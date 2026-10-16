@@ -16,17 +16,17 @@ The resolution is to give kernelet code stacks of its own. A **kernelet stack** 
 
 ```mermaid
 flowchart LR
-    subgraph L["the carrier's Linux stack, 16 KiB"]
+    subgraph L[" "]
         direction TB
-        l1["pt_regs: the user registers"] --> l2["entry code frames"] --> l3["the gate hook's frame"] --> l4["klet_enter, parked in klet_switch"]
+        l0["<b>the carrier's Linux stack, 16 KiB</b>"] ~~~ l1["pt_regs: the user registers"] --> l2["entry code frames"] --> l3["the gate hook's frame"] --> l4["klet_enter, parked in klet_switch"]
     end
-    subgraph B["the virtual CPU's first kernelet stack"]
+    subgraph B[" "]
         direction TB
-        b1["kernelet_entry"] --> b2["main"] --> b3["yield_now: switched away,<br/>never resumed"]
+        b0["<b>the virtual CPU's first kernelet stack</b>"] ~~~ b1["kernelet_entry"] --> b2["main"] --> b3["yield_now: switched away,<br/>never resumed"]
     end
-    subgraph K["the task's kernelet stack, 256 KiB"]
+    subgraph K[" "]
         direction TB
-        k1["user_task: the loop"] --> k2["execute()"] --> k3["user_run: parked in klet_switch"]
+        k0["<b>the task's kernelet stack, 256 KiB</b>"] ~~~ k1["user_task: the loop"] --> k2["execute()"] --> k3["user_run: parked in klet_switch"]
     end
     L -- "klet_switch: into the kernelet" --> B
     B -. "the kernelet's own task switch<br/>(chapter 8)" .-> K
@@ -122,7 +122,7 @@ Where does `klet_enter` get called? From exactly three places: the carrier's sta
 
 <div class="linux">
 
-**Linux: `vmalloc`.** Linux has two kinds of kernel memory: the direct map, physically contiguous, from `kmalloc` and the page allocator; and the **vmalloc area**, where the kernel builds virtually contiguous ranges out of scattered pages with [`vmalloc()`](https://elixir.bootlin.com/linux/v6.12/source/mm/vmalloc.c#L3924). Each range is followed by an unmapped *guard page*, so running off the end of one faults instead of silently overwriting its neighbor.
+**Linux: `vmalloc`.** Linux has two kinds of kernel memory: the direct map, physically contiguous, from `kmalloc` and the page allocator; and the **vmalloc area**, where the kernel builds virtually contiguous ranges out of scattered pages with [`vmalloc()`](https://elixir.bootlin.com/linux/v6.12/source/include/linux/vmalloc.h#L144). Each range is followed by an unmapped *guard page*, so running off the end of one faults instead of silently overwriting its neighbor.
 
 </div>
 
@@ -220,7 +220,7 @@ The endovisor finds the calling carrier from Linux's `current` task and the gate
 
 The **depth** counter says whether this carrier is, right now, inside endovisor or Linux code on the kernelet's behalf, where it may hold Linux's locks: it is 1 exactly then. The watch timer of chapter 9 and the eviction of chapter 11 must never touch the instruction pointer of such a carrier, and the depth is how they know.
 
-The one exception to the stub is `user_run`, which leaves the kernelet stack and does not come back until the next hook brings the carrier in; it is chapter 7's. `stop` uses the stub like any service, and then leaves for ever (chapter 11).
+The one exception to the stub is `user_run`, which leaves the kernelet stack and does not come back until the next hook brings the carrier in; it is chapter 7's. `stop` uses the stub like any service, and then leaves forever (chapter 11).
 
 <div class="recap">
 

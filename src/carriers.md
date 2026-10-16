@@ -2,7 +2,7 @@
 
 The gate attaches a hook to a Linux task. This chapter is about those tasks: where they come from, what they inherit, and how the endovisor learns when one dies. The word for them is the book's first Linux-specific term.
 
-A **carrier** is a Linux task that runs a kernelet's code and enters user mode on the kernelet's behalf. Linux schedules carriers like any tasks; it does not know what they carry. A sandbox has a fixed number of carriers, chosen when it is created: one **root carrier**, which never runs kernelet code, and one carrier per **virtual CPU**, each of which is one of the processors the kernelet believes it has. Chapter 8 says what a virtual CPU is in full; for now, a sandbox with one virtual CPU, like the hundred-line kernel's, has a root carrier and one other.
+A **carrier** is a Linux task that belongs to a sandbox. Linux schedules carriers like any tasks; it does not know what they carry. A sandbox has a fixed number of carriers, chosen when it is created: one **root carrier**, which holds the sandbox together and never runs kernelet code, and one carrier per **virtual CPU**, which runs the kernelet's code and enters user mode on the kernelet's behalf; a virtual CPU is one of the processors the kernelet believes it has. Chapter 8 says what a virtual CPU is in full; for now, a sandbox with one virtual CPU, like the hundred-line kernel's, has a root carrier and one other.
 
 ## Why a carrier is not a kernel thread
 
@@ -42,7 +42,7 @@ Everything the runtime set up on that child before the `execve`, such as its con
 
 <div class="linux">
 
-**Linux: `TIF_NOTIFY_RESUME`.** Linux enters the exit loop of chapter 4, and so runs the resume hook, only if the task has a *work flag* set: a pending signal, a request to reschedule, or the flag below. So the hook runs for every kind of exit work, not only the kernelet's, and must be written to find nothing of its own to do. Kernel code that wants the loop to run sets the flag [`TIF_NOTIFY_RESUME`](https://elixir.bootlin.com/linux/v6.12/source/include/linux/resume_user_mode.h#L16) on the task: a plain flag-set on the current task, or `set_notify_resume()` on another, which also nudges the processor that task is on. The book says the endovisor *flags the carrier* when it means this.
+**Linux: `TIF_NOTIFY_RESUME`.** Linux enters the exit loop of chapter 4, and so runs the resume hook, only if the task has a *work flag* set: a pending signal, a request to reschedule, or the flag below. So the hook runs for every kind of exit work, not only the kernelet's, and must be written to find nothing of its own to do. Kernel code that wants the loop to run sets the flag [`TIF_NOTIFY_RESUME`](https://elixir.bootlin.com/linux/v6.12/source/arch/x86/include/asm/thread_info.h#L87) on the task: a plain flag-set on the current task, or `set_notify_resume()` on another, which also nudges the processor that task is on. The book says the endovisor *flags the carrier* when it means this.
 
 </div>
 
@@ -55,7 +55,7 @@ static int klet_load_binary(struct linux_binprm *bprm)
 {
 	klet_read_config(inst, bprm, &nr_vcpus);   /* the magic, the version, the vCPU count */
 
-	begin_new_exec(bprm);                       /* a fresh, empty address space; signal handlers reset */
+	begin_new_exec(bprm);                       /* a fresh, empty address space; signal handlers reset (ignored signals stay ignored) */
 	klet_personality_64bit();
 	setup_new_exec(bprm);
 	klet_empty_mm();                            /* unmap the one area exec left: the argument stack */
@@ -79,7 +79,7 @@ Each line does what any program loader does, with one difference. The ELF loader
 
 The call to `start_thread` looks pointless for a task that will never run user code, and is not: a task cloned from this one copies its saved registers, segment selectors and flags included, and those clones *will* run user code. The root carrier's registers are the template.
 
-The last line is the handoff. The root carrier returns from the handler and heads for user mode, as every `execve` does. On the way it passes through the exit loop, and because the flag is set, the gate's resume hook runs. For the root carrier that hook never returns: it is where the root carrier does its work.
+The last line is the handoff. The root carrier returns from the handler and heads for user mode, as every `execve` does. On the way it passes through the exit loop, and because the flag is set, the gate's resume hook runs. For the root carrier that hook returns only to die: it is where the root carrier does its work.
 
 ## The root carrier starts the others
 
@@ -123,17 +123,19 @@ static int klet_spawn_vcpu(struct klet_inst *inst, int vcpu)
 
 `wait_event_interruptible` is Linux's ordinary way to sleep until a condition holds: a waker *wakes* the queue the sleeper named, and the sleeper checks its condition again. An *interruptible* sleep also ends whenever a signal is pending for the task. The clones use the *killable* variant, which ends only for `SIGKILL`, because a `SIGSTOP` sent to a carrier stays pending until the carrier next heads for user mode (chapter 7) and must not end the wait early.
 
-Each clone is a separate process, not a thread: no `CLONE_VM`, no `CLONE_FILES`, no `CLONE_THREAD`. It gets a *copy* of the root's empty address space, a copy of its descriptor table, and, because Linux copies the task structure, the root's gate pointer, syscall-work bit, control group, credentials and seccomp filter. The control group, the credentials and the seccomp filter it keeps as they came: the endovisor sets none of them up per carrier; `fork` does. The gate pointer and the lifeline it replaces at once: the clone's first act, below, is to attach a record of its own in place of the inherited pointer, and to close the inherited copy of the root's lifeline and open one of its own.
+Each clone is a separate process, not a thread: no `CLONE_VM`, no `CLONE_FILES`, no `CLONE_THREAD`. It gets a *copy* of the root's empty address space, a copy of its descriptor table, and, because Linux copies the task structure, the root's gate pointer, syscall-work bit, control group, credentials and seccomp filter. The control group, the credentials and the seccomp filter it keeps as they came: the endovisor sets none of them up per carrier; `fork` does. The gate pointer and the lifeline it replaces at once: the clone's first act, below, is to clear the inherited pointer, so that nothing it does before it is attached can reach the root's record, then to attach a record of its own, and to close the inherited copy of the root's lifeline and open one of its own.
 
 ```mermaid
 flowchart TB
     rt["kernelet runtime<br/>(run-hello)"] -- "fork + execve(/hello.klet)" --> root["root carrier<br/>(the binary-format handler claimed it)<br/>never runs kernelet code"]
     root -- "kernel_clone(.fn = klet_carrier_main)" --> v0["carrier of virtual CPU 0<br/>enters the image at kernelet_entry"]
     root -- "kernel_clone(...)" --> v1["carrier of virtual CPU 1<br/>waits for vcpu_boot"]
-    subgraph inherited["inherited by every clone, because Linux copies it"]
-        direction LR
-        i1["gate pointer<br/>(replaced by its own)"] --- i2[empty address space] --- i3[control group] --- i4[seccomp filter] --- i5["lifeline, see below<br/>(replaced by its own)"]
+    subgraph inherited[" "]
+        direction TB
+        i0["<b>inherited by every clone,<br/>because Linux copies it</b>"] ~~~ i1["gate pointer<br/>(replaced by its own)"] --- i2[empty address space] --- i3[control group]
+        i3 --- i4[seccomp filter] --- i5["lifeline, see below<br/>(replaced by its own)"]
     end
+    root -. "copied at the clone" .-> inherited
 ```
 
 The child's start function builds the carrier's record and enters the kernelet:
@@ -145,14 +147,23 @@ static int klet_carrier_main(void *arg)
 {
 	int vcpu = (int)(long)arg;
 
+	clear_syscall_work(KERNELET);               /* not a carrier until attached: the inherited pointer must not be used */
+	current->kernelet = NULL;
 	close_fd(inst->root_lifeline_fd);           /* the inherited copy of the root's lifeline */
 	c = klet_carrier_new(inst, KLET_VCPU, vcpu);
 	klet_carrier_attach(c);                     /* this task's own gate record and lifeline */
-	c->blank_mm = current->mm;                  /* keep a reference to the empty address space */
+	mmget(current->mm);                         /* keep a reference to the empty address space ... */
+	c->blank_mm = current->mm;                  /* ... which chapter 12 drops when a tenant's replaces it */
 	inst->vcpus[vcpu] = c;
 
-	if (vcpu != 0)                              /* virtual CPU 0 boots; the others wait to be started */
-		wait_event_killable(c->idle_wq, c->boot_requested || inst->dying);   /* only SIGKILL cuts the wait short */
+	if (vcpu != 0) {                            /* virtual CPU 0 boots; the others wait to be started */
+		wait_event_state(c->idle_wq, c->boot_requested || inst->dying,   /* only SIGKILL cuts the wait short; */
+				 TASK_KILLABLE | TASK_NOLOAD);                                 /* a waiting carrier is not load */
+		if (!c->boot_requested) {                /* woken because the sandbox is dying */
+			klet_carrier_die(c);
+			return 0;
+		}
+	}
 
 	klet_enter(c, KLET_RUN_EVENT);              /* switch to a kernelet stack and run kernelet code */
 
@@ -169,7 +180,7 @@ A carrier can die without the endovisor's involvement: the operator kills it, or
 
 <div class="linux">
 
-**Linux: descriptors and release.** Every process has a table of open file descriptors. When a task exits for any reason, Linux closes them all, and when the last reference to an open file goes, the file's `release` operation runs. A module can make an open file of its own with [`anon_inode_getfile()`](https://elixir.bootlin.com/linux/v6.12/source/fs/anon_inodes.c#L148), with whatever operations it likes.
+**Linux: descriptors and release.** Every process has a table of open file descriptors. When a task exits for any reason, Linux closes them all, and when the last reference to an open file goes, the file's `release` operation runs. A module can make an open file of its own with [`anon_inode_getfile()`](https://elixir.bootlin.com/linux/v6.12/source/fs/anon_inodes.c#L143), with whatever operations it likes.
 
 </div>
 
@@ -202,6 +213,6 @@ When a lifeline closes, the endovisor takes the carrier off its lists. If the sa
 
 <div class="recap">
 
-**Recap.** A carrier is an ordinary Linux user task that runs kernelet code and enters user mode for it. The root carrier is made by `execve` of a sandbox file, which the endovisor's binary-format handler claims, giving it an empty address space and the gate; it never runs user code and it never returns from the resume hook. It clones one carrier per virtual CPU with `kernel_clone`, and each clone inherits the gate, the empty address space, the control group and the seccomp filter by the ordinary rules of `fork`. Every carrier holds a lifeline, an open file whose release tells the endovisor that the carrier has died.
+**Recap.** A carrier is an ordinary Linux user task that runs kernelet code and enters user mode for it. The root carrier is made by `execve` of a sandbox file, which the endovisor's binary-format handler claims, giving it an empty address space and the gate; it never runs user code and it returns from the resume hook only to die. It clones one carrier per virtual CPU with `kernel_clone`, and each clone inherits the gate, the empty address space, the control group and the seccomp filter by the ordinary rules of `fork`. Every carrier holds a lifeline, an open file whose release tells the endovisor that the carrier has died.
 
 </div>

@@ -79,7 +79,7 @@ Three choices in this code each close a hole.
 
 **The file's inode.** The plain anonymous-inode helper hands every caller one shared inode. Linux keeps, per inode, the list of areas that map it, so every space's area would sit in one list, and an operation on one space's file could reach the others'. Each space gets an inode of its own.
 
-**The area's flags.** `VM_SHARED`, which the `MAP_SHARED` in the `vm_mmap` call sets, is required for the host's sake: inserting a raw frame number into a private, copy-on-write area is a `BUG_ON` in Linux, which halts the machine rather than returning an error. `VM_DONTCOPY` keeps a `fork` of a carrier, which never happens but could, from copying entries that belong to the kernelet. The area covers exactly the range the kernel proper can map, so that a `vm_map` outside it can be refused, and `zap_vma_ptes()`, which silently does nothing for a range not wholly inside its area, is always inside.
+**The area's flags.** `VM_SHARED`, which the `MAP_SHARED` in the `vm_mmap` call sets, is required for the host's sake: inserting a raw frame number into a private, copy-on-write area is a `BUG_ON` in Linux, which kills the calling task with the address-space lock held, and halts the machine if the host is configured to panic on an oops, rather than returning an error. `VM_DONTCOPY` keeps a `fork` of a carrier while it is in a tenant's space, which never happens but could, from copying entries that belong to the kernelet. The area covers exactly the range the kernel proper can map, so that a `vm_map` outside it can be refused, and `zap_vma_ptes()`, which silently does nothing for a range not wholly inside its area, is always inside.
 
 ## The address-space switch
 
@@ -127,7 +127,7 @@ struct mm_struct *kernelet_mm_alloc(struct task_struct *owner)
 }
 ```
 
-The two `sched_mm_cid_*` brackets are not optional. Linux gives each address space a small pool of *concurrency ids*, one per processor currently running one of its tasks, which programs may use to index per-processor data; a task that changes address space must return its id to the old space and take one from the new. Without the brackets a carrier leaked one concurrency id per switch, invisibly, until it had leaked as many as the machine has processors and then hung. That is the kind of bookkeeping that makes the helper belong in Linux rather than in a module.
+The two `lru_gen_*` calls are for Linux's multi-generational page reclaim, which keeps a list of the address spaces it may scan: a new space is put on it once, and a switch marks the space as in use. The two `sched_mm_cid_*` brackets are not optional. Linux gives each address space a small pool of *concurrency ids*, one per processor currently running one of its tasks, which programs may use to index per-processor data; a task that changes address space must return its id to the old space and take one from the new. Without the brackets a carrier would leak one concurrency id per switch, invisibly, until the pool ran dry and the task hung. That is the kind of bookkeeping that makes the helper belong in Linux rather than in a module.
 
 *Simplified from `prototype/endovisor/space.c`: `klet_space_adopt`.*
 
@@ -146,7 +146,7 @@ int klet_space_adopt(struct klet_carrier *c, u64 id)       /* called by both gat
 }
 ```
 
-Every carrier holds one reference on the space it is in, which Linux drops when the carrier leaves it or exits; the endovisor holds one more on every live space, from `vm_create` to `vm_destroy`. That second reference is what pins the page tables for the next chapter's lockless reads.
+Every carrier holds one reference on the space it is in, which the endovisor drops when the carrier leaves it and Linux when the carrier exits; the endovisor holds one more on every live space, from `vm_create` to `vm_destroy`. That second reference is what pins the page tables for the next chapter's lockless reads.
 
 ## The four edits
 
@@ -264,7 +264,7 @@ sequenceDiagram
     L->>U: retry the instruction, no second fault
 ```
 
-One case never reaches the handler. A read or an instruction fetch that a *present* entry forbids raises `SIGSEGV` inside Linux directly, and the resume hook turns that signal into an exception as it does for any other (chapter 7). A write to a present read-only entry reaches the handler only because the area supplies `pfn_mkwrite`; without it, Linux would make the entry writable on its own authority.
+One case never reaches the handler. An instruction fetch from a *present* entry marked no-execute raises `SIGSEGV` inside Linux directly (short of protection keys, which the design never sets, a present x86-64 entry cannot forbid a read), and the resume hook turns that signal into an exception as it does for any other (chapter 7). A write to a present read-only entry reaches the handler only because the area supplies `pfn_mkwrite`; without it, Linux would make the entry writable on its own authority.
 
 The rule that a kernel-mode access is answered with an error and never reported deserves a sentence. Linux itself sometimes reads a task's user memory from kernel mode, for instance on a 32-bit system-call entry. A handler that reported such a fault and waited for the return to user mode would wait forever, since the access is not in user mode; failing it cleanly lets Linux's own error handling turn it into `-EFAULT`, which that code is written to expect.
 

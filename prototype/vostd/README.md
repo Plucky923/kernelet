@@ -39,7 +39,7 @@ endovisor's pool hands out.
 | `Cargo.toml` | the crate; its one dependency is the real `ostd-macros` (`../libs`) | 2 |
 | `src/lib.rs` | the crate root; `kernelet_entry` (vCPU 0) and `vcpu_entry` (the others) | 3, 8 |
 | `src/abi.rs` | the image ABI: `BootArgs`, `Services`, `EntryTable`, `VcpuRec`, `SpaceRec`, `MemStats`, `kernelet_entry_table` | 3 |
-| `src/vcpu.rs` | finding the vCPU record without a call (`vrec`), the mirror of the guard depth into Linux's preemption count, the upcall stub `klet_virq_entry` and `klet_virq_body`, idle, kick, yield, `vcpu_on_spin` | 8, 9, 10 |
+| `src/vcpu.rs` | finding the vCPU record without a call (`vrec`), the mirror of the guard depth into Linux's preemption count, the upcall stub `klet_virq_entry` and `klet_virq_body`, idle, kick, yield, `vcpu_on_spin`; `publish_stack_limit`, which tells the endovisor the bound of the current kernelet stack | 6, 8, 9, 10 |
 | `src/klet.rs` | not OSTD API: the counters the tests read, and the test hook that makes `vm_map` sleep | 13, 14 |
 | `src/console.rs` | `println!`, line-buffered onto the `log_write` service | 3 |
 | `src/panic.rs` | a kernelet panic stops the sandbox, not the machine | 11 |
@@ -62,7 +62,7 @@ endovisor's pool hands out.
 | `src/sync/spin.rs` | OSTD's spin lock, telling the host after a long spin; `r2`, the sleeping contract's spin-lock count | 10, 13 |
 | `src/sync/wait.rs`, `src/sync/guard.rs`, `src/sync/mod.rs` | wait queues and lock guard behaviors, ported | 8 |
 | `src/task/mod.rs`, `src/task/processor.rs` | OSTD's task layer: `Task`, `switch_to_task`, `after_switching_to` | 8 |
-| `src/task/kernel_stack.rs` | `KernelStack`: kernelet stacks from the endovisor's pool, `publish_stack_limit` | 6 |
+| `src/task/kernel_stack.rs` | `KernelStack`: kernelet stacks from the endovisor's pool | 6 |
 | `src/task/atomic_mode.rs` | `might_sleep` and atomic mode, which here is the vCPU record's two facts | 8 |
 | `src/task/preempt/` | the preemption word in the vCPU record, `inc_guard_count`, `dec_guard_count`, `irq_mask`, `irq_unmask`; the guard; `halt_cpu` | 8, 10 |
 | `src/task/scheduler/` | OSTD's scheduler injection, `might_preempt`, `reschedule`, `vcpu_idle_loop`, the default FIFO scheduler | 8 |

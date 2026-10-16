@@ -150,4 +150,11 @@ pub(super) unsafe fn after_switching_to() {
     crate::arch::irq::enable_local();
 
     drop(prev);
+
+    // A preemption the window stopped: its upcall consumed its interrupt, so
+    // neither the unmask above nor the next guard drop, which deliver only what
+    // is pending, would act on it before the next upcall, a watch period later.
+    if super::scheduler::take_deferred() {
+        super::scheduler::might_preempt();
+    }
 }

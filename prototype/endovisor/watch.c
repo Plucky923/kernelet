@@ -31,10 +31,12 @@
  *      room left on the current task's stack: store the interrupted instruction
  *      pointer in the vCPU record, set the record's `irq_off` as hardware clears
  *      IF, and point regs->ip at the image's own `virq_entry`. The interrupt's own
- *      iret does the rest. Note that a *preemption guard* does not stop this: on
- *      bare metal it would not stop an interrupt either;
- *    - masked, or too little stack, or in a service, or in Linux's own code: leave
- *      it pending. vOSTD delivers it itself when it unmasks.
+ *      iret does the rest. This is done only outside a critical section, which
+ *      is a preemption guard held *or* interrupts masked (klet_critical): the
+ *      upcall may switch tasks, which a guard forbids;
+ *    - in a critical section, or with too little stack, or in a service, or in
+ *      Linux's own code: leave it pending. vOSTD delivers it itself when it
+ *      unmasks or drops its last guard.
  *
  * 3. **The bound (two strikes).** If the tick found the carrier in kernelet text in
  *    a critical section *and* Linux wanting the processor, note when (the note is
@@ -63,6 +65,7 @@
 #include <linux/moduleparam.h>
 #include <linux/percpu.h>
 #include <linux/sched.h>
+#include <linux/sched/signal.h>
 #include <linux/smp.h>
 
 #include <asm/irq_regs.h>
@@ -178,6 +181,26 @@ static enum hrtimer_restart klet_watch_fn(struct hrtimer *timer)
 	c = klet_current_carrier();
 	if (c->kind == KLET_ROOT || c->inst != inst || c->state == KLET_DEAD ||
 	    inst->dying || inst->stopped) {
+		this_cpu_write(klet_watch_last_tick, 0);
+		return HRTIMER_NORESTART;
+	}
+
+	/*
+	 * 0. A fatal signal to a carrier that is running kernelet code. Linux acts
+	 * on it only on the way to user mode, and kernelet code that calls no
+	 * service never goes there: evict the carrier, as the sweep does, which
+	 * sends it back to its Linux stack to die, and its death ends the sandbox
+	 * (klet_carrier_lifeline_closed). Whatever the kernelet held, guards
+	 * included, is abandoned with it, as on any eviction. A carrier asleep or
+	 * in a service is left to klet_svc_body, one in user mode to Linux.
+	 */
+	if (regs && !user_mode(regs) && klet_in_image_text(regs->ip) &&
+	    klet_in_kernelet(c) && fatal_signal_pending(current)) {
+		c->evicted = true;
+		c->doomed = true;
+		c->killed_in = "kernelet code";
+		atomic_inc(&inst->kills_in_kernelet);
+		regs->ip = (unsigned long)klet_exit_stub;
 		this_cpu_write(klet_watch_last_tick, 0);
 		return HRTIMER_NORESTART;
 	}

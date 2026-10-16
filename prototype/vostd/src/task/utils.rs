@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MPL-2.0
 
-//! A helper of real OSTD's task module, ported unchanged.
+//! A helper of real OSTD's task module: the code unchanged, two doc comments
+//! dropped and the others reworded or rewrapped.
 
 use alloc::fmt;
 

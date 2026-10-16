@@ -29,6 +29,12 @@ _start:
 	#     rip is already past it and the kernel proper changes nothing.
 	int3
 
+	# 2c. A general-protection fault: hlt is privileged, so user mode gets
+	#     #GP, which Linux turns into SIGSEGV with SI_KERNEL, handed over as
+	#     trap 13. A fault: rip is still at the hlt, and the kernel proper
+	#     steps over its one byte.
+	hlt
+
 	# 3. A system call whose handler spins inside the kernelet for ever, so
 	#    that the only way to get the CPU back is eviction.
 	movq	$1000, %rax

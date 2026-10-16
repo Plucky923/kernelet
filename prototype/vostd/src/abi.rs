@@ -14,9 +14,11 @@
 //! - [`MemStats`], counters of the host's memory paths, for the tests.
 //!
 //! vOSTD calls no Linux symbol. Everything it needs from the host arrives
-//! through [`Services`], except the three facts in [`BootArgs`] that let it find
-//! its own [`VcpuRec`] and mirror its guard depth into the host's preemption
-//! count without a call.
+//! through [`Services`], except the four host offsets in [`BootArgs`] (where the
+//! current-task pointer and the preemption count sit in the per-CPU area, where
+//! a task's gate pointer sits in its `task_struct`, and where the vCPU record
+//! sits from the gate) that let it find its own [`VcpuRec`] and mirror its guard
+//! depth into the host's preemption count without a call.
 
 use core::{
     cell::UnsafeCell,

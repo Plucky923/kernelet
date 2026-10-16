@@ -24,9 +24,10 @@ flowchart TB
     e --> w{syscall work bits set?}
     w -- no --> t[Linux's system-call table]
     w -- yes --> s[syscall_trace_enter: dispatch, ptrace, seccomp]
-    s --> g{"the gate: current->kernelet?"}
+    s --> g{"the gate: the KERNELET work bit?"}
     g -- no --> t
-    g -- "yes: ops->syscall(regs) returned true" --> x[the table is skipped]
+    g -- "yes, but ops->syscall(regs) returned false" --> t
+    g -- "yes, and it returned true" --> x[the table is skipped]
 ```
 
 **On the way out:**
@@ -78,17 +79,22 @@ struct kernelet_gate {
 	}
 ```
 
-Returning `-1` from this function is Linux's existing convention for "an earlier stage has answered this call; do not dispatch it", and [`do_syscall_64()`](https://elixir.bootlin.com/linux/v6.12/source/arch/x86/entry/common.c#L76) then skips the table. The hook is placed *after* seccomp, which means the filter a sandbox was started with runs on every one of the tenant's system calls *before* the kernelet sees them. That is a tool for the kernelet runtime, the host program that creates sandboxes (chapter 5), with a sharp edge: a filter that allows a call lets the kernelet serve it; one that returns an error answers the call in Linux, and the kernelet never hears of it; one that kills ends a carrier, and with it a virtual CPU. A filter for a sandbox therefore bounds what the tenant may ask of its *kernelet*, and must be written for that, not copied from a host process. The prototype's runtime installs none.
+Returning `-1` from this function is Linux's existing convention for "an earlier stage has answered this call; do not dispatch it", and [`do_syscall_64()`](https://elixir.bootlin.com/linux/v6.12/source/arch/x86/entry/common.c#L76) then skips the table. The hook is placed *after* seccomp, which means the filter a sandbox was started with runs on every one of the tenant's system calls *before* the kernelet sees them. That is a tool for the kernelet runtime, the host program that creates sandboxes (chapter 5), with a sharp edge: a filter that allows a call lets the kernelet serve it; one that returns an error answers the call in Linux, and the kernelet never hears of it; one that kills ends a carrier, and with it, as chapter 11 shows, the whole sandbox. A filter for a sandbox therefore bounds what the tenant may ask of its *kernelet*, and must be written for that, not copied from a host process. The prototype's runtime installs none.
 
 **The resume hook.** At the top of `exit_to_user_mode_loop()`, after interrupts are enabled and before Linux delivers signals:
 
 ```c
 /* kernel/entry/common.c, exit_to_user_mode_loop() */
-		if (unlikely(current->kernelet))
+		if (unlikely(current->kernelet)) {
+			if (ti_work & _TIF_NOTIFY_RESUME) {          /* Linux's own notify-resume work first, since it clears the flag: */
+				resume_user_mode_work(regs);             /* a flag set while the hook runs then survives to the loop's */
+				ti_work &= ~_TIF_NOTIFY_RESUME;          /* next look at the flags, and the hook runs again */
+			}
 			current->kernelet->ops->resume(regs);
+		}
 ```
 
-This runs whenever a task with pending work is about to return to user mode. It is what lets the kernelet run code at moments that are *not* a system call: when the task was just created, when an exception has been turned into a signal, when a timer wants the kernelet's attention. Placing it before signal delivery is what lets the kernelet take a tenant's exceptions away from Linux, as chapter 7 shows.
+This runs whenever a task with pending work is about to return to user mode. Linux's own notify-resume work goes first because its first act is to clear the flag that requested it; run after the hook, it would clear a request the endovisor made from another processor while the hook was looking elsewhere, and the carrier would enter user mode with that request pending (chapter 9). It is what lets the kernelet run code at moments that are *not* a system call: when the task was just created, when an exception has been turned into a signal, when a timer wants the kernelet's attention. Placing it before signal delivery is what lets the kernelet take a tenant's exceptions away from Linux, as chapter 7 shows.
 
 **The gate is inherited.** Nothing in the patch copies the pointer into child tasks, and nothing needs to: Linux creates a task by copying the parent's whole `task_struct` ([`dup_task_struct()`](https://elixir.bootlin.com/linux/v6.12/source/kernel/fork.c#L1101)), the new field included, and the syscall-work bits are inherited the same way. A child of a kernelet's task is therefore attached to the gate before it executes its first instruction, and there is no moment at which it could make a system call that Linux would answer. This is the difference between a field Linux does not know about, which it copies, and a setting Linux knows about, such as Syscall User Dispatch, which it deliberately resets at `fork` and `exec`.
 
@@ -96,7 +102,7 @@ This runs whenever a task with pending work is about to return to user mode. It 
 
 **Two exports.** `kernel_clone` (chapter 5 creates tasks with it) and `flush_tlb_mm_range` (chapter 12 flushes with it): the two functions the endovisor needs that Linux does not already export to modules.
 
-**A configuration option.** `CONFIG_KERNELET` guards all of it. The prototype's kernel configuration turns it on; a kernel built without it is byte-for-byte a stock kernel in these files.
+**A configuration option.** `CONFIG_KERNELET` guards all of it. The prototype's kernel configuration turns it on; a kernel built without it behaves exactly as a stock kernel, since every line the patch adds to a function is inside `#ifdef CONFIG_KERNELET`; only the include lines, the bit's name and a macro that expands to zero remain.
 
 ## What the patch does not do
 

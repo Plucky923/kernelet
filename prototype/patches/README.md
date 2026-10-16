@@ -10,7 +10,11 @@ needs; everything else is the endovisor module. It adds, behind
 - the two hooks of `struct kernelet_gate_ops` in the generic entry code
   (`kernel/entry/common.c`): `syscall`, offered every system call of a carrier
   after seccomp, and `resume`, run on every exit to user mode with work
-  pending, before signals are delivered (`include/linux/kernelet.h`);
+  pending, before signals are delivered (`include/linux/kernelet.h`). For a
+  carrier, the exit loop runs Linux's own resume work, which clears
+  `TIF_NOTIFY_RESUME`, *before* the hook rather than after it, so that a
+  virtual interrupt the endovisor flags while the hook runs is not cleared
+  with it but makes the loop run the hook again;
 - `kernelet_switch_mm()`, which makes the current user task run in another
   address space, modelled on `exec_mmap()` with the concurrency-id brackets
   (`kernel/fork.c`);
@@ -22,7 +26,7 @@ needs; everything else is the endovisor module. It adds, behind
   flush of `vm_flush`;
 - the Kconfig entry, which selects `PREEMPT_NOTIFIERS` (`init/Kconfig`).
 
-It adds 197 lines (175 of them not blank) and removes none, counted with
+It adds 210 lines (188 of them not blank) and removes none, counted with
 `git apply --numstat`.
 
 The book explains the patch in chapter 4 (the gate), `kernel_clone` in

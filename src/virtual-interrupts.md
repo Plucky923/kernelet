@@ -74,7 +74,7 @@ static enum hrtimer_restart klet_watch_fn(struct hrtimer *timer)
 }
 ```
 
-`klet_virq_raise` sets the bit and does the two cheap things that get it noticed: wakes the carrier if it is asleep in `vcpu_idle`, and flags it (chapter 7) if it is in user mode, so that it comes back through the resume hook, `user_run` returns 2, and `execute`'s loop runs the handler before it re-enters user mode.
+`klet_virq_raise` sets the bit and does the two cheap things that get it noticed: wakes the carrier if it is asleep in `vcpu_idle`, and flags it (chapter 5) if it is in user mode, so that it comes back through the resume hook, `user_run` returns 2, and `execute`'s loop runs the handler before it re-enters user mode. A flag set while the hook is already running is not lost either: the patch runs Linux's own notify-resume work, which clears the flag, *before* the hook (chapter 4), so the exit loop finds the new request on its next look and runs the hook again.
 
 The interesting case is the middle one: the carrier is executing kernelet code, at an arbitrary instruction, and is not in a critical section. A machine would push the interrupted instruction pointer and jump to the handler. The endovisor does the same, by changing one saved register:
 
@@ -102,7 +102,7 @@ When the timer interrupt returns, it returns into the kernelet's upcall stub rat
 
 ## The upcall
 
-The stub is in vOSTD, in assembly, because it is entered between two arbitrary instructions and must put every register and the flags back exactly. It saves everything on the *current task's* kernelet stack, calls a Rust function, and returns to the interrupted instruction.
+The stub is in vOSTD, in assembly, because it is entered between two arbitrary instructions and must put every register and the flags back exactly. It saves everything on the *current task's* kernelet stack, calls a Rust function, and returns to the interrupted instruction. It is written in Intel syntax, destination first, as Rust's `global_asm!` has it; chapter 6's switch was in the assembler's own syntax, source first.
 
 *Simplified from `prototype/vostd/src/vcpu.rs`: `klet_virq_entry`, `klet_virq_body`.*
 
@@ -154,7 +154,7 @@ fn run_handlers(rec: &VcpuRec) {
 The last few lines are something OSTD on a machine does not do today, and the design needs: **kernel-mode preemption**. Because the interrupted instruction pointer is on the task's own stack, the handler may switch to another task before returning, and the interrupted task resumes later, from the same frame, on whichever virtual CPU next picks it. That is how a tick ends a time slice in the middle of a kernel task's computation, as it does on a machine with a preemptible kernel.
 
 ```mermaid
-flowchart LR
+flowchart TB
     t["watch timer fires<br/>(interrupt context)"] --> raise["set TICK in the record"]
     raise --> where{"what was interrupted?"}
     where -- "user mode" --> flag["flag the carrier:<br/>resume hook, user_run returns 2"]
@@ -172,11 +172,11 @@ flowchart LR
 Two separate fields in the record stand for the two ways a kernel holds things off, and they are kept separate because OSTD keeps them separate.
 
 - `irq_off` is the virtual interrupt flag, inverted. vOSTD sets it where OSTD's interrupts-off guard would clear the processor's flag, and clears it when the guard drops; the endovisor sets it when it redirects into the upcall, and the upcall clears it at the end. While it is set, nothing is delivered.
-- The **guard count**, the low bits of `preempt_info`, is how many preemption guards and spin locks are held. A guard forbids only a task switch, which is why `klet_virq_body` calls `might_preempt` only when the count is zero. Handlers may still run under a guard: when the carrier comes back from user mode with a bit pending, `execute` runs them whatever the count. What a guard does prevent is the upcall, because the watch timer never redirects a task that holds one; a bit raised then waits for the last guard to drop, which is the unmask path below.
+- The **guard count**, the low bits of `preempt_info`, is how many preemption guards and spin locks are held. A guard forbids only a task switch, which is why `klet_virq_body` calls `might_preempt` only when the count is zero: the upcall itself is never delivered under a guard, but a handler may have taken one and not yet dropped it. Handlers may still run under a guard: when the carrier comes back from user mode with a bit pending, `execute` runs them whatever the count. What a guard does prevent is the upcall, because the watch timer never redirects a task that holds one; a bit raised then waits for the last guard to drop, which is the unmask path below.
 
 Both are updated by the virtual CPU that owns the record, with single instructions where it matters, because the endovisor reads them from an interrupt on the same processor and the upcall writes them. If a guard's increment compiled to a load, an add and a store, and an upcall ran between the load and the store and changed the word itself, the store would overwrite the upcall's change; a single `inc` cannot be split by an interrupt.
 
-Kernel-mode preemption has one more consequence, which OSTD on a machine never meets, because its interrupts never switch tasks underneath kernel code. `reschedule` (chapter 8) makes its decision and then switches; between the two, the run queue has already made the chosen task its current one and put the still-running task back in the queue. An upcall that lands in that window and calls `might_preempt` would decide again, and could pick the task that is still running, which the switch then waits for without end. So vOSTD marks the window with a flag in the virtual CPU's local storage, set when the decision is made and cleared by the task switched to, and `might_preempt` does nothing while it is set. The preemption is not lost: the need-preempt flag stays set, and is acted on after the switch.
+Kernel-mode preemption has one more consequence, which OSTD on a machine never meets, because its interrupts never switch tasks underneath kernel code. `reschedule` (chapter 8) makes its decision and then switches; between the two, the run queue has already made the chosen task its current one and put the still-running task back in the queue. An upcall that lands in that window and calls `might_preempt` would decide again, and could pick the task that is still running; a switch to a task waits until that task has finished switching away, which a running task never does. So vOSTD marks the window with a flag in the virtual CPU's local storage, set before the decision is made and cleared once the switch has completed, or at once when the decision is to do nothing, and `might_preempt` inside the window only leaves a note. The switch, once complete, or the decision to do nothing, acts on the note at once, so a preemption is deferred by the window and never by more. The window has a price, which chapter 14 shows on the wake-up across virtual CPUs: a kick usually arrives after the woken virtual CPU has already picked the task, lands inside the window, and the note costs one reschedule that finds nothing to do.
 
 A bit that was left pending while interrupts were masked must still be delivered. The guard that unmasks does it:
 

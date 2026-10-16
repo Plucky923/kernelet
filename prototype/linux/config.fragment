@@ -3,8 +3,8 @@
 # Applied on top of `make ARCH=x86_64 tinyconfig` with
 # scripts/kconfig/merge_config.sh, then settled by `make olddefconfig`.
 #
-# Two constraints shape this file: the build host has no OpenSSL headers
-# (so no module signing) and no pahole (so no BTF debug info).
+# Module signing and BTF debug info are off, so that the build needs neither
+# the OpenSSL headers nor pahole.
 
 # --- architecture and CPU -----------------------------------------------
 CONFIG_64BIT=y

@@ -384,6 +384,23 @@ struct klet_carrier {
 	 */
 	int pc_base;
 	int excess;
+	/*
+	 * Linux's count as klet_mirror_out found it when it was neither pc_base
+	 * nor pc_base + 1, or -1. klet_mirror_out may run on a kernelet stack, where
+	 * no Linux function may be called, so the warning is printed by klet_enter
+	 * once the carrier is back on its Linux stack.
+	 */
+	int mirror_fault_pc;
+
+	/*
+	 * Set on the Linux stack when a fatal signal is found pending on the
+	 * carrier, in a service (klet_svc_body) or by the watch timer in kernelet
+	 * code: the carrier must not go back into the kernelet, but leave it for
+	 * good and die, so that a SIGKILL ends the sandbox wherever the carrier
+	 * was. `killed_in` says which, for the log.
+	 */
+	bool doomed;
+	const char *killed_in;
 
 	/* Set while the carrier is asleep in vcpu_idle. */
 	bool idle;
@@ -516,6 +533,12 @@ struct klet_inst {
 	atomic_t fpu_swaps;
 	atomic_t fpu_rejects;
 	atomic_t mirror_faults;
+	/* Where a fatal signal to a carrier of the live sandbox was acted on. */
+	atomic_t kills_in_service;
+	atomic_t kills_in_kernelet;
+	/* Carrier records allocated and freed: equal once every carrier is gone. */
+	atomic_t carriers_made;
+	atomic_t carriers_freed;
 	atomic_t stolen_ms;
 
 	/* What one service costs, measured on the first log line (carrier.c). */

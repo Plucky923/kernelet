@@ -17,5 +17,3 @@ pub use self::{
     spin::{SpinLock, SpinLockGuard},
     wait::{WaitQueue, Waiter, Waker},
 };
-#[allow(unused_imports)]
-pub(crate) use self::spin::ON_SPIN_COUNT;

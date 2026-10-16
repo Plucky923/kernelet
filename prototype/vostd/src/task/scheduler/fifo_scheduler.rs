@@ -1,9 +1,22 @@
 // SPDX-License-Identifier: MPL-2.0
 
-//! The default FIFO scheduler, ported verbatim from real OSTD at `ab9a4cfdc`
-//! except for two things: `select_cpu` spreads work over the sandbox's virtual
-//! CPUs round-robin instead of always choosing the BSP (OSTD's own `FIXME`), and
-//! the `util::id_set::Id` import is gone with the rest of that module.
+//! The default FIFO scheduler, ported from real OSTD at `ab9a4cfdc`. Every
+//! difference from the original:
+//!
+//! - `select_cpu` spreads work over the sandbox's virtual CPUs round-robin, with
+//!   the new `next` counter, instead of always choosing the BSP (OSTD's own
+//!   `FIXME`).
+//! - `enqueue` returns `Some(target_cpu)` when the task went to another vCPU's
+//!   queue, where the original always returns `None`. The caller then kicks that
+//!   vCPU: one asleep in `vcpu_idle` would otherwise sleep through the work,
+//!   because a virtual CPU, unlike a real one, has no idle loop that polls.
+//! - The let-chain in `enqueue` (`still_in_rq && let Err(_) = ...`) is written as
+//!   `still_in_rq && ....is_err()`, the same test: vOSTD is edition 2021, in
+//!   which let-chains do not exist, and OSTD is edition 2024.
+//! - The `util::id_set::Id` import is gone with the rest of that module, the
+//!   `use` lists are in edition 2021's `rustfmt` order, the doc comment of
+//!   `new` is dropped, and the comments on `rq` and on `enqueue`'s return say
+//!   what they mean here.
 
 use alloc::{boxed::Box, collections::VecDeque, sync::Arc, vec::Vec};
 use core::sync::atomic::{AtomicUsize, Ordering};

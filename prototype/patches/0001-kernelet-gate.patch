@@ -156,7 +156,7 @@ Signed-off-by: kernelet-in-Linux prototype <none@example.com>
  	/* Either of the above might have changed the syscall number */
  	syscall = syscall_get_nr(current, regs);
  
-@@ -98,6 +112,17 @@
+@@ -98,6 +112,30 @@
  
  		local_irq_enable_exit_to_user(ti_work);
  
@@ -166,9 +166,22 @@ Signed-off-by: kernelet-in-Linux prototype <none@example.com>
 +		 * before arch_do_signal_or_restart(): a carrier's registers are
 +		 * owned by the kernelet, so they must be in place before a
 +		 * signal frame is built on top of them.
++		 *
++		 * The resume work goes first, because its first act is to clear
++		 * TIF_NOTIFY_RESUME. Cleared after the hook, the flag would take
++		 * with it a set_notify_resume() the endovisor made while the hook
++		 * ran, for a virtual interrupt the hook had already looked for,
++		 * and the carrier would enter user mode with it pending. Cleared
++		 * before, such a request is in the flags read again at the end of
++		 * this pass, and the loop runs the hook once more.
 +		 */
-+		if (unlikely(current->kernelet))
++		if (unlikely(current->kernelet)) {
++			if (ti_work & _TIF_NOTIFY_RESUME) {
++				resume_user_mode_work(regs);
++				ti_work &= ~_TIF_NOTIFY_RESUME;
++			}
 +			current->kernelet->ops->resume(regs);
++		}
 +#endif
 +
  		if (ti_work & _TIF_NEED_RESCHED)

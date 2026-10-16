@@ -4,9 +4,7 @@ The hundred-line kernel has one task. A real kernel has thousands: a thread per 
 
 ## Two levels
 
-There are two ways to run a kernel's tasks inside another kernel. The first makes every kernelet task a Linux task and lets Linux schedule them all; the kernelet's scheduler is compiled in and never asked. It is simple, and it throws away the kernelet's policy: the tenant's real-time thread is not real-time, and the kernel proper's scheduler is dead code.
-
-The second, which the design uses, has **two levels**. Linux schedules a sandbox's **virtual CPUs**, a handful per sandbox, and knows nothing else about it. On each virtual CPU, the kernelet's own scheduler decides which kernelet task runs, for how long, and what preempts what.
+The design has **two levels**. Linux schedules a sandbox's **virtual CPUs**, a handful per sandbox, and knows nothing else about it. On each virtual CPU, the kernelet's own scheduler decides which kernelet task runs, for how long, and what preempts what.
 
 ```mermaid
 flowchart TB
@@ -114,7 +112,7 @@ A machine's processors are started at boot, halted when idle, and interrupted wh
 ```c
 static void klet_do_vcpu_idle(struct klet_carrier *c, u64 deadline_ns)
 {
-	set_current_state(TASK_KILLABLE | TASK_FREEZABLE);   /* 1. announce the sleep */
+	set_current_state(TASK_KILLABLE | TASK_FREEZABLE | TASK_NOLOAD);   /* 1. announce the sleep; an idle vCPU is not load */
 	WRITE_ONCE(c->idle, true);                            /* 2. mark the vCPU idle */
 	smp_mb();
 	if (!atomic_read(&c->vrec.pending) && !inst->dying)   /* 3. only then look */
@@ -147,7 +145,8 @@ fn set_need_preempt(cpu_id: CpuId) {
     }
 }
 
-fn reschedule<F>(mut f: F) {                     // the heart of every scheduling decision
+fn reschedule<F>(mut f: F)                       // the heart of every scheduling decision
+where F: FnMut(&mut LocalRunQueue) -> ReschedAction {
     cpu_local::clear_need_preempt();
     let next_task = loop {
         match f(local_run_queue) {

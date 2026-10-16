@@ -424,6 +424,15 @@ pub(crate) fn deliver_no_switch() {
     IN_VIRQ.store(false);
 }
 
+/// Runs the pending virtual interrupts, if there are any, without switching
+/// tasks: what the scheduler does before it decides (`open_resched_window`).
+#[inline]
+pub(crate) fn deliver_pending_no_switch() {
+    if has_pending() {
+        deliver_no_switch();
+    }
+}
+
 /// Whether this virtual CPU is inside a virtual-interrupt upcall.
 #[inline]
 pub(crate) fn in_upcall() -> bool {

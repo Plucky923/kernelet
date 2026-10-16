@@ -9,7 +9,7 @@ use core::{
     fmt,
     marker::PhantomData,
     ops::{Deref, DerefMut},
-    sync::atomic::{AtomicBool, AtomicU64, Ordering},
+    sync::atomic::{AtomicBool, Ordering},
 };
 
 use super::{guard::SpinGuardian, LocalIrqDisabled, PreemptDisabled};
@@ -18,10 +18,6 @@ use crate::task::atomic_mode::AsAtomicModeGuard;
 /// How many failed acquisitions make it worth asking the host to run whichever
 /// sibling vCPU holds the lock.
 const SPINS_BEFORE_ON_SPIN: u32 = 1000;
-
-/// How many times any spin lock in this kernelet reached that point, for the
-/// report.
-pub(crate) static ON_SPIN_COUNT: AtomicU64 = AtomicU64::new(0);
 
 /// A spin lock.
 ///
@@ -115,7 +111,6 @@ impl<T: ?Sized, G: SpinGuardian> SpinLock<T, G> {
             spins += 1;
             if spins == SPINS_BEFORE_ON_SPIN {
                 spins = 0;
-                ON_SPIN_COUNT.fetch_add(1, Ordering::Relaxed);
                 crate::vcpu::on_spin();
             }
         }

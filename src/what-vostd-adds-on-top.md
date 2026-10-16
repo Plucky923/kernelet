@@ -67,7 +67,7 @@ impl Region {
 
 fn copy_regions(dst: &mut Region, src: &mut Region) -> (usize, bool) {
     while copied < total {
-        let done = rcu::read(|| {                                      // a closure, run inside a read section (below)
+        let done = rcu::read(|| {                                      // a closure, run inside a read section (below); a `?` in it returns from the closure
             let (dptr, dlen) = dst.resolve(true)?;
             let (sptr, slen) = src.resolve(false)?;
             let n = dlen.min(slen).min(total - copied);
@@ -131,7 +131,7 @@ pub(crate) fn from_raw(paddr: Paddr) -> Self {
 
 This is sound only if Linux never clears an entry of the area on its own initiative. For a raw-frame-number area it does not: reclaim, swapping, compaction, same-page merging and the rest all skip such entries, because there is no Linux page behind them. The test `make mem-pressure` drives the Linux under test into swap with a host process while a tenant has 512 pages mapped, and afterwards every entry is present with the same frame and the same contents.
 
-**The grace period.** A copy takes no cursor, so an `unmap` on another virtual CPU may clear the entry the copy just walked, and then free the frame while the copy is still reading it. The `rcu::read` around each page of a copy, and the `rcu::synchronize()` in `unmap` before the frames are freed, are a minimal RCU (*read-copy-update*, a scheme in which readers take no lock and a writer waits for every reader in progress to finish before it frees anything): each virtual CPU has a sequence word that is odd while it is inside a read section, and `synchronize` waits until every other virtual CPU that was inside a section when it was called has left it. A read section lasts one page's walk and copy, so the wait is short. `make mem-conc` runs tens of millions of copies on one virtual CPU against tens of thousands of map-and-unmap cycles on the other and finds no torn copy.
+**The grace period.** A copy takes no cursor, so an `unmap` on another virtual CPU may clear the entry the copy just walked, and then free the frame while the copy is still reading it. The `rcu::read` around each page of a copy, and the `rcu::synchronize()` in `unmap` before the frames are freed, are a minimal RCU (*read-copy-update*, a scheme in which readers take no lock and a writer waits for every reader in progress to finish before it frees anything): each virtual CPU has a sequence word that is odd while it is inside a read section, and `synchronize` waits until every other virtual CPU that was inside a section when it was called has left it. A read section holds a preemption guard, so no task switch happens inside it, which is why `synchronize` need not wait for its own virtual CPU; it lasts one page's walk and copy, so the wait is short. `make mem-conc` runs copies without pause on one virtual CPU against map-and-unmap cycles on the other and finds no torn copy.
 
 ## The range lock
 
@@ -235,7 +235,7 @@ fn destroy(mut node: Node) {
 
 ## The rule about sleeping
 
-Every memory service except `vm_flush` and `vm_activate` may sleep in Linux: for the address-space lock, for a page-table page, for the zap's own pauses between tables, in `vm_wait`. And the kernel proper calls `map` holding a preemption guard, because every cursor takes one. On a machine that would be a contradiction: OSTD forbids sleeping inside a critical section. Here it is not, and the design states the rule in four parts.
+Every memory service except `vm_flush`, `vm_activate` and `vm_wake` may sleep in Linux: for the address-space lock, for a page-table page, for the zap's own pauses between tables, in `vm_wait`. And the kernel proper calls `map` holding a preemption guard, because every cursor takes one. On a machine that would be a contradiction: OSTD forbids sleeping inside a critical section. Here it is not, and the design states the rule in four parts.
 
 1. A service may sleep whenever its work needs it. Its prologue lifts the mirror of chapter 10, so Linux sees nothing wrong, and its epilogue restores it.
 2. A service that may sleep must not be called while the caller holds a kernelet **spin lock** or has virtual interrupts off. Under a plain preemption guard it may. The reason is lock-holder preemption: a spin lock held across a Linux sleep makes every other virtual CPU that wants it spin for the sleep's length. vOSTD asserts this before every sleeping service, with a count of spin locks held that is separate from the guard count.
@@ -258,7 +258,7 @@ pub(crate) fn map(&self, va: Vaddr, paddr: Paddr, prot: u32) {
 
 pub(crate) fn assert_may_sleep(service: &str) {
     if held() != 0 || irq_is_off() {
-        panic!("R2 violated: the sleeping service {} was called holding {} kernelet spin lock(s)", service, held());
+        panic!("R2 violated: the sleeping service {} was called holding {} kernelet spin lock(s)", service, held());   // R2 is the code's name for rule 2
     }
 }
 ```

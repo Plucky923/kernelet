@@ -59,6 +59,12 @@ The program's bytes are compiled into the kernel with `include_bytes!`. `main` b
 
 ## Piece 2: building the address space
 
+<div class="rust">
+
+**Rust: the small syntax, once.** `&T` is a reference to a `T`, a pointer the compiler has checked; `&mut T` is one that may change the `T`; `&[u8]` is a reference to a run of bytes with its length. A method written `fn f(&self)` takes a reference to the value it is called on, as `x.f()`. `*const T` and `*mut T` are raw pointers, C's pointers, which only `unsafe` code may dereference. `'static` on a reference says it lives for the whole program. `as` converts between numeric types and between pointers and integers. On integers `!x` is bitwise NOT, C's `~x`, so `addr & !(PAGE_SIZE - 1)` rounds down to a page. `x.store(v, Ordering::Relaxed)` and `x.load(...)` are atomic accesses, and the `Ordering` says what other memory accesses they order, as the C11 atomics do. An `asm!` block is inline assembly in Intel syntax, destination first; `in("rdi") x` puts `x` in a register before it runs, `out("rax") y` reads one afterwards, and `options(nostack)` and its siblings promise what the block does not touch.
+
+</div>
+
 *Simplified from `prototype/hello/src/lib.rs`: `create_vm_space`.*
 
 ```rust
@@ -99,7 +105,7 @@ Three framework types appear here.
 
 **The address space.** `VmSpace::new()` creates an empty address space for user programs. On a machine that is a fresh page table. To change it, the kernel opens a **cursor** over a range of virtual addresses, `cursor_mut`, and calls `map` once per page: *put this frame at the cursor's address, with these permissions*, after which the cursor moves one page on. `PageFlags::RWX` makes the pages readable, writable and executable. The cursor holds the range locked while it exists, so two parts of a kernel cannot map the same page at once; dropping it releases the range.
 
-**The preemption guard.** `disable_preempt()` returns a guard; while it lives, the framework's scheduler will not switch this processor to another task. The cursor requires one, because the framework's page-table code is written on the assumption that it will not be interrupted by a task switch half way through an edit.
+**The preemption guard.** `disable_preempt()` returns a guard; while it lives, the framework's scheduler will not switch this processor to another task. The cursor requires one, because the framework's page-table code is written on the assumption that it will not be interrupted by a task switch halfway through an edit.
 
 **What it asks of the machine:** physical frames to allocate; a page table per address space, which the kernel edits one page at a time through a cursor; and a way to switch off task preemption.
 
@@ -211,6 +217,6 @@ Here is everything the hundred-line kernel needs, with what OSTD does on a machi
 
 <div class="recap">
 
-**Recap.** The hundred-line kernel allocates frames, builds an address space with a cursor, creates a task, and in that task loops over `execute`, which enters user mode and returns on each system call. It copies the program's buffer through a fallible reader rather than touching the address. The table above is the contract that vOSTD and the endovisor must fulfil, and the rest of the book fulfils it one row at a time.
+**Recap.** The hundred-line kernel allocates frames, builds an address space with a cursor, creates a task, and in that task loops over `execute`, which enters user mode and returns on each system call. It copies the program's buffer through a fallible reader rather than touching the address. The table above is the contract that vOSTD and the endovisor must fulfill, and the rest of the book fulfills it one row at a time.
 
 </div>

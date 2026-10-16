@@ -28,8 +28,24 @@
  * Three rules the code exists to keep:
  *
  *  - no kernelet code runs on a carrier's Linux stack;
- *  - no host code runs on a kernelet stack, bar the four instructions of a
- *    service stub that get off it; and
+ *  - no Linux function runs on a kernelet stack. What the endovisor runs there
+ *    is the stub of each service: the C wrapper the service table points at
+ *    (klet_svc_log_write, klet_svc_vm_map, ..., and klet_svc_enter or
+ *    klet_svc_enter5 behind it), which finds the carrier through `current`,
+ *    packs the arguments and calls klet_run_on_linux_stack, the few
+ *    instructions that move to the Linux stack and call klet_svc_body there;
+ *    the wrappers of vm_wait, vcpu_yield and stop, which on the way back look
+ *    at the carrier's flags and leave the kernelet for good if the sandbox is
+ *    dying; user_run and klet_leave, which take the mirror off Linux's
+ *    preemption count and switch to the Linux stack; klet_yield_body and
+ *    klet_evict_leave, the same for the yield and exit stubs; klet_coro_main,
+ *    which calls the kernelet's entry point on a vCPU's first coroutine and
+ *    leaves if it ever returns; and, once, on the first log line,
+ *    klet_measure_switch's timing loop. None of it calls a function of the
+ *    Linux kernel: what it uses of Linux are the header helpers compiled into
+ *    the module itself (`current`, the preemption count, the interrupt flag,
+ *    the time-stamp counter, the signal bits), and a warning it would print
+ *    waits for the Linux stack (see mirror_fault_pc); and
  *  - nothing the kernelet writes decides how much the endovisor changes Linux's
  *    own state. The mirrored preemption count is un-mirrored by measuring
  *    Linux's count, not by believing the kernelet's `masked`.
@@ -82,13 +98,23 @@ struct klet_carrier *klet_carrier_get(struct klet_carrier *c)
 	return c;
 }
 
+/*
+ * A carrier record has two references for as long as its carrier lives: the
+ * carrier's own, taken by klet_carrier_new() and dropped by
+ * klet_carrier_lifeline_closed(), and the lifeline file's, dropped when the
+ * file is released. Anyone else who looks a carrier up (a kick) takes one of
+ * its own under inst->lock.
+ */
 void klet_carrier_put(struct klet_carrier *c)
 {
+	struct klet_inst *inst = c->inst;
+
 	if (!refcount_dec_and_test(&c->refs))
 		return;
 	if (c->task)
 		put_task_struct(c->task);
 	kfree(c);
+	atomic_inc(&inst->carriers_freed);
 }
 
 /*
@@ -124,6 +150,7 @@ struct klet_carrier *klet_carrier_new(struct klet_inst *inst, enum klet_kind kin
 	c->inst = inst;
 	c->kind = kind;
 	c->vcpu = vcpu;
+	c->mirror_fault_pc = -1;
 	refcount_set(&c->refs, 1);
 	INIT_LIST_HEAD(&c->link);
 	init_waitqueue_head(&c->idle_wq);
@@ -162,6 +189,7 @@ struct klet_carrier *klet_carrier_new(struct klet_inst *inst, enum klet_kind kin
 	list_add_tail(&c->link, &inst->carriers);
 	spin_unlock(&inst->lock);
 	atomic_inc(&inst->nr_carriers);
+	atomic_inc(&inst->carriers_made);
 
 	return c;
 }
@@ -183,7 +211,13 @@ int klet_carrier_attach(struct klet_carrier *c)
 
 	fd = get_unused_fd_flags(0);
 	if (fd < 0) {
+		/*
+		 * The caller sends the death notice itself, so the file's release
+		 * must not send a second one: it gives back only its reference.
+		 */
+		file->private_data = NULL;
 		fput(file);
+		klet_carrier_put(c);
 		return fd;
 	}
 	fd_install(fd, file);
@@ -229,7 +263,8 @@ void klet_carrier_lifeline_closed(struct klet_carrier *c)
 {
 	struct klet_inst *inst = c->inst;
 	bool was_root = (c->kind == KLET_ROOT);
-	bool live = !inst->stopped && !inst->dying;
+	/* Read without the lock, as everywhere but klet_kill_instance (see there). */
+	bool live = !READ_ONCE(inst->stopped) && !READ_ONCE(inst->dying);
 	bool last;
 
 	spin_lock(&inst->lock);
@@ -290,7 +325,35 @@ void klet_carrier_lifeline_closed(struct klet_carrier *c)
 	if (last)
 		klet_spaces_destroy(inst);
 
-	klet_carrier_put(c);
+	/*
+	 * The carrier's own reference, and with it, once the lifeline file has
+	 * given back its own, the record and the task_struct reference it holds.
+	 *
+	 * Nothing may still reach the record through the task first. A carrier
+	 * killed in user mode never ran klet_detach(): its task_struct still
+	 * points at the gate, and its preempt notifier is still registered, and
+	 * both would be used after the free, by the watch timer's and the sweep's
+	 * look at `current` in the rest of do_exit(), and by the final
+	 * schedule()'s sched_out notifier. The lifeline is released in
+	 * exit_task_work(), in the dying task's own context, before that final
+	 * schedule(), so they are undone here. A notifier may only be
+	 * unregistered by its own task: if the lifeline is released anywhere
+	 * else (a copy of the descriptor taken with pidfd_getfd(), closed after
+	 * the carrier died), a record still attached is kept rather than freed,
+	 * and the unload counts it.
+	 */
+	if (c->task == current) {
+		clear_syscall_work(KERNELET);
+		WRITE_ONCE(current->kernelet, NULL);
+		barrier();
+		klet_sched_detach(c);
+	}
+	if (!c->pnotifier_on &&
+	    !(c->task && READ_ONCE(c->task->kernelet) == &c->gate))
+		klet_carrier_put(c);
+	else
+		pr_warn("kernelet: %s carrier record (pid %d) released away from its task; kept\n",
+			klet_kind_name(c->kind), c->task ? c->task->pid : 0);
 }
 
 /*
@@ -303,8 +366,10 @@ static void klet_carrier_die(struct klet_carrier *c)
 	if (c->kind == KLET_ROOT)
 		pr_info("kernelet: root carrier (pid %d) dying\n", current->pid);
 	else
-		pr_info("kernelet: vcpu %d carrier (pid %d) dying%s\n", c->vcpu,
-			current->pid, c->evicted ? " (evicted)" : "");
+		pr_info("kernelet: vcpu %d carrier (pid %d) dying%s%s\n", c->vcpu,
+			current->pid,
+			c->killed_in ? ", killed in " : c->evicted ? " (evicted)" : "",
+			c->killed_in ? c->killed_in : "");
 	klet_detach(c);
 	if (!fatal_signal_pending(current))
 		force_sig(SIGKILL);
@@ -459,8 +524,7 @@ static void klet_mirror_out(struct klet_carrier *c, bool forever)
 		 * every task that follows.
 		 */
 		atomic_inc(&c->inst->mirror_faults);
-		pr_warn_once("kernelet: Linux's preempt count was %d, expected %d or %d; re-normalising\n",
-			     now, c->pc_base, c->pc_base + 1);
+		c->mirror_fault_pc = now;
 		preempt_count_set(c->pc_base);
 		c->excess = 0;
 		return;
@@ -492,6 +556,13 @@ static void klet_enter(struct klet_carrier *c, u64 run_ret)
 	klet_mirror_in(c);
 	klet_watch_arm(c);
 	klet_switch(&c->linux_sp, c->coro_sp);
+
+	/* Back on the Linux stack, where a warning may be printed. */
+	if (unlikely(c->mirror_fault_pc >= 0)) {
+		pr_warn_once("kernelet: Linux's preempt count was %d, expected %d or %d; re-normalised\n",
+			     c->mirror_fault_pc, c->pc_base, c->pc_base + 1);
+		c->mirror_fault_pc = -1;
+	}
 }
 
 /* Runs on a kernelet stack: gives control back to the Linux stack. */
@@ -533,7 +604,7 @@ unsigned long klet_yield_body(void)
 	unsigned long ip = c->yield_ip;
 
 	klet_run_on_linux_stack(c->linux_sp, &args);
-	if (args.ret)
+	if (args.ret || READ_ONCE(c->doomed))
 		return 0;
 	return ip;
 }
@@ -655,6 +726,13 @@ static void klet_ctx_set_exception(struct klet_carrier *c)
  * mode: user_run marks the carrier KLET_USER *before* it looks at the pending
  * word, and this sets the pending word before it looks at the state, so at least
  * one of the two sees the other and the interrupt is never lost.
+ *
+ * Nor is the set_notify_resume(): the gate clears TIF_NOTIFY_RESUME *before* it
+ * runs the resume hook, in the same pass of the exit loop, so a request made
+ * while the hook runs, after its last look at the pending word, is still set
+ * when the loop reads the flags again, and the loop runs the hook once more.
+ * Cleared after the hook, it would be swallowed, and the carrier would enter
+ * user mode with the interrupt pending until the next watch tick.
  */
 void klet_virq_raise(struct klet_carrier *c, u32 bit)
 {
@@ -677,15 +755,20 @@ void klet_virq_raise(struct klet_carrier *c, u32 bit)
  * Whether a signal is Linux's report of a fault of the tenant's own making,
  * which the kernelet must see as the CPU exception it was. Those are the
  * synchronous fault signals with a fault's si_code (0 < si_code < SI_KERNEL),
- * and four of them with SI_KERNEL too, which is what x86's do_trap() and
- * do_general_protection() send through force_sig() when there is no finer
- * code (arch/x86/kernel/traps.c): SIGSEGV for #GP and #TS, SIGBUS for #NP and
- * #SS, SIGTRAP for #BP (int3), SIGFPE for #MF on the legacy coprocessor
- * vector. A process cannot forge SI_KERNEL: kill() and sigqueue() send SI_USER
- * or a negative code. SIGILL is a fault only with a fault code. Everything
- * else is not a trap, and thread.trap_nr is stale for it: SIGXCPU from
- * RLIMIT_CPU and the other SI_KERNEL signals, and seccomp's SIGSYS
- * (SYS_SECCOMP).
+ * and four of them with SI_KERNEL too, which is what x86's do_trap(),
+ * do_general_protection() and the XFD path send through force_sig() when
+ * there is no finer code (arch/x86/kernel/traps.c): SIGSEGV for #GP, #TS, #OF
+ * (the `into` instruction is gone in 64-bit mode, but `int $4` reaches the
+ * DPL-3 gate), #BR (from a compatibility code segment), and an #NM whose
+ * extended feature (XFD) could not be enabled; SIGBUS for #NP and #SS;
+ * SIGTRAP for #BP (int3); SIGFPE for #MF on the legacy coprocessor vector.
+ * Every one but the XFD #NM records its vector in thread.trap_nr first; that
+ * one does not (handle_xfd_event()), so it reaches the kernelet with whatever
+ * trap number the tenant's last fault left behind. A process cannot forge
+ * SI_KERNEL: kill() and sigqueue() send SI_USER or a negative code. SIGILL is
+ * a fault only with a fault code. Everything else is not a trap, and
+ * thread.trap_nr is stale for it: SIGXCPU from RLIMIT_CPU and the other
+ * SI_KERNEL signals, and seccomp's SIGSYS (SYS_SECCOMP).
  */
 static bool klet_is_fault_signal(int signr, int si_code)
 {
@@ -838,6 +921,15 @@ static int klet_carrier_main(void *arg)
 	int err;
 
 	/*
+	 * The clone copied the root carrier's gate pointer and syscall-work bit.
+	 * This task is not a carrier until klet_carrier_attach() makes it one,
+	 * and must not reach the root's record through them meanwhile, nor after
+	 * a failure below, when the root's record may be gone.
+	 */
+	clear_syscall_work(KERNELET);
+	current->kernelet = NULL;
+
+	/*
 	 * Drop the copy of the root carrier's lifeline that came with the fresh
 	 * descriptor table, so that the root's death notice is the root's alone.
 	 */
@@ -902,7 +994,7 @@ static int klet_carrier_main(void *arg)
 	/*
 	 * ret_from_fork() zeroes regs->ax after this function returns, so the
 	 * registers cannot be applied here: ask for the resume hook, which runs
-	 * last, to apply them.
+	 * after that, on the way out to user mode, to apply them.
 	 */
 	set_thread_flag(TIF_NOTIFY_RESUME);
 	return 0;
@@ -928,24 +1020,74 @@ static void klet_kill_carriers(struct klet_inst *inst)
 /* The kernelet asked to power off. */
 void klet_stop_instance(struct klet_inst *inst, u64 code)
 {
-	if (!inst->stopped) {
-		inst->stopped = true;
+	bool first;
+
+	/* Decided under the lock, as `dying` is (klet_kill_instance). */
+	spin_lock(&inst->lock);
+	first = !inst->stopped;
+	if (first) {
 		inst->exit_code = code;
-		pr_info("kernelet: stopped, exit code %llu\n", code);
+		WRITE_ONCE(inst->stopped, true);
 	}
+	spin_unlock(&inst->lock);
+	if (first)
+		pr_info("kernelet: stopped, exit code %llu\n", code);
 	klet_kill_carriers(inst);
 }
 
-/* The sandbox is being destroyed from outside: one of its carriers has died. */
+/*
+ * The sandbox is being destroyed from outside: one of its carriers has died, or
+ * has been sent a fatal signal.
+ *
+ * Two carriers can get here at once. Only the setting of `dying` has to be
+ * decided between them, so that the message is printed once: it is a
+ * test-and-set under inst->lock. The rest may run twice: a second SIGKILL to a
+ * carrier, a second wake-up and a second arming of the sweep change nothing.
+ * `dying` and `stopped` are read without the lock everywhere else, and that is
+ * enough: each only ever goes from false to true, and every reader that acts
+ * on one either runs again later (a loop, the watch timer, the sweep) or is
+ * woken by klet_kill_carriers(), which comes after the store.
+ */
 void klet_kill_instance(struct klet_inst *inst)
 {
-	if (!inst->dying) {
-		inst->dying = true;
+	bool first;
+
+	spin_lock(&inst->lock);
+	first = !inst->dying;
+	WRITE_ONCE(inst->dying, true);
+	spin_unlock(&inst->lock);
+	if (first)
 		pr_info("kernelet: a carrier is gone, the sandbox is dying; %d carrier(s) left\n",
 			atomic_read(&inst->nr_carriers));
-	}
 	klet_kill_carriers(inst);
 	klet_evict_arm(inst);
+}
+
+/*
+ * A fatal signal was found pending on this carrier on the Linux stack, in a
+ * service: end the sandbox if it is still live, and mark the carrier, so that
+ * the stub leaves the kernelet for good instead of returning into it. Linux
+ * acts on SIGKILL only on the way to user mode, and a carrier asleep in
+ * vcpu_idle, or running only kernel tasks, may never go there: without this, a
+ * kill (an operator's, or the OOM killer's) would end nothing, and vcpu_idle,
+ * which does not sleep with a fatal signal pending, would return at once into
+ * an idle loop that calls it again, burning a host processor for the rest of
+ * the sandbox's life.
+ */
+static void klet_carrier_doom(struct klet_carrier *c)
+{
+	struct klet_inst *inst = c->inst;
+
+	if (c->doomed)
+		return;
+	c->doomed = true;
+	if (READ_ONCE(inst->stopped) || READ_ONCE(inst->dying))
+		return;
+	c->killed_in = "a service";
+	atomic_inc(&inst->kills_in_service);
+	pr_info("kernelet: vcpu %d carrier (pid %d) has a fatal signal pending in a service\n",
+		c->vcpu, current->pid);
+	klet_kill_instance(inst);
 }
 
 /* ------------------------------------------------------------------ */
@@ -1164,12 +1306,15 @@ static void klet_do_vcpu_boot(struct klet_inst *inst, u64 id)
 
 	spin_lock(&inst->lock);
 	target = inst->vcpus[id];
+	if (target)
+		klet_carrier_get(target);
 	spin_unlock(&inst->lock);
 	if (!target)
 		return;
 
 	target->boot_requested = true;
 	wake_up_all(&target->idle_wq);
+	klet_carrier_put(target);
 }
 
 static void klet_do_vcpu_kick(struct klet_inst *inst, u64 id)
@@ -1589,10 +1734,23 @@ void klet_svc_body(struct klet_svc_args *args)
 		break;
 	}
 
+	/*
+	 * Wherever the carrier was in the kernelet, a fatal signal ends it here,
+	 * on the way back. Not for the empty service the measurement runs with
+	 * interrupts off, where klet_kill_instance() may not run; the next real
+	 * service catches it.
+	 */
+	if (unlikely(args->op != KLET_SVC_NOP && fatal_signal_pending(current)))
+		klet_carrier_doom(c);
+
 	klet_svc_epilogue(c);
 }
 
-/* Runs on the kernelet stack: the only thing it does is leave it. */
+/*
+ * The stub proper, on the kernelet stack: find the carrier, pack the arguments,
+ * and run the service body on the Linux stack. klet_svc_enter5 is the same for
+ * the one service with more than three arguments.
+ */
 static u64 klet_svc_enter5(u64 op, u64 a0, u64 a1, u64 a2, u64 a3, u64 a4)
 {
 	struct klet_carrier *c = klet_current_carrier();
@@ -1600,6 +1758,10 @@ static u64 klet_svc_enter5(u64 op, u64 a0, u64 a1, u64 a2, u64 a3, u64 a4)
 				      .a3 = a3, .a4 = a4 };
 
 	klet_run_on_linux_stack(c->linux_sp, &args);
+	/* A fatal signal: abandon the coroutine (klet_carrier_doom). */
+	if (unlikely(READ_ONCE(c->doomed)))
+		for (;;)
+			klet_leave(c, KLET_DEAD);
 	return args.ret;
 }
 
@@ -1609,6 +1771,9 @@ static u64 klet_svc_enter(u64 op, u64 a0, u64 a1, u64 a2)
 	struct klet_svc_args args = { .op = op, .a0 = a0, .a1 = a1, .a2 = a2 };
 
 	klet_run_on_linux_stack(c->linux_sp, &args);
+	if (unlikely(READ_ONCE(c->doomed)))
+		for (;;)
+			klet_leave(c, KLET_DEAD);
 	return args.ret;
 }
 
@@ -1711,9 +1876,12 @@ static s64 klet_svc_vm_flush(u64 space, u64 va, u64 len)
 }
 
 /*
- * A kill wakes the waiters, and the epilogue then leaves the kernelet for good
+ * A kill wakes the waiters, and the stub then leaves the kernelet for good
  * rather than returning into it: there is no "cancelled" error for vOSTD to
- * handle, because a kernelet that is being killed has nothing left to do.
+ * handle, because a kernelet that is being killed has nothing left to do. A
+ * fatal signal to this carrier is caught by klet_svc_enter (klet_carrier_doom);
+ * the test here also catches a sandbox that is stopping or dying because of
+ * another carrier, which may wake this one before its own SIGKILL is sent.
  */
 static s64 klet_svc_vm_wait(u64 space, u32 stripe, u64 expected)
 {
@@ -1789,7 +1957,9 @@ static void klet_svc_fpu_load(const void *area, u64 len)
  *
  * The carrier is marked as leaving *before* the pending word is read, so that a
  * virtual interrupt raised in the window is either seen here or makes the raiser
- * flag the carrier. Either way it is not lost.
+ * flag the carrier. Either way it is not lost: a flag raised while the resume
+ * hook is still running makes the exit loop run the hook again, because the gate
+ * clears TIF_NOTIFY_RESUME before the hook, not after (klet_virq_raise).
  */
 static u64 klet_svc_user_run(struct klet_user_ctx *ctx)
 {

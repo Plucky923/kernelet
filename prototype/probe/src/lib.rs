@@ -14,7 +14,10 @@
 //!    [`CpuException::InvalidOpcode`], logs it, and steps over the two bytes.
 //!    Then `int3`, which Linux reports as a SIGTRAP with `SI_KERNEL`; the kernel
 //!    gets [`CpuException::BreakPoint`] (trap 3) and carries on, since rip is
-//!    already past the instruction.
+//!    already past the instruction. Then `hlt`, privileged, which Linux reports
+//!    as a SIGSEGV with `SI_KERNEL`; the kernel gets
+//!    [`CpuException::GeneralProtectionFault`] (trap 13) and steps over the one
+//!    byte.
 //! 3. **Eviction.** The program makes a system call whose handler never returns.
 //!    The only way the host gets that CPU back is to evict the kernelet.
 
@@ -147,6 +150,14 @@ fn handle_exception(user_context: &mut UserContext, vm_space: &VmSpace) {
                 rip
             );
             user_context.set_rip(rip + 2);
+        }
+        Some(CpuException::GeneralProtectionFault(_)) => {
+            let rip = user_context.rip();
+            println!(
+                "probe: general protection fault at {:#x} (trap 13), stepping over one byte",
+                rip
+            );
+            user_context.set_rip(rip + 1);
         }
         other => {
             println!("probe: unexpected exception {:?}, giving up", other);

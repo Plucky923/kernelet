@@ -17,6 +17,10 @@
  *    and then kills it with SIGKILL, while vCPU 0's tenant thread keeps
  *    faulting in the same address space. The kill must end the whole
  *    sandbox. Meanwhile vCPU 1's tenant runs the rewind check.
+ *  - "killidle" and "killspin": once the kernelet says vCPU 1 is idle in
+ *    vcpu_idle, or spinning in a kernel task, kills the carrier of vCPU 1 with
+ *    SIGKILL and reports how long the sandbox took to end. Linux acts on a
+ *    SIGKILL only on the way to user mode, where neither carrier is going.
  */
 #define _GNU_SOURCE
 
@@ -337,8 +341,12 @@ int main(void)
 			arg[n] = 0;
 		close(fd);
 	}
-	pressure = strstr(arg, "pressure") != NULL;
-	int kill_vcpu1 = strstr(arg, "kill") != NULL;
+	arg[strcspn(arg, "\n")] = 0;
+	pressure = strcmp(arg, "pressure") == 0;
+	int kill_vcpu1 = strcmp(arg, "kill") == 0;
+	int kill_quiet = strcmp(arg, "killidle") == 0 || strcmp(arg, "killspin") == 0;
+	struct timespec kill_t0 = { 0, 0 };
+	int killed = 0;
 
 	/* The area starts at 0x10000: security_mmap_addr() refuses it below
 	 * vm.mmap_min_addr. */
@@ -392,6 +400,24 @@ int main(void)
 		}
 	}
 
+	if (kill_quiet) {
+		long cpid = -1;
+
+		if (wait_kmsg("vcpu 1 carrier starting (pid ", 30) == 0)
+			cpid = strtol(kmsg_hit + strlen("vcpu 1 carrier starting (pid "), NULL, 10);
+		if (cpid > 0 && wait_kmsg("MEM-KILL-READY", 30) == 0) {
+			usleep(300 * 1000);	/* let it settle where it is */
+			outf("RUN-MEM: the carrier of vcpu 1 (pid %ld) is in state %c (%s); SIGKILL\n",
+			     cpid, task_state(cpid),
+			     strcmp(arg, "killidle") == 0 ? "idle in vcpu_idle" : "running a kernel task");
+			clock_gettime(CLOCK_MONOTONIC, &kill_t0);
+			kill((pid_t)cpid, SIGKILL);
+			killed = 1;
+		} else {
+			out("RUN-MEM: could not find the carrier of vcpu 1\n");
+		}
+	}
+
 	if (pressure) {
 		if (wait_kmsg("E7-MAPPED", 60) == 0) {
 			out("RUN-MEM: HOG: the kernelet has mapped its pages; allocating until reclaim runs\n");
@@ -407,6 +433,14 @@ int main(void)
 	do {
 		done = waitpid(pid, &status, 0);
 	} while (done < 0 && errno == EINTR);
+	if (killed) {
+		struct timespec t1;
+
+		clock_gettime(CLOCK_MONOTONIC, &t1);
+		outf("RUN-MEM: the sandbox ended %ld ms after the kill\n",
+		     (long)((t1.tv_sec - kill_t0.tv_sec) * 1000 +
+			    (t1.tv_nsec - kill_t0.tv_nsec) / 1000000));
+	}
 	if (WIFSIGNALED(status))
 		outf("RUN-MEM: root carrier (pid %d) killed by signal %d\n", pid,
 		     WTERMSIG(status));

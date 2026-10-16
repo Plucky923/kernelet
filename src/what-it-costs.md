@@ -10,10 +10,10 @@ A service call is an indirect function call plus two stack switches (chapter 6).
 
 | | cycles |
 |---|---|
-| the service body alone, called directly | 22 |
-| the same through the service stub, both stack switches included | 37 |
+| the service body alone, called directly | 24 |
+| the same through the service stub, both stack switches included | 42 |
 
-So the stack switches cost about fifteen cycles a call, a few nanoseconds. The two figures move by a few cycles from boot to boot: over the four `make test` runs of the build this book reports, the stub took 34 to 37 cycles and the body 22 to 25.
+So the stack switches cost about twenty cycles a call, a few nanoseconds; the two figures move by several cycles from boot to boot, and their difference with them.
 
 ## Tasks
 
@@ -21,26 +21,26 @@ Measured by the scheduler test kernel on its two virtual CPUs (`make sched-perf`
 
 | | median | worst 99th percentile |
 |---|---|---|
-| two kernelet tasks yielding to each other on one virtual CPU, one round trip | 2,278 cycles (601 ns) | 4,896 |
-| a blocked high-priority task woken by a lower-priority one on the same virtual CPU, until it runs | 1,842 cycles (486 ns) | 3,872 |
-| the same, woken from the other virtual CPU: `vcpu_kick`, the kick's interrupt and the upcall (chapter 9) | 3,684 cycles (972 ns) | 135,974 |
-| two tenant threads of two processes alternating on one virtual CPU through a yield system call, one round trip | 10,364 cycles (2.73 µs) | 25,250 |
-| for scale: two Linux processes on one processor calling `sched_yield()`, one round trip | 3,592 cycles (947 ns) | 10,936 |
-| for scale: a Linux process woken through a pipe by one on the other processor | 41,122 cycles (10.8 µs) | 97,230 |
+| two kernelet tasks yielding to each other on one virtual CPU, one round trip | 2,336 cycles (616 ns) | 4,882 |
+| a blocked high-priority task woken by a lower-priority one on the same virtual CPU, until it runs | 1,878 cycles (495 ns) | 3,692 |
+| the same, woken from the other virtual CPU: `vcpu_kick`, the kick's interrupt and the upcall (chapter 9) | 5,338 cycles (1.41 µs) | 66,266 |
+| two tenant threads of two processes alternating on one virtual CPU through a yield system call, one round trip | 11,610 cycles (3.06 µs) | 17,164 |
+| for scale: two Linux processes on one processor calling `sched_yield()`, one round trip | 3,638 cycles (959 ns) | 19,562 |
+| for scale: a Linux process woken through a pipe by one on the other processor | 41,576 cycles (11.0 µs) | 74,820 |
 
-A kernelet task switch, the scheduler's decision included, is therefore about 1,100 cycles. The Linux `sched_yield` row is a scale for it, not a baseline: the Linux pair makes two system calls and changes address space, and the kernelet pair does neither, so the kernelet round trip is an upper bound on what the kernelet's own scheduler costs and not a speed-up. The tenant-thread row is the honest comparison with it: both are a user thread entering the kernel and another user thread, in another address space, leaving it, timed from the same point in user mode, and the kernelet's costs 2.9 times as much. The difference is what each thread pays per trip: the gate's entry and exit, the kernelet's own switch, the adoption of the other address space through `kernelet_switch_mm` (chapter 12), and the kernel proper's save and load of the floating-point registers (chapter 8). The wake-up across virtual CPUs takes a microsecond when the kick's interrupt finds the other carrier running kernelet code; its tail is the widest of any row, because the kick may instead find that carrier asleep in `vcpu_idle`, where waking it is a Linux wake-up, or in user mode, where the bit waits for the carrier's next return (chapter 8).
+A kernelet task switch, the scheduler's decision included, is therefore about 1,200 cycles. The Linux `sched_yield` row is a scale for it, not a baseline: the Linux pair makes two system calls and changes address space, and the kernelet pair does neither, so the kernelet round trip is an upper bound on what the kernelet's own scheduler costs and not a speed-up. The tenant-thread row is the honest comparison with it: both are a user thread entering the kernel and another user thread, in another address space, leaving it, timed from the same point in user mode, and the kernelet's costs 3.2 times as much. The difference is what each thread pays per trip: the gate's entry and exit, the kernelet's own switch, the adoption of the other address space through `kernelet_switch_mm` (chapter 12), and the kernel proper's save and load of the floating-point registers (chapter 8). The wake-up across virtual CPUs takes about a microsecond and a half when the kick's interrupt finds the other carrier running kernelet code, of which about half a microsecond is the reschedule window of chapter 9: the kick usually lands after the woken virtual CPU has already picked the task, and the note it leaves costs one reschedule that finds nothing to do. Its tail is the widest of any row, because the kick may instead find that carrier asleep in `vcpu_idle`, where waking it is a Linux wake-up with Linux's own latency (chapter 8).
 
 ## Fairness
 
 The sandbox's control group and a sibling group with equal weight, both confined to the same two processors; the sibling runs busy loops for ten seconds (`make sched-fair`).
 
-| the sandbox runs | the sibling's share, in processors, first run | second run, directly after | runnable tasks of the sandbox that Linux saw at once |
-|---|---|---|---|
-| 1 task | 0.997 | 0.986 | 2 |
-| 50 tasks | 0.992 | 0.977 | 3 |
-| 50 tasks and one that holds a guard for 10 ms at a time | 0.666 | 0.984 | 3 |
+| the sandbox runs | the sibling's share, in processors | runnable tasks of the sandbox that Linux saw at once |
+|---|---|---|
+| 1 task | 0.995 | 2 |
+| 50 tasks | 0.990 | 2 |
+| 50 tasks and one that holds a guard for 10 ms at a time | 0.991 | 2 |
 
-Linux never saw more than three of the sandbox's tasks runnable at once, the two carriers and, briefly, the root carrier, whether the kernelet ran one task or fifty: that is the two-level argument of chapter 8, and the reason chapter 10's fairness holds. The first run's last row is the exception, and it is unexplained: the sibling got two thirds of a processor and the sandbox, by its own account, 1.32. The same two-thirds share appeared once before on this shared host, in the middle row of an earlier run, and never twice in a row. The one thing the test measures about interference, the time the sandbox's carriers spent descheduled by the guest's own Linux while running kernelet code, which it reports as *stolen*, was no higher in either odd run than in the passing ones, and the test does not read how long the host kept the whole guest off a processor. A measurement of fairness on a shared host means little, so the test is in `make bench`, which reports and does not fail.
+Linux never saw more than two of the sandbox's tasks runnable at once, its two carriers, whether the kernelet ran one task or fifty: that is the two-level argument of chapter 8, and the reason chapter 10's fairness holds. Two earlier runs of the same test on this shared host, on earlier builds of the prototype, each had one row in which the sibling got two thirds of a processor, once the middle row and once the last, and those runs are unexplained. The one thing the test measures about interference, the time the sandbox's carriers spent descheduled by the guest's own Linux while running kernelet code, which it reports as *stolen*, was no higher in either odd run than in the passing ones, and the test does not read how long the host kept the whole guest off a processor. A measurement of fairness on a shared host means little, so the test is in `make bench`, which reports and does not fail.
 
 ## Memory
 
@@ -48,32 +48,32 @@ Measured by the memory test kernel (`make mem-perf`), with a tenant program that
 
 | | median | worst 99th percentile |
 |---|---|---|
-| first touch of a page the kernel mapped ahead | 86 cycles (23 ns), 0 faults | 1,148 |
-| `map`, one page per call | 742 cycles (196 ns) | 804 |
-| `map` of 512 pages under one cursor, per page | 782 cycles (206 ns) | 928 |
-| protect 2 MiB read-only, with its flush | 409,064 cycles (108 µs) | 565,730 |
-| a read of each page after that protect | 82 cycles (22 ns), 0 faults | 312 |
-| copy 64 bytes out of tenant memory | 180 cycles (47 ns) | 236 |
-| copy 4 KiB out of tenant memory | 394 cycles (104 ns) | 516 |
-| `fork` of a process with 64 MiB mapped | 37.0 M cycles (9.8 ms) | 37.6 M |
-| the child's first pass over the 64 MiB | 2.0 M cycles (0.52 ms), 0 faults | 2.2 M |
-| the parent's re-read of the 64 MiB after the fork | 1.9 M cycles (0.51 ms), 0 faults | 2.2 M |
-| `munmap` of the 64 MiB | 1.9 M cycles (0.51 ms) | 2.1 M |
+| first touch of a page the kernel mapped ahead | 86 cycles (23 ns), 0 faults | 464 |
+| `map`, one page per call | 762 cycles (201 ns) | 1,722 |
+| `map` of 512 pages under one cursor, per page | 804 cycles (212 ns) | 1,262 |
+| protect 2 MiB read-only, with its flush | 404,422 cycles (107 µs) | 657,700 |
+| a read of each page after that protect | 80 cycles (21 ns), 0 faults | 308 |
+| copy 64 bytes out of tenant memory | 184 cycles (49 ns) | 372 |
+| copy 4 KiB out of tenant memory | 394 cycles (104 ns) | 652 |
+| `fork` of a process with 64 MiB mapped (16,384 pages over 256 frames, each mapped 64 times) | 37.4 M cycles (9.9 ms) | 39.6 M |
+| the child's first read pass over the 64 MiB of mappings | 2.0 M cycles (0.52 ms), 0 faults | 2.1 M |
+| the parent's re-read of the 64 MiB of mappings after the fork | 2.0 M cycles (0.53 ms), 0 faults | 2.1 M |
+| `munmap` of the 64 MiB | 1.9 M cycles (0.50 ms) | 2.7 M |
 
 What the rows say, one at a time.
 
 **A page the kernel mapped costs nothing at its first touch.** The entry is in Linux's page table from the moment `vm_map` returns, so the tenant's first access is a TLB miss and a hardware walk, 86 cycles, with no fault. That is a container's cost, and it is the design's whole reason: any scheme that let Linux's page table be filled lazily, on demand, would pay a fault, many times the cost of a walk, at the first touch of every page.
 
-**A `map` costs a crossing.** 742 cycles is one service call: the stub, the address-space lock, the grant check, and Linux's insert. A kernel that maps 512 pages under one cursor pays it 512 times. That is the price of letting trusted code check every frame, paid once per page, where the first-touch saving is collected once per page too.
+**A `map` costs a crossing.** 762 cycles is one service call: the stub, the address-space lock, the grant check, and Linux's insert. A kernel that maps 512 pages under one cursor pays it 512 times. That is the price of letting trusted code check every frame, paid once per page, where the first-touch saving is collected once per page too.
 
-**A protect costs a crossing per page and saves a refault per page.** 2 MiB read-only is 512 `vm_protect` calls and one flush, about 108 µs; the reads afterwards take 82 cycles and no fault, because the entries were rewritten in place and never removed.
+**A protect costs a crossing per page and saves a refault per page.** 2 MiB read-only is 512 `vm_protect` calls and one flush, about 107 µs; the reads afterwards take 80 cycles and no fault, because the entries were rewritten in place and never removed.
 
-**Copies cost a walk.** 180 cycles for 64 bytes is the software walk of chapter 13 plus the copy; a direct copy on a machine would be a fraction of that. For 4 KiB the walk disappears into the copy.
+**Copies cost a walk.** 184 cycles for 64 bytes is the software walk of chapter 13 plus the copy; a direct copy on a machine would be a fraction of that. For 4 KiB the walk disappears into the copy.
 
-**`fork` is the trade-off.** A `fork` of a process with 64 MiB mapped costs two crossings per page, a protect of the parent and a map into the child, and takes 9.8 ms. In exchange, neither the child's first pass over the memory nor the parent's re-read takes a single fault: half a millisecond each. A design that made the fork cheap by deferring the work to faults would pay it back, with interest, the first time either process touched its memory. A kernel that forks and never touches the memory, as a shell does before `exec`, loses by it; everything else gains.
+**`fork` is the trade-off.** A `fork` of a process with 64 MiB mapped costs two crossings per page, a protect of the parent and a map into the child, and takes 9.9 ms. In exchange, neither the child's first read pass over the memory nor the parent's re-read takes a single fault: half a millisecond each, which is the cost of the TLB misses and walks alone, since the grant is small and the 64 MiB are 256 frames mapped over and over, so the data never leaves the cache. (A write to a shared page after the fork still faults, as copy-on-write requires.) A design that made the fork cheap by deferring the work to faults would pay it back, with interest, the first time either process touched its memory. A kernel that forks and never touches the memory, as a shell does before `exec`, loses by it; everything else gains.
 
 <div class="recap">
 
-**Recap.** The stack switches of a crossing cost a few nanoseconds; a memory service, with Linux's lock and its work, costs several hundred cycles. A kernelet task switch costs about eleven hundred cycles and never involves Linux. A sandbox's share of the processors does not depend on what its kernel does. A page costs a crossing to map and nothing to touch; a copy costs a walk; a fork costs two crossings per page and makes every later access free.
+**Recap.** The stack switches of a crossing cost a few nanoseconds; a memory service, with Linux's lock and its work, costs several hundred cycles. A kernelet task switch costs about twelve hundred cycles and never involves Linux. A sandbox's share of the processors does not depend on what its kernel does, in every run of this build, and in all but two unexplained runs of earlier ones. A page costs a crossing to map and nothing to touch; a copy costs a walk; a fork costs two crossings per page and makes every later read free.
 
 </div>

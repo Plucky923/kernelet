@@ -16,7 +16,14 @@
 //!   virtual CPU must not spin: it would burn the sandbox's share of a real
 //!   processor for nothing. So the retry loop spins a little and then calls the
 //!   `vcpu_idle` service, which sleeps the carrier in the host until a virtual
-//!   interrupt arrives. This is the one addition to OSTD's own logic in this file.
+//!   interrupt arrives.
+//! - **The decision window.** vOSTD preempts kernel code from an upcall, which
+//!   real OSTD never does, so `reschedule` and the idle loop mark the stretch
+//!   from a scheduling decision to the switch (`IN_RESCHED`), `might_preempt`
+//!   only notes a preemption asked for inside it (`RESCHED_DEFERRED`), and
+//!   whoever closes the window acts on the note (see [`might_preempt`]).
+//!
+//! These two are the additions to OSTD's own logic in this file.
 //!
 //! # Scheduler injection
 //!
@@ -162,6 +169,35 @@ crate::cpu_local_cell! {
     /// Whether this virtual CPU is between a scheduling decision and the switch
     /// that carries it out.
     static IN_RESCHED: bool = false;
+    /// Whether `might_preempt` found a preemption due inside that window and
+    /// left it for whoever closes the window.
+    static RESCHED_DEFERRED: bool = false;
+}
+
+/// Opens the window before a scheduling decision.
+///
+/// First the virtual interrupts already pending are taken, without switching:
+/// whatever they ask for (a KICK's "look again", a tick's end of a slice) is
+/// asked before the decision, and the decision answers it. So `need_preempt`
+/// is cleared after them, and only an interrupt that arrives once the decision
+/// has started can leave a note for the window's end. Taken later, at the
+/// unmask that ends the decision, the KICK of the very wake-up the decision
+/// picked would look like a new request, and every such switch would be
+/// followed by a reschedule for nothing.
+fn open_resched_window() {
+    crate::vcpu::deliver_pending_no_switch();
+    cpu_local::clear_need_preempt();
+    RESCHED_DEFERRED.store(false);
+    IN_RESCHED.store(true);
+}
+
+/// Takes the note `might_preempt` leaves when the window stops it.
+pub(super) fn take_deferred() -> bool {
+    let d = RESCHED_DEFERRED.load();
+    if d {
+        RESCHED_DEFERRED.store(false);
+    }
+    d
 }
 
 /// Ends the window [`reschedule`] opened: called by the switched-to task in
@@ -180,12 +216,25 @@ pub(super) fn end_resched_window() {
 /// the switch has masked interrupts would ask the run queue again. The run
 /// queue, which has already made the decided task its current one and put the
 /// task still running back in its queue, may then pick the running task, and
-/// `switch_to_task` would wait for ever for that task to stop running. The
-/// preemption is not lost: `need_preempt` stays set, and the next guard drop
-/// or upcall after the switch acts on it.
+/// `switch_to_task` would wait for ever for that task to stop running.
+///
+/// The preemption is not lost. The upcall that asked for it has consumed its
+/// interrupt, so nothing would be left pending for a later guard drop or
+/// unmask to deliver, and it would wait for the next upcall, a watch period
+/// away. So a preemption the window stops is noted, and whoever closes the
+/// window acts on the note at once: [`processor::after_switching_to`] after the
+/// switch, `reschedule` when it decides to do nothing, and the idle loop and
+/// `reschedule`'s retry by deciding again instead of sleeping in `vcpu_idle`.
+/// Only a preemption that was stopped is acted on, and the window opens by
+/// taking what is already pending (`open_resched_window`), so that a request
+/// the decision answers does not count as one made after it.
 #[track_caller]
 pub(crate) fn might_preempt() {
-    if !cpu_local::should_preempt() || IN_RESCHED.load() {
+    if !cpu_local::should_preempt() {
+        return;
+    }
+    if IN_RESCHED.load() {
+        RESCHED_DEFERRED.store(true);
         return;
     }
     reschedule(|local_rq| {
@@ -316,7 +365,7 @@ pub(super) fn yield_now() {
 pub(crate) fn vcpu_idle_loop() -> ! {
     loop {
         let mut next = None;
-        IN_RESCHED.store(true);
+        open_resched_window();
         scheduler_singleton().mut_local_rq_with(&mut |rq| {
             next = rq.try_pick_next().cloned();
         });
@@ -324,6 +373,11 @@ pub(crate) fn vcpu_idle_loop() -> ! {
             Some(task) => processor::switch_to_task(task),
             None => {
                 end_resched_window();
+                // A KICK stopped by the window has consumed its pending bit,
+                // so vcpu_idle would sleep through it: decide again.
+                if take_deferred() {
+                    continue;
+                }
                 crate::vcpu::idle(0)
             }
         }
@@ -336,13 +390,11 @@ fn reschedule<F>(mut f: F)
 where
     F: FnMut(&mut dyn LocalRunQueue) -> ReschedAction,
 {
-    // Even if the decision below is `DoNothing`, this flag should be cleared, and
-    // before the decision is made, to avoid a race.
-    cpu_local::clear_need_preempt();
-
-    // From the decision to the switch, nothing may preempt this vCPU's code
-    // into deciding again (see `might_preempt`).
-    IN_RESCHED.store(true);
+    // Even if the decision below is `DoNothing`, `need_preempt` should be
+    // cleared, and before the decision is made, to avoid a race; and from the
+    // decision to the switch, nothing may preempt this vCPU's code into
+    // deciding again (see `might_preempt`).
+    open_resched_window();
 
     let mut spins: u32 = 0;
     let next_task = loop {
@@ -354,18 +406,29 @@ where
         match action {
             ReschedAction::DoNothing => {
                 end_resched_window();
+                // A preemption the window stopped. Recursion needs another
+                // one stopped in the next, equally short, window.
+                if take_deferred() {
+                    might_preempt();
+                }
                 return;
             }
             ReschedAction::Retry => {
                 // Nothing to run on this virtual CPU. Spin a little in case a
                 // sibling is about to enqueue something, then give the host
                 // processor back until a virtual interrupt says otherwise.
+                // But not after a preemption the window stopped, whose
+                // interrupt is consumed: decide again at once.
                 spins += 1;
-                if spins >= IDLE_SPINS {
+                if take_deferred() {
+                    core::hint::spin_loop();
+                } else if spins >= IDLE_SPINS {
                     crate::vcpu::idle(0);
                 } else {
                     core::hint::spin_loop();
                 }
+                // The next try is a new decision.
+                open_resched_window();
                 continue;
             }
             ReschedAction::SwitchTo(next_task) => {

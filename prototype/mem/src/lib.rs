@@ -23,6 +23,11 @@
 //!   contended cursor, and a process that exits under a copy (E8, E11);
 //! - `kill`: one carrier of a two-thread process killed from outside while the
 //!   other thread keeps faulting in the same space (E11);
+//! - `killidle` and `killspin`, two virtual CPUs: vCPU 1's carrier killed from
+//!   outside while it is asleep in `vcpu_idle` with nothing to run, or while it
+//!   runs a kernel task that loops in kernelet code and calls no service;
+//!   either kill must end the sandbox, which vCPU 0's tenant would otherwise
+//!   outlive;
 //! - `perf`: the costs of first touch, map, protect, copies, fork and munmap
 //!   (E6, E9).
 //!
@@ -575,6 +580,11 @@ pub fn main() {
             spawn(1, kill_victim);
             spawn(0, kill_survivor);
         }
+        "killidle" => spawn(0, || kill_outlive("idle")),
+        "killspin" => {
+            spawn(1, kill_spinner);
+            spawn(0, || kill_outlive("spin"));
+        }
         other => {
             println!("MEM: unknown mode {}", other);
             poweroff(ExitCode::Failure);
@@ -585,7 +595,11 @@ pub fn main() {
 
 fn ap_main() {
     enable_preemption_on_cpu();
+    AP_UP.store(true, Ordering::Release);
 }
+
+/// Set once the application processor, vCPU 1, has started.
+static AP_UP: AtomicBool = AtomicBool::new(false);
 
 fn finish(_: ()) {
     let failed = FAILED.load(Ordering::Relaxed);
@@ -1295,6 +1309,46 @@ fn kill_survivor() {
     expect("E11 kill: the kill of vCPU 1's carrier ended the sandbox before this thread finished",
            false,
            format_args!("({} rounds, {} faults)", rounds, faults(&d)));
+    finish(());
+}
+
+// ---------------------------------------------------------------------------
+// killidle, killspin: a kill must end the sandbox wherever the carrier is
+// ---------------------------------------------------------------------------
+
+static SPINNING: AtomicBool = AtomicBool::new(false);
+
+/// vCPU 1, in `killspin`: a kernel task that never leaves kernelet code and
+/// calls no service, so that only the watch timer can notice a kill.
+fn kill_spinner() {
+    SPINNING.store(true, Ordering::Release);
+    loop {
+        core::hint::spin_loop();
+    }
+}
+
+/// vCPU 0: once vCPU 1 is where the scenario wants it (idle, or spinning),
+/// says so for the runtime, which then kills vCPU 1's carrier, and runs its
+/// tenant in user mode for `dur` ms in steps of 50 ms. The kill must end the
+/// sandbox long before that; reaching the end is the failure.
+fn kill_outlive(what: &str) {
+    // Not AP_UP for the spinner: vCPU 1 may switch to it from inside
+    // `ap_main`, when the guard drop in `enable_preemption_on_cpu` delivers the
+    // KICK its spawn raised, and then never come back to finish `ap_main`.
+    let ready = if what == "spin" { &SPINNING } else { &AP_UP };
+    while !ready.load(Ordering::Acquire) {
+        core::hint::spin_loop();
+    }
+    let mut t = new_tenant();
+    let dur = arg_u64("dur", 10_000);
+    let end = read_tsc() + dur * ostd::time::tsc_khz();
+    println!("MEM-KILL-READY vcpu 1 is {}", if what == "spin" { "spinning in a kernel task" } else { "idle" });
+    while read_tsc() < end {
+        t.run(CMD_SPIN, 0, 0, 50 * ostd::time::tsc_khz(), 0);
+    }
+    expect("kill: the kill of vCPU 1's carrier ended the sandbox before vCPU 0's tenant finished",
+           false,
+           format_args!("(vCPU 1 {})", what));
     finish(());
 }
 

@@ -1,7 +1,8 @@
 // SPDX-License-Identifier: GPL-2.0
 /*
- * Module init and exit, the grant, the carrier lifeline, the three host facts the
- * kernelet needs in order to find its own vCPU record, and the binary-format
+ * Module init and exit, the grant, the carrier lifeline, the four host offsets
+ * the kernelet needs in order to find its own vCPU record and Linux's
+ * preemption count without a call, and the binary-format
  * handler that turns a Linux task into the root carrier of a sandbox.
  */
 
@@ -74,8 +75,11 @@ static int klet_lifeline_release(struct inode *inode, struct file *file)
 	struct klet_carrier *c = file->private_data;
 
 	file->private_data = NULL;
-	if (c)
+	if (c) {
 		klet_carrier_lifeline_closed(c);
+		/* The file's own reference (klet_lifeline_create). */
+		klet_carrier_put(c);
+	}
 	return 0;
 }
 
@@ -93,7 +97,7 @@ struct file *klet_lifeline_create(struct klet_carrier *c)
 }
 
 /* ------------------------------------------------------------------ */
-/* The three host facts vOSTD needs without a service call            */
+/* The four host offsets vOSTD needs without a service call           */
 /* ------------------------------------------------------------------ */
 
 /*
@@ -314,10 +318,15 @@ static int klet_load_binary(struct linux_binprm *bprm)
 	kernel_sigaction(SIGCHLD, SIG_IGN);
 
 	/*
-	 * begin_new_exec() reset every handler to SIG_DFL, and a signal whose
-	 * default action is to terminate without a core dump is fatal at the
-	 * moment it is sent (complete_signal() turns it into SIGKILL): it would
-	 * never reach the drain. An operator's SIGTERM to a carrier, or a stray
+	 * begin_new_exec() reset every handler to SIG_DFL, except the ones the
+	 * runtime had set to SIG_IGN, which flush_signal_handlers() keeps; the
+	 * signal mask survives the exec too. Neither matters: an ignored signal is
+	 * discarded when it is sent, where the drain would have dropped it, and a
+	 * fault signal Linux raises for the tenant's instruction un-ignores and
+	 * unblocks itself (force_sig_info_to_task()), so it still reaches the
+	 * drain. A signal whose default action is to terminate without a core
+	 * dump is fatal at the moment it is sent (complete_signal() turns it into
+	 * SIGKILL): it would never reach the drain. An operator's SIGTERM to a carrier, or a stray
 	 * SIGPIPE, would end the sandbox. So they are ignored, here, and the
 	 * vCPU carriers inherit it from the root; SIGKILL and SIGSTOP cannot be,
 	 * and keep their meaning. The core-dump class (SIGQUIT, SIGABRT, the
@@ -454,6 +463,10 @@ static int __init klet_init(void)
 	atomic_set(&inst->fpu_swaps, 0);
 	atomic_set(&inst->fpu_rejects, 0);
 	atomic_set(&inst->mirror_faults, 0);
+	atomic_set(&inst->kills_in_service, 0);
+	atomic_set(&inst->kills_in_kernelet, 0);
+	atomic_set(&inst->carriers_made, 0);
+	atomic_set(&inst->carriers_freed, 0);
 	atomic_set(&inst->stolen_ms, 0);
 	inst->root_lifeline_fd = -1;
 	inst->nr_vcpus = 1;
@@ -548,6 +561,12 @@ static void __exit klet_exit(void)
 		kfree(m);
 		inst->mem_stats = NULL;
 	}
+	pr_info("kernelet: kills: %d found in a service, %d in kernelet code by the watch timer\n",
+		atomic_read(&inst->kills_in_service),
+		atomic_read(&inst->kills_in_kernelet));
+	pr_info("kernelet: carrier records: %d made, %d freed, %d live\n",
+		atomic_read(&inst->carriers_made), atomic_read(&inst->carriers_freed),
+		atomic_read(&inst->carriers_made) - atomic_read(&inst->carriers_freed));
 	pr_info("kernelet: endovisor unloaded\n");
 }
 

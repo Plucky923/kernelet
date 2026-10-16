@@ -16,15 +16,17 @@
 //!    virtual interrupt may arrive between a load and a store and the handler
 //!    touches the same word. That is exactly why real OSTD uses `add %gs:…`.
 //!
-//! # A guard does not mask interrupts
+//! # A guard and the interrupt flag
 //!
 //! On bare metal a preemption guard does not stop the processor taking an
-//! interrupt; it only forbids the task switch. The same must hold here, or a
-//! kernelet holding a spin lock would receive no ticks. So the record carries two
-//! separate things: the guard count above, and `irq_off`, the virtual interrupt
-//! flag, inverted. The endovisor delivers an upcall whenever `irq_off` is clear,
-//! guards or no guards, and the upcall only switches tasks if the guard count is
-//! zero.
+//! interrupt; it only forbids the task switch. The record keeps the two apart
+//! as well: the guard count above, and `irq_off`, the virtual interrupt flag,
+//! inverted. But the endovisor redirects into the upcall only outside a
+//! critical section, with no guard held *and* `irq_off` clear, because it
+//! cannot tell whether the upcall will want to switch tasks. An interrupt that
+//! arrives under a guard stays pending, and the drop of the last guard
+//! delivers it (`dec_guard_count`), so a kernelet holding a spin lock gets its
+//! ticks late, never not at all.
 //!
 //! # The mirror
 //!

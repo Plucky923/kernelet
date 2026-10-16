@@ -469,13 +469,18 @@ static void klet_space_teardown(struct klet_inst *inst, struct klet_space *sp)
 		pr_warn("kernelet: space %u destroyed with %u range-lock word(s) held\n",
 			sp->id, held);
 
-	/* A vCPU that still has it activated has none any more. */
+	/*
+	 * A vCPU that still has it activated has none any more. Under the lock,
+	 * which is what keeps a carrier in inst->vcpus from being freed.
+	 */
+	spin_lock(&inst->lock);
 	for (i = 0; i < inst->nr_vcpus; i++) {
 		struct klet_carrier *v = inst->vcpus[i];
 
 		if (v && READ_ONCE(v->vrec.space) == sp->id)
 			WRITE_ONCE(v->vrec.space, 0);
 	}
+	spin_unlock(&inst->lock);
 
 	if (mm)
 		klet_space_zap_all(sp);
