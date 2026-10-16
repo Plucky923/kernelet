@@ -84,7 +84,7 @@ fn create_vm_space(program: &[u8]) -> VmSpace {
 
 <div class="rust">
 
-**Rust: `Result` and `unwrap`.** A function that can fail returns a `Result`, which is either `Ok(value)` or `Err(error)`. Calling `.unwrap()` on it takes the value and panics (stops the kernel with a message) if it was an error. The teaching kernel unwraps everything; a real kernel would handle the errors. `drop(x)` ends the life of `x` now rather than at the end of the block.
+**Rust: `Result`, `unwrap` and `drop`.** A function that can fail returns a `Result`, which is either `Ok(value)` or `Err(error)`. Calling `.unwrap()` on it takes the value and panics (stops the kernel with a message) if it was an error. The teaching kernel unwraps everything; a real kernel would handle the errors. Every value has a *life*, which ends at the end of the block that holds it, and a type may say what happens then by implementing `Drop`: a function the compiler runs at that moment, a destructor. `drop(x)` ends the life of `x` now rather than later.
 
 </div>
 
@@ -130,11 +130,11 @@ fn create_user_context() -> UserContext {
 }
 ```
 
-This is the most important piece, so read it slowly.
+This piece is the one Linux will find hardest to host, because the kernel's handler waits inside a loop while the program runs.
 
 A **task** is the framework's unit of execution, like a thread: a function, a stack, and saved registers. `TaskOptions::new(user_task)` describes one that will run the function `user_task`; `.data(vm_space)` attaches the address space to it so the function can find it later; `build()` creates it. `main`, in piece 1, then calls `run()` on it.
 
-A `UserContext` is a user program's register file: sixteen general registers, the instruction pointer and the flags. The task fills in one register, the instruction pointer, and leaves the rest zero.
+A `UserContext` is a user program's register file: the sixteen general registers, the instruction pointer and the flags, eighteen words in all. The task fills in one register, the instruction pointer, and leaves the rest zero.
 
 Then the loop. `user_mode.execute(...)` **enters user mode**: it loads the context into the processor's registers and starts the program. The call *returns* when something brings the processor back into the kernel: a system call, an exception, or an event the kernel asked to be told about. The return value says which. The context now holds the program's registers as they were at that moment, and the kernel reads and changes them through `context_mut()` before calling `execute` again.
 
@@ -194,7 +194,7 @@ Here is everything the hundred-line kernel needs, with what OSTD does on a machi
 |---|---|---|
 | `FrameAllocOptions`, `Segment` | allocates from the machine's RAM | allocate from a grant of memory Linux hands it (chapter 3) |
 | `VmSpace::new`, `cursor_mut`, `map` | writes a hardware page table the processor walks | ask Linux to put the page in a Linux page table (chapter 12) |
-| `VmSpace::activate` | loads the page-table register | remember which address space the virtual CPU is in (chapter 12) |
+| `VmSpace::activate` | loads the page-table register | remember which address space this virtual CPU is in, and switch the carrier to it (chapter 12) |
 | `TaskOptions`, `Task::run`, `disable_preempt` | its own tasks, stacks and scheduler | the same code, on stacks Linux lends it (chapters 6 and 8) |
 | `UserMode::execute` | the processor's instruction for entering user mode, and its trap handlers | a Linux task that enters user mode on the kernelet's behalf, with a patch to Linux that routes the system call back (chapters 4 to 7) |
 | `VmSpace::reader`, `read_fallible` | reads the user address, with a fault handler as the safety net | walk the page table itself and copy through the kernel's own map of memory (chapter 13) |

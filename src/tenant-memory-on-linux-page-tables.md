@@ -83,7 +83,7 @@ Three choices in this code each close a hole.
 
 ## The address-space switch
 
-Two of the lines above call `kernelet_switch_mm()`, the first of the patch's two helpers, and `user_run` calls it on every trip to user mode in which the virtual CPU has activated a different process than the carrier is in (chapter 8). A carrier is born with an empty address space of its own; to run a tenant thread it must run in *that process's* space.
+Two of the lines above call `kernelet_switch_mm()`, the first of the patch's two helpers, and both gate hooks call it, through `klet_space_adopt` below, before they apply the registers on a trip to user mode in which the virtual CPU has activated a different process than the carrier is in (chapter 8). A carrier is born with an empty address space of its own; to run a tenant thread it must run in *that process's* space.
 
 <div class="linux">
 
@@ -196,7 +196,7 @@ s64 klet_do_vm_map(struct klet_carrier *c, u64 id, u64 va, u64 paddr, u32 prot)
 
 **`vm_unmap(space, va, len)`** clips the range to the area and calls `zap_vma_ptes()`, which clears every present entry and **flushes the TLB** before it returns, through Linux's own gather-and-finish. It reports no count; the number of pages that were mapped is vOSTD's own, from a walk it makes before the call.
 
-**`vm_protect(space, va, prot)`** rewrites one present entry in place. Linux's helpers for taking a page-table lock are not exported to modules, so the endovisor uses [`apply_to_page_range()`](https://elixir.bootlin.com/linux/v6.12/source/mm/memory.c#L2983), which is, over the one entry, and in its callback replaces the entry with one atomic compare-and-exchange:
+**`vm_protect(space, va, prot)`** rewrites one present entry in place. Linux's helpers for taking a page-table lock are not exported to modules, so the endovisor uses [`apply_to_page_range()`](https://elixir.bootlin.com/linux/v6.12/source/mm/memory.c#L2983), which is exported and takes that lock itself, here over the one entry, and in its callback replaces the entry with one atomic compare-and-exchange:
 
 *Simplified from `prototype/endovisor/space.c`: `klet_pte_protect`.*
 
@@ -215,7 +215,7 @@ static int klet_pte_protect(pte_t *pte, unsigned long addr, void *data)
 
 `pte_modify()` matters: an entry rebuilt from the frame number would lose the *special* bit that marks a raw-frame-number entry, and the next zap would then treat a grant frame as a Linux page and drop a reference it never took. The rewrite is one store, so a lockless reader on another virtual CPU never sees the entry absent. It does not flush; the kernel proper issues its flushes separately, as on a machine.
 
-**`vm_flush(space, va, len)`** is [`flush_tlb_mm_range()`](https://elixir.bootlin.com/linux/v6.12/source/arch/x86/mm/tlb.c#L995) over the range, or over the whole space, on every processor where the address space is loaded, which `switch_mm_irqs_off()` keeps track of. It is not exported in a stock kernel, which is the patch's fifth export. It never sleeps, and so may be called while the kernel proper still holds a cursor.
+**`vm_flush(space, va, len)`** is [`flush_tlb_mm_range()`](https://elixir.bootlin.com/linux/v6.12/source/arch/x86/mm/tlb.c#L995) over the range, or over the whole space, on every processor where the address space is loaded, which `switch_mm_irqs_off()` keeps track of. It is not exported in a stock kernel, which is why the patch exports it. It never sleeps, and so may be called while the kernel proper still holds a cursor.
 
 Two more services complete the set: `vm_activate(space)` only records the space in the virtual CPU's record, where the hooks of chapter 7 find it, and never sleeps, because the kernel proper calls `activate` with interrupts off; and `vm_destroy(space)` clears the whole area, waits for calls in flight, and drops the endovisor's reference on the address space.
 
@@ -236,7 +236,7 @@ static vm_fault_t klet_space_report(struct vm_fault *vmf, bool mkwrite)
 
 	c->exc_trap = X86_TRAP_PF;                        /* for the kernel proper: a page fault ... */
 	c->exc_addr = vmf->address;                       /*   at this address ... */
-	c->exc_error = (mkwrite ? 1 : 0) | (write ? 2 : 0) | 4 | (exec ? 16 : 0);   /*   with this error code */
+	c->exc_error = (mkwrite ? 1 : 0) | (write ? 2 : 0) | 4 | (exec ? 16 : 0);   /*   with the processor's error-code bits: 1 present, 2 write, 4 user, 16 fetch */
 	c->exc_pending = true;
 	set_thread_flag(TIF_NOTIFY_RESUME);               /* run the resume hook on the way back */
 	return VM_FAULT_NOPAGE;                           /* "handled": Linux returns to user mode without installing anything */

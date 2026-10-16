@@ -55,6 +55,8 @@ Asterinas is a kernel written in Rust that runs the same programs Linux runs: it
 
 So the kernel proper can do only what OSTD's interface lets it do. It cannot forge a pointer to another tenant's memory, because safe Rust has no way to express that. It cannot execute a privileged instruction, because none of OSTD's functions do that for it. It can still have bugs, and a hostile tenant will look for them, but a bug in safe Rust can produce a wrong answer, never a corrupted page table.
 
+Who compiles it matters. The *operator* of the machine builds the kernel proper, and refuses any crate that does not carry `#![deny(unsafe_code)]`; the tenant never hands over code to be loaded into kernel mode. What the tenant controls is its own programs, and through them which paths of the kernel proper run, with which arguments. OSTD itself, the layer that does use `unsafe`, is written and audited by the operator, like the host kernel: it is trusted, as the host is.
+
 That is the opening.
 
 ## The same kernel, a different framework
@@ -79,8 +81,11 @@ These are used in one sense throughout the book.
 | **vOSTD** | the framework a kernelet is built on: OSTD's interface with a different implementation underneath |
 | **service table** | the fixed list of host functions a kernelet may call; its only way out |
 | **grant** | the physical memory a kernelet has been given |
+| **virtual CPU** | one of the fixed number of processors a sandbox is given when it is created; the kernelet runs its tasks on them as a kernel runs on real processors (chapter 8) |
+| **carrier** | the Linux task that stands behind one virtual CPU (chapter 5) |
+| **gate** | the small change to Linux that hands a tenant's system calls to its kernelet (chapter 4) |
 
-Three more words, **carrier**, **virtual CPU** and **gate**, name Linux-specific parts of the design and are defined in the chapters that build them.
+The last three are the Linux-specific parts of the design, and the chapters named define them in full.
 
 ## What the book builds
 

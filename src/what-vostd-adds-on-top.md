@@ -67,7 +67,7 @@ impl Region {
 
 fn copy_regions(dst: &mut Region, src: &mut Region) -> (usize, bool) {
     while copied < total {
-        let done = rcu::read(|| {                                      // inside a read section (below)
+        let done = rcu::read(|| {                                      // a closure, run inside a read section (below)
             let (dptr, dlen) = dst.resolve(true)?;
             let (sptr, slen) = src.resolve(false)?;
             let n = dlen.min(slen).min(total - copied);
@@ -85,11 +85,17 @@ unsafe fn copy_opaque(dst: *mut u8, src: *const u8, n: usize) {
 }
 ```
 
-The copy is one `rep movsb` in assembly rather than a Rust copy, and that is not for speed. Tenant memory may change under the copy, since another virtual CPU's thread may be writing it; a plain copy of memory that changes is a data race in Rust's terms, and the optimizer may then serve a later read of the destination by reading the source again, after the moment the copy was supposed to be done. OSTD's own user copy is assembly for the same reason.
+The copy is one `rep movsb` in assembly rather than a Rust copy, and that is not for speed. Tenant memory may change under the copy, since another virtual CPU's thread may be writing it; a plain copy of memory that changes is a data race in Rust's terms, and the optimizer is then free to assume the source did not change. It could, for instance, compile "copy a length out, check it, use it" into a check of the copy and a *re-read of the source* for the use, and a tenant that changed the length in between would have passed the check with a value it never had. An assembly copy is opaque to the compiler, so the destination is the only thing it reads afterwards. OSTD's own user copy is assembly for the same reason.
 
 ## Who holds the frame
 
 On a machine, OSTD's page table holds a counted reference on every mapped frame, and the kernel proper relies on the count: its copy-on-write path reuses a frame in place when the count is one. Here the *Linux entry* holds that reference. `map` turns the handle into a raw address after the service succeeds, so the reference passes to the entry only once the entry exists; `unmap` reads the entries back before the service clears them, and turns each address into a handle again, which is dropped.
+
+<div class="rust">
+
+**Rust: destructors, and forgetting.** A frame handle's `Drop` (chapter 2's box) decrements the frame's count, and frees the frame when the count reaches zero. `core::mem::forget(x)` ends the life of `x` *without* running its destructor, so the count stays as it was: that is how a reference is handed to something Rust cannot see, such as a page-table entry. `from_raw` is the reverse: it makes a handle out of an address without incrementing, taking the reference back.
+
+</div>
 
 *Simplified from `prototype/vostd/src/mm/vm_space.rs` and `prototype/vostd/src/mm/frame.rs`: `CursorMut::map`, `CursorMut::unmap`, `Frame::into_raw`, `Frame::from_raw`.*
 
@@ -123,9 +129,9 @@ pub(crate) fn from_raw(paddr: Paddr) -> Self {
 }
 ```
 
-This is sound only if Linux never clears an entry of the area on its own initiative. For a raw-frame-number area it does not: reclaim, swapping, compaction, same-page merging and the rest all skip such entries, because there is no Linux page behind them. The test `make mem-pressure` drives the guest into swap with a host process while a tenant has 512 pages mapped, and afterwards every entry is present with the same frame and the same contents.
+This is sound only if Linux never clears an entry of the area on its own initiative. For a raw-frame-number area it does not: reclaim, swapping, compaction, same-page merging and the rest all skip such entries, because there is no Linux page behind them. The test `make mem-pressure` drives the Linux under test into swap with a host process while a tenant has 512 pages mapped, and afterwards every entry is present with the same frame and the same contents.
 
-**The grace period.** A copy takes no cursor, so an `unmap` on another virtual CPU may clear the entry the copy just walked, and then free the frame while the copy is still reading it. The `rcu::read` around each page of a copy, and the `rcu::synchronize()` in `unmap` before the frames are freed, are a minimal RCU: each virtual CPU has a sequence word that is odd while it is inside a read section, and `synchronize` waits until every other virtual CPU that was inside a section when it was called has left it. A read section lasts one page's walk and copy, so the wait is short. `make mem-conc` runs 54 million copies on one virtual CPU against 72 thousand map-and-unmap cycles on the other and finds no torn copy.
+**The grace period.** A copy takes no cursor, so an `unmap` on another virtual CPU may clear the entry the copy just walked, and then free the frame while the copy is still reading it. The `rcu::read` around each page of a copy, and the `rcu::synchronize()` in `unmap` before the frames are freed, are a minimal RCU (*read-copy-update*, a scheme in which readers take no lock and a writer waits for every reader in progress to finish before it frees anything): each virtual CPU has a sequence word that is odd while it is inside a read section, and `synchronize` waits until every other virtual CPU that was inside a section when it was called has left it. A read section lasts one page's walk and copy, so the wait is short. `make mem-conc` runs tens of millions of copies on one virtual CPU against tens of thousands of map-and-unmap cycles on the other and finds no torn copy.
 
 ## The range lock
 
@@ -159,11 +165,11 @@ fn unlock_word(&self, idx: usize, exclusive: bool) {
 }
 ```
 
-The slow path is a futex. A waiter sets the *waiters* bit and calls `vm_wait(space, word, expected)`; the endovisor takes the space's wait-queue lock, reads the word, returns at once if it no longer equals `expected`, and otherwise puts the carrier to sleep, killably. A releasing holder clears the bit with one atomic read-modify-write and, if it was set, calls `vm_wake`, which wakes every waiter under the same lock. The read under the lock and the single read-modify-write on release are what make a wake-up impossible to lose. Nothing spins: the holder may itself be asleep in Linux inside a `vm_map`, and the waiter then sleeps too. `make mem-conc` has one virtual CPU hold a cursor while its `vm_map` sleeps for 80 milliseconds, and the other virtual CPU's cursor on the same region sleeps in `vm_wait` and takes the lock after the release, without a single kernelet task switch.
+The slow path is a futex, Linux's "sleep only if this word still holds this value" primitive, rebuilt for carriers. A waiter sets the *waiters* bit and calls `vm_wait(space, word, expected)`; the endovisor takes the space's wait-queue lock, reads the word, returns at once if it no longer equals `expected`, and otherwise puts the carrier to sleep, killably. A releasing holder clears the bit with one atomic read-modify-write and, if it was set, calls `vm_wake`, which wakes every waiter under the same lock. The read under the lock and the single read-modify-write on release are what make a wake-up impossible to lose. Nothing spins: the holder may itself be asleep in Linux inside a `vm_map`, and the waiter then sleeps too. `make mem-conc` has one virtual CPU hold a cursor while its `vm_map` sleeps (a test hook makes it), and the other virtual CPU's cursor on the same region sleeps in `vm_wait` and takes the lock after the release, without a single kernelet task switch.
 
 ## A page without read permission
 
-The kernel proper keeps a `PROT_NONE` page *mapped*, with every permission bit cleared, and on a machine OSTD encodes that as a valid but not-present entry. Linux has no safe equivalent for this area: its own inaccessible entry is read on a fault by the NUMA-balancing code, which would reinstall it with the area's full permissions. So such a page has **no Linux entry**. vOSTD keeps it in a per-space ordered map, the **withheld set**, from address to frame and property, in kernelet memory under the range lock, and the set holds the frame's reference exactly as an entry would. `query`, `find_next`, `protect_next` and `unmap` consult the set beside the table:
+The kernel proper keeps a `PROT_NONE` page *mapped*, with every permission bit cleared, and on a machine OSTD encodes that as a valid but not-present entry. Linux has no safe equivalent for this area. Linux does have a "no access" form of entry, but it uses it as a marker of its own: its NUMA-balancing code, which moves pages closer to the processors that use them, plants such entries and, on the next fault, rewrites each with the area's full permissions. A `PROT_NONE` page encoded that way would silently become writable. So such a page has **no Linux entry**. vOSTD keeps it in a per-space ordered map, the **withheld set**, from address to frame and property, in kernelet memory under the range lock, and the set holds the frame's reference exactly as an entry would. `query`, `find_next`, `protect_next` and `unmap` consult the set beside the table:
 
 *Simplified from `prototype/vostd/src/mm/vm_space.rs`: `Slot`, `slot`, `protect_next`.*
 
@@ -193,7 +199,9 @@ A tenant access to a withheld page faults as an absent page does, and the kernel
 
 ## A space that is dropped at the wrong moment
 
-The last reference to a `VmSpace` is dropped inside the kernel proper's post-schedule handler, with interrupts off, when a virtual CPU activates another space. So `Drop` may do nothing that sleeps or crosses, and `vm_destroy` does both. Nor can vOSTD keep a task of its own for the purpose, since on this host a task created before the kernel proper injects its scheduler would install OSTD's default one and make the injection fail.
+The last reference to a `VmSpace` can be dropped at a bad moment. `activate` keeps one reference per virtual CPU to the space that is active there, and drops the previous space's reference when a new one is activated; the kernel proper activates from the handler it runs right after a task switch, with interrupts off. If that was the last reference, `Drop` runs there, and so it may do nothing that sleeps or crosses, while `vm_destroy` does both.
+
+The usual answer, a helper task that does the work later, is not available: on this host a task created before the kernel proper injects its scheduler would install OSTD's default one and make the injection fail, and one created afterwards is not a task the kernel proper's own scheduler knows how to run.
 
 So `Drop` pushes the space onto a per-kernelet **retire list**, lock-free and without allocating (the list node was allocated at `new`), and the list is drained at the next point on any virtual CPU where sleeping is allowed: the stubs of `vm_create` and `vcpu_idle`, and every sleeping service's stub when the caller holds no guard. The drain unmaps the whole space, which flushes and releases every frame, the withheld set's included, and then calls `vm_destroy`.
 
@@ -255,7 +263,7 @@ pub(crate) fn assert_may_sleep(service: &str) {
 }
 ```
 
-Why rule 1 is sound is the point of chapter 10's last section: a kernelet's atomic mode promises only that no kernelet task switch happens on this virtual CPU until the guard drops, and a sleep in Linux is the same event as a Linux preemption, which the kernelet already survives at any instruction. `make mem-func` maps a page into a fresh 2 MiB region, which makes Linux allocate a page-table page, inside a preemption guard, on a kernel built with `CONFIG_DEBUG_ATOMIC_SLEEP`, and Linux reports nothing; `make mem-r2` does the same under a spin lock, and vOSTD stops the kernelet before the call crosses.
+Why rule 1 is sound was argued at the end of chapter 10's second problem: a kernelet's atomic mode promises only that no kernelet task switch happens on this virtual CPU until the guard drops, and a sleep in Linux is the same event as a Linux preemption, which the kernelet already survives at any instruction. `make mem-func` maps a page into a fresh 2 MiB region, which makes Linux allocate a page-table page, inside a preemption guard, on a Linux built with `CONFIG_DEBUG_ATOMIC_SLEEP`, the option that makes Linux complain about any sleep in atomic mode, and Linux reports nothing; `make mem-r2` does the same under a spin lock, and vOSTD stops the kernelet before the call crosses.
 
 <div class="recap">
 

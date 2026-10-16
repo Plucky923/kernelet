@@ -8,9 +8,9 @@ A kernelet is three layers of code compiled into one file.
 
 1. **The kernel proper**, the hundred-line kernel of the last chapter: safe Rust, never edited.
 2. **vOSTD**, a Rust crate whose library name is `ostd`, so that the kernel proper's `use ostd::...` lines resolve to it. It offers every type and function the kernel proper uses, with the same names and signatures as the real OSTD. It is in `prototype/vostd/`.
-3. **The image ABI**, a few C-layout structures that both vOSTD and the endovisor know: what the host tells the kernelet at start, which functions the kernelet may call, and which functions the host may call. It is in `prototype/vostd/src/abi.rs` on the Rust side and `prototype/endovisor/kernelet.h` on the C side, and the two must agree byte for byte.
+3. **The image ABI** (an *application binary interface* is the exact layout of what two separately compiled pieces of code pass each other), a few C-layout structures that both vOSTD and the endovisor know: what the host tells the kernelet at start, which functions the kernelet may call, and which functions the host may call. It is in `prototype/vostd/src/abi.rs` on the Rust side and `prototype/endovisor/kernelet.h` on the C side, and the two must agree byte for byte.
 
-The build compiles the kernel proper and vOSTD together into one static library, links it with `ld -r` into a single relocatable object, `image.o`, and checks two things about that object: that it has **no undefined symbols**, and that its relocations are of kinds Linux's module loader accepts. Then it links `image.o` into the endovisor's kernel module, `kernelet.ko`, together with the endovisor's own C files.
+The build compiles the kernel proper and vOSTD together into one static library, links it with `ld -r` into a single relocatable object, `image.o`, and checks two things about that object: that it has **no undefined symbols**, and that its *relocations*, the places in the code that the loader must patch with final addresses, are of kinds Linux's module loader accepts. Then it links `image.o` into the endovisor's kernel module, `kernelet.ko`, together with the endovisor's own C files.
 
 ```mermaid
 flowchart LR
@@ -89,9 +89,9 @@ pub struct EntryTable {
 
 </div>
 
-Two rules shape every service. Arguments are integers, never pointers into the host: a space number, a virtual address, a physical address. And the host keeps no pointer into the kernelet after a call returns. Both keep a buggy vOSTD from steering the endovisor into writing wherever the kernelet says.
+Two rules shape every service. Arguments are integers or pointers into the kernelet's own memory: a space number, a virtual address, a physical address, a buffer to log. The one exception is the heap, whose blocks are the host's, below. And the host keeps no pointer into the kernelet after a call returns. Both keep a buggy vOSTD from steering the endovisor into writing wherever the kernelet says.
 
-The table's one exported symbol on the kernelet's side is the entry table:
+The image's one exported symbol is the entry table:
 
 *Simplified from `prototype/vostd/src/abi.rs`: `kernelet_entry_table`.*
 
@@ -170,6 +170,12 @@ This is how the hundred-line kernel's `segment.write_bytes(0, program)` lands in
 ## Three small services
 
 Three of the services need no more than a sentence each, and the hundred-line kernel uses all three.
+
+<div class="rust">
+
+**Rust: traits.** A trait is an interface: a list of functions a type must provide. `impl GlobalAlloc for HostHeap` says that the type `HostHeap` provides the two functions the `GlobalAlloc` trait names, and the attribute `#[global_allocator]` tells Rust to use it for every heap allocation. A function written `fn f<T: SomeTrait>(x: &T)` accepts any type that provides the trait's functions. Implementing a trait is `unsafe` when the trait's contract is one the compiler cannot check, as an allocator's is.
+
+</div>
 
 **The heap.** Rust's `Vec`, `Box` and `Arc` need a heap. vOSTD's is the host's: a global allocator that forwards each allocation to the services `mem_alloc` and `mem_free`, which the endovisor implements with Linux's `kmalloc` and `kfree`.
 

@@ -16,16 +16,21 @@ The resolution is to give kernelet code stacks of its own. A **kernelet stack** 
 
 ```mermaid
 flowchart LR
-    subgraph L["the carrier's Linux stack (16 KiB)"]
+    subgraph L["the carrier's Linux stack, 16 KiB"]
         direction TB
-        l1["pt_regs: the user registers"] --- l2["entry code frames"] --- l3["the gate hook's frame"] --- l4["klet_enter, waiting in klet_switch"]
+        l1["pt_regs: the user registers"] --> l2["entry code frames"] --> l3["the gate hook's frame"] --> l4["klet_enter, parked in klet_switch"]
     end
-    subgraph K["a kernelet stack (256 KiB, from vmalloc)"]
+    subgraph B["the virtual CPU's first kernelet stack"]
         direction TB
-        k1["kernelet_entry / main"] --- k2["user_task: the loop"] --- k3["execute()"] --- k4["user_run service"]
+        b1["kernelet_entry"] --> b2["main"] --> b3["yield_now: switched away,<br/>never resumed"]
     end
-    l4 -- "klet_switch: to the kernelet" --> k1
-    k4 -- "klet_switch: back to Linux" --> l4
+    subgraph K["the task's kernelet stack, 256 KiB"]
+        direction TB
+        k1["user_task: the loop"] --> k2["execute()"] --> k3["user_run: parked in klet_switch"]
+    end
+    L -- "klet_switch: into the kernelet" --> B
+    B -. "the kernelet's own task switch<br/>(chapter 8)" .-> K
+    K -- "klet_switch: back to Linux" --> L
 ```
 
 One Linux task, two stacks. Linux tolerates this better than one might fear:
@@ -203,11 +208,11 @@ void klet_svc_body(struct klet_svc_args *args)                /* runs on the Lin
 }
 ```
 
-The endovisor finds the calling carrier from Linux's `current` task and the gate pointer in it: `klet_current_carrier()` is `container_of(current->kernelet, struct klet_carrier, gate)`. No service takes a "which kernelet" argument, so a kernelet cannot claim to be another.
+The endovisor finds the calling carrier from Linux's `current` task and the gate pointer in it: `klet_current_carrier()` is `container_of(current->kernelet, struct klet_carrier, gate)` (given a pointer to a field, `container_of` subtracts the field's offset to get the enclosing structure). No service takes a "which kernelet" argument, so a kernelet cannot claim to be another.
 
-The **depth** counter is simple and important: it is 1 exactly while the carrier, having come from kernelet code, is inside the endovisor or Linux and may hold their locks. Chapter 11 uses it to decide when a carrier may be stopped by force.
+The **depth** counter says whether this carrier is, right now, inside endovisor or Linux code on the kernelet's behalf, where it may hold Linux's locks: it is 1 exactly then. The watch timer of chapter 9 and the eviction of chapter 11 must never touch the instruction pointer of such a carrier, and the depth is how they know.
 
-The two exceptions to the stub are `user_run`, which leaves the kernelet stack for good until the next hook brings the carrier back, and `stop`, which leaves it for ever. Both are chapter 7's.
+The one exception to the stub is `user_run`, which leaves the kernelet stack and does not come back until the next hook brings the carrier in; it is chapter 7's. `stop` uses the stub like any service, and then leaves for ever (chapter 11).
 
 <div class="recap">
 

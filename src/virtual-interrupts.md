@@ -13,7 +13,7 @@ A virtual interrupt is a bit in the `pending` word of a virtual CPU's record (ch
 
 The kernel proper's timer callbacks and its scheduler's tick accounting run from TICK exactly as they would from a hardware timer interrupt. KICK does what a reschedule interrupt does on a machine: it makes the virtual CPU ask its scheduler whether something more urgent has become runnable.
 
-The question is *when* the handler runs, and the answer depends on what the virtual CPU is doing at the moment the bit is set.
+The question is *when* the handler runs, and the answer depends on what the virtual CPU is doing at the moment the bit is set. One term is needed for it. A virtual CPU is in a **critical section** when the kernelet task on it holds at least one preemption guard or spin lock, or has its virtual interrupts masked; the two conditions are kept as two fields of the record, below.
 
 ## The watch timer
 
@@ -61,9 +61,9 @@ static enum hrtimer_restart klet_watch_fn(struct hrtimer *timer)
 	if (user_mode(regs) || !klet_in_image_text(regs->ip) || !klet_in_kernelet(c)) {
 		/* in user mode (klet_virq_raise flagged the carrier), in a service, or in Linux: leave it pending */
 	} else if (!klet_critical(c)) {
-		klet_virq_redirect(c, regs);            /* 2. in kernelet code with interrupts on: deliver now */
+		klet_virq_redirect(c, regs);            /* 2. in kernelet code, not in a critical section: deliver now */
 	} else {
-		/* in kernelet code with interrupts masked: the kernelet delivers it itself when it unmasks */
+		/* in a critical section: the kernelet delivers it itself when the section ends */
 	}
 	/* 3. the bound on critical sections: chapter 10 */
 
@@ -74,7 +74,7 @@ static enum hrtimer_restart klet_watch_fn(struct hrtimer *timer)
 
 `klet_virq_raise` sets the bit and does the two cheap things that get it noticed: wakes the carrier if it is asleep in `vcpu_idle`, and flags it (chapter 7) if it is in user mode, so that it comes back through the resume hook, `user_run` returns 2, and `execute`'s loop runs the handler before it re-enters user mode.
 
-The interesting case is the middle one: the carrier is executing kernelet code, at an arbitrary instruction, and the kernelet's virtual interrupts are on. A machine would push the interrupted instruction pointer and jump to the handler. The endovisor does the same, by changing one saved register:
+The interesting case is the middle one: the carrier is executing kernelet code, at an arbitrary instruction, and is not in a critical section. A machine would push the interrupted instruction pointer and jump to the handler. The endovisor does the same, by changing one saved register:
 
 *Simplified from `prototype/endovisor/watch.c`: `klet_virq_redirect`.*
 
@@ -105,8 +105,8 @@ The stub is in vOSTD, in assembly, because it is entered between two arbitrary i
 
 ```asm
 klet_virq_entry:
-    sub rsp, 8               ; a slot for the interrupted instruction pointer
-    pushfq                   ; the flags
+    lea rsp, [rsp - 8]       ; a slot for the interrupted instruction pointer (lea, not sub: sub would change the flags)
+    pushfq                   ; the flags, exactly as the interrupted code left them
     push rax ... push r15    ; every general register
     mov rbp, rsp
     and rsp, -16             ; align for the call
@@ -124,9 +124,14 @@ extern "C" fn klet_virq_body() -> u64 {
     let ip = unsafe { read_volatile(rec.virq_ip.get()) } as usize;
     assert!(IMAGE_TEXT_LO <= ip && ip < IMAGE_TEXT_HI);   // never resume at an address the host made up
 
+    let owns_mirror = get_guard_count() == 0;            // this upcall begins a critical section of its own
+    if owns_mirror { host_preempt_inc(); }               // chapter 10: tell Linux so
+
     run_handlers(rec);                                   // TICK: the timer callbacks; KICK: a look at the run queue
 
+    let host_wants_cpu = if owns_mirror { host_preempt_dec_and_test() } else { false };
     unsafe { write_volatile(rec.irq_off.get(), 0) };     // unmask: the iret
+    if host_wants_cpu { host_yield(); }                  // chapter 10: Linux was waiting for this processor
     if get_guard_count() == 0 {                          // kernel-mode preemption: switch if the scheduler wants to
         crate::task::scheduler::might_preempt();
     }
@@ -150,8 +155,8 @@ flowchart LR
     t["watch timer fires<br/>(interrupt context)"] --> raise["set TICK in the record"]
     raise --> where{"what was interrupted?"}
     where -- "user mode" --> flag["flag the carrier:<br/>resume hook, user_run returns 2"]
-    where -- "kernelet code, interrupts on" --> redir["saved ip := virq_entry<br/>irq_off := 1"]
-    where -- "kernelet code, interrupts off<br/>or a service, or Linux" --> pend["leave the bit pending"]
+    where -- "kernelet code, not in a critical section" --> redir["saved ip := virq_entry<br/>irq_off := 1"]
+    where -- "a critical section,<br/>or a service, or Linux" --> pend["leave the bit pending"]
     redir --> stub["virq_entry: push all,<br/>klet_virq_body"]
     stub --> h["timer callbacks:<br/>scheduler.update_current(Tick)"]
     h --> pre["irq_off := 0;<br/>might_preempt()"]
@@ -164,7 +169,7 @@ flowchart LR
 Two separate fields in the record stand for the two ways a kernel holds things off, and they are kept separate because OSTD keeps them separate.
 
 - `irq_off` is the virtual interrupt flag, inverted. vOSTD sets it where OSTD's interrupts-off guard would clear the processor's flag, and clears it when the guard drops; the endovisor sets it when it redirects into the upcall, and the upcall clears it at the end. While it is set, nothing is delivered.
-- The **guard count**, the low bits of `preempt_info`, is how many preemption guards and spin locks are held. It does *not* mask interrupts, on a machine or here: a handler may run on top of a task that holds a preemption guard. What a guard forbids is a task switch, which is why `klet_virq_body` calls `might_preempt` only when the count is zero.
+- The **guard count**, the low bits of `preempt_info`, is how many preemption guards and spin locks are held. What a guard forbids is a task switch, which is why `klet_virq_body` calls `might_preempt` only when the count is zero. A guard does not stop the handlers from running when it drops, or when a kick arrives from user mode; but the watch timer never interrupts a task that holds one, so the bit waits for the last guard to drop, which is the unmask path below.
 
 Both are updated by the virtual CPU that owns the record, with single instructions where it matters, because the endovisor reads them from an interrupt on the same processor.
 
@@ -195,7 +200,7 @@ pub(crate) fn handle_virq() {                   // the same handlers, called as 
 }
 ```
 
-The same function is called by every service stub when the service returns, in case a bit arrived while the carrier was in Linux. So a virtual interrupt is delivered by whichever of three paths comes first: the upcall, if the kernelet was interruptible when it arrived; the unmask, if it was not; or the return from user mode or from a service.
+The same check runs whenever the last guard drops, which follows every service that ran under a guard, in case a bit arrived while the carrier was in Linux. So a virtual interrupt is delivered by whichever of three paths comes first: the upcall, if the kernelet was not in a critical section when it arrived; the end of the critical section, if it was; or the return from user mode.
 
 ## The kick's interrupt
 

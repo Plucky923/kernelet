@@ -12,15 +12,15 @@ Linux will take a processor away from a carrier whenever its own policy says so:
 
 Kernelet code contains no call to `cond_resched()`, because it cannot call Linux. On a kernel booted with `preempt=none`, a kernelet task that computes for eight seconds would hold its processor for eight seconds, against every other task that wants it. The test kernel in `prototype/yield/src/lib.rs` does exactly that, and `make yield` runs it twice on such a kernel, once with the mechanism below turned off and once with it on, with a competing host process pinned to the same processor. Without it, the competitor stalls for over four seconds at a stretch; with it, the two share the processor evenly.
 
-The mechanism is the watch timer volunteering on the kernelet's behalf. When it interrupts a carrier in kernelet code, outside a critical section, and finds `need_resched` set, it points the interrupted frame at a **yield stub** in the endovisor, by the same means as the upcall:
+The mechanism is the watch timer volunteering on the kernelet's behalf, and it has two forms. Usually the upcall of chapter 9 does it: the upcall raises the mirror described under Problem 2 while the handlers run, and on its way out, if Linux has set `need_resched` meanwhile, the decrement that lowers the mirror reads zero and vOSTD calls `vcpu_yield`, which reschedules in Linux. When the upcall cannot be taken, because the interrupted task's stack has too little room left for the handlers, the timer points the interrupted frame at a **yield stub** in the endovisor instead, by the same means:
 
 *Simplified from `prototype/endovisor/watch.c`: `klet_watch_fn`.*
 
 ```c
 	if (!klet_critical(c)) {
-		if (klet_virq_redirect(c, regs))       /* an upcall was possible: it will run the handlers */
+		if (klet_virq_redirect(c, regs))       /* an upcall was possible: it will yield on its way out */
 			goto again;
-		if (need_resched()) {                  /* Linux wants the processor: volunteer */
+		if (need_resched()) {                  /* no room for an upcall, and Linux wants the processor */
 			c->yield_ip = regs->ip;
 			c->forced = false;
 			regs->ip = (unsigned long)klet_yield_stub;
@@ -35,7 +35,7 @@ The stub saves every register and the flags on the kernelet stack, as the upcall
 
 ```asm
 klet_yield_stub:
-	subq	$8, %rsp          /* a slot for the return address */
+	leaq	-8(%rsp), %rsp    /* a slot for the return address; lea, not sub, which would change the flags */
 	pushfq
 	pushq	%rax ... pushq %r15
 	movq	%rsp, %rbp
@@ -67,7 +67,7 @@ static void klet_do_yield(struct klet_carrier *c)
 }
 ```
 
-On a Linux that does preempt kernel code, Linux reschedules by itself on the way out of the interrupt, and the stub finds nothing left to do. It exists for the configurations that do not. The test's checksum, computed over eight hundred million rounds through ten live registers, comes out identical whether the kernelet was interrupted eight hundred times or never, which is the stub's register-preservation argument made by experiment.
+On a Linux that does preempt kernel code, Linux reschedules by itself on the way out of the interrupt, and neither form has anything left to do; they exist for the configurations that do not. The test's checksum, computed over eight hundred million rounds through ten live registers, comes out identical whether the kernelet was interrupted eight hundred times or never, which is the register-preservation argument made by experiment.
 
 ## Problem 2: a lock holder loses its processor
 
@@ -75,7 +75,7 @@ Now the other direction. Suppose Linux preempts a carrier while the kernelet tas
 
 <div class="linux">
 
-**Linux: the preemption count.** Under the full model, what stops Linux from rescheduling kernel code at a bad moment, such as inside a spin-locked section, is a per-processor **preemption count** that [`preempt_disable()`](https://elixir.bootlin.com/linux/v6.12/source/include/linux/preempt.h#L213) and every spin lock raise and their counterparts lower; on return from an interrupt, Linux reschedules only if the count is zero. On x86-64 the `need_resched` flag is kept, inverted, in the top bit of the *same word* ([`PREEMPT_NEED_RESCHED`](https://elixir.bootlin.com/linux/v6.12/source/arch/x86/include/asm/preempt.h#L12)), so that a single decrement yields zero exactly when the count is zero *and* a reschedule is wanted, which is what `preempt_enable()` tests. The word lives in the per-processor block that `%gs` points at.
+**Linux: the preemption count.** Under the full model, what stops Linux from rescheduling kernel code at a bad moment, such as inside a spin-locked section, is a per-processor **preemption count** that [`preempt_disable()`](https://elixir.bootlin.com/linux/v6.12/source/include/linux/preempt.h#L213) and every spin lock raise and their counterparts lower; on return from an interrupt, Linux reschedules only if the count is zero. On x86-64 the `need_resched` flag is kept, inverted, in the top bit of the *same word* ([`PREEMPT_NEED_RESCHED`](https://elixir.bootlin.com/linux/v6.12/source/arch/x86/include/asm/preempt.h#L12)), so that a single decrement yields zero exactly when the count is zero *and* a reschedule is wanted, which is what `preempt_enable()` tests. In numbers: with one guard held and no reschedule wanted the word is `0x80000001`, and a decrement gives `0x80000000`, not zero; if Linux has cleared the top bit to ask for the processor, the word is `0x00000001`, and the decrement gives zero. The word lives in the per-processor block that `%gs` points at.
 
 </div>
 
@@ -113,7 +113,11 @@ pub(crate) fn dec_guard_count() {
 }
 ```
 
-The **mirror**, as the book calls it, is one increment however deeply the kernelet's guards nest, and that is deliberate: Linux's count is a bit field with only eight bits for the preemption depth, and a kernel proper that nested more guards than that would spill into the fields that say "in an interrupt". So vOSTD keeps a private flag, `mirrored`, in the record: the increment happens when a critical section begins and the flag is clear; the decrement when one ends and the flag is set. Both are idempotent against the flag. The order of the two stores is chosen so that the flag never claims more than the count holds, because OSTD's guard lifetimes cross a context switch (`switch_to_task` takes a guard that the *next* task releases) and a count that vOSTD tried to keep balanced by construction once went below zero.
+The **mirror**, as the book calls it, is one increment however deeply the kernelet's guards nest, and that is deliberate. Linux's count is a bit field with only eight bits for the preemption depth, and a kernel proper that nested more guards than that would spill into the fields that say "in an interrupt" and make Linux misjudge its own state.
+
+So vOSTD keeps a private flag, `mirrored`, in the record, and the flag is the authority: the increment happens when a critical section begins and the flag is clear; the decrement when one ends and the flag is set. Raising twice is a no-op, and so is lowering when nothing is raised. A pairing kept by construction would not have been enough, because OSTD's guard lifetimes cross a context switch: `switch_to_task` takes a guard that the *next* task releases, so the increment and its decrement may run on different tasks, and a count that must balance within one function cannot be checked.
+
+The order of the two stores in each function is also deliberate. The flag is set *after* the increment and cleared *before* the decrement, so that the flag never claims more than the count holds; the endovisor reads the flag to tell a genuine failure of the mirror from the two-instruction window in which the kernelet is between the updates.
 
 The effect is that Linux defers an involuntary preemption of a virtual CPU until the kernelet's critical section ends, by Linux's own mechanism, and that the kernelet gives the processor up the moment it can. The test `make sched-coop` runs four kernel tasks hammering one spin lock for ten seconds while two competitors in a sibling control group make Linux preempt the carriers constantly, and counts, in the preemption notifier, every time a carrier is switched out involuntarily while the mirror is up. With the mirror on, the count is zero; with it off (a module parameter, `klet_mirror=0`), it is in the thousands.
 
@@ -152,7 +156,7 @@ void klet_svc_body(struct klet_svc_args *args)
 }
 ```
 
-A kernelet in a critical section is therefore *not* in Linux's atomic mode. Its guards promise only that no kernelet task switch happens on this virtual CPU until the guard drops; the carrier may still lose the processor, by a Linux sleep inside a service as by a Linux preemption, and the kernelet is already correct under that, as a guest kernel is correct when its hypervisor deschedules a virtual CPU. Chapter 13 states the rule precisely, because the memory services depend on it.
+A kernelet in a critical section is therefore *not* in Linux's **atomic mode**, the state of holding something that forbids a task switch and in which code must not sleep. Its guards promise only that no kernelet task switch happens on this virtual CPU until the guard drops; the carrier may still lose the processor, by a Linux sleep inside a service as by a Linux preemption, and the kernelet is already correct under that, as a guest kernel is correct when its hypervisor deschedules a virtual CPU. Chapter 13 states the rule precisely, because the memory services depend on it.
 
 ## Problem 3: a critical section that never ends
 

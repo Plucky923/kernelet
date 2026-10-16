@@ -59,4 +59,4 @@ Chapters 12 and 13 are the climax, and everything before them is there so that t
 
 A few words are used in exactly one sense throughout; each is defined where it first appears, and the first chapter collects them. Linux functions are linked to the version 6.12 source on `elixir.bootlin.com` the first time they are named, so that you can read the real code. Every figure is either a diagram in the text or a drawing; nothing in a figure is decorative.
 
-Each chapter ends with a short recap, and with the `make` target that runs the code the chapter explained.
+Each chapter ends with a short recap, and where a chapter's mechanism has a test, the chapter names the `make` target that runs it.

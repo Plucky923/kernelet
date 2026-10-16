@@ -16,22 +16,30 @@ On x86-64 every system-call instruction, after a few lines of assembly, reaches 
 
 The three interceptors are all controlled from user space, and none lets kernel code *answer* a call. The gate is a fourth stage that does.
 
+**On the way in:**
+
 ```mermaid
 flowchart TB
-    u[user program executes syscall] --> e[entry assembly: save pt_regs]
+    u[user program executes syscall] --> e[entry assembly saves pt_regs]
     e --> w{syscall work bits set?}
     w -- no --> t[Linux's system-call table]
     w -- yes --> s[syscall_trace_enter: dispatch, ptrace, seccomp]
     s --> g{"the gate: current->kernelet?"}
-    g -- "no" --> t
-    g -- "ops->syscall(regs) returned true" --> x[skip the table]
-    t --> x2[exit_to_user_mode_loop]
-    x --> x2
-    x2 --> r{"the gate: current->kernelet?"}
+    g -- no --> t
+    g -- "yes: ops->syscall(regs) returned true" --> x[the table is skipped]
+```
+
+**On the way out:**
+
+```mermaid
+flowchart TB
+    p{"work pending? (a signal, a flag, a reschedule)"} -- no --> back[restore pt_regs, return to user mode]
+    p -- yes --> loop[exit_to_user_mode_loop]
+    loop --> r{"the gate: current->kernelet?"}
     r -- yes --> h["ops->resume(regs)"]
     h --> sig[signals, reschedule]
     r -- no --> sig
-    sig --> back[restore pt_regs, return to user mode]
+    sig --> p
 ```
 
 ## The patch, hunk by hunk
@@ -43,7 +51,7 @@ flowchart TB
 ```c
 /* include/linux/kernelet.h (new) */
 struct kernelet_gate_ops {
-	/* A system call was issued by a carrier's user mode. Returns true
+	/* A system call was issued by an attached task's user mode. Returns true
 	 * if the kernelet serviced it; Linux's own dispatch is then skipped. */
 	bool (*syscall)(struct pt_regs *regs);
 	/* Called on the way out to user mode while any exit work is pending. */
@@ -82,7 +90,7 @@ Returning `-1` from this function is Linux's existing convention for "an earlier
 
 This runs whenever a task with pending work is about to return to user mode. It is what lets the kernelet run code at moments that are *not* a system call: when the task was just created, when an exception has been turned into a signal, when a timer wants the kernelet's attention. Placing it before signal delivery is what lets the kernelet take a tenant's exceptions away from Linux, as chapter 7 shows.
 
-**The gate is inherited.** Nothing in the patch copies the pointer into child tasks, and nothing needs to: Linux creates a task by copying the parent's whole `task_struct` ([`dup_task_struct()`](https://elixir.bootlin.com/linux/v6.12/source/kernel/fork.c#L1101)), the new field included, and the syscall-work bits are inherited the same way. A child of a kernelet's task is therefore attached to the gate before it executes its first instruction, and there is no moment at which it could make a system call that Linux would answer. This is the difference between a field Linux does not know about, which it copies, and a setting Linux knows about, such as seccomp's user dispatch, which it deliberately resets at `fork` and `exec`.
+**The gate is inherited.** Nothing in the patch copies the pointer into child tasks, and nothing needs to: Linux creates a task by copying the parent's whole `task_struct` ([`dup_task_struct()`](https://elixir.bootlin.com/linux/v6.12/source/kernel/fork.c#L1101)), the new field included, and the syscall-work bits are inherited the same way. A child of a kernelet's task is therefore attached to the gate before it executes its first instruction, and there is no moment at which it could make a system call that Linux would answer. This is the difference between a field Linux does not know about, which it copies, and a setting Linux knows about, such as Syscall User Dispatch, which it deliberately resets at `fork` and `exec`.
 
 **Two helper functions.** `kernel/fork.c` gains two functions that the endovisor cannot write itself because everything they touch is private to the core kernel: `kernelet_mm_alloc()`, which creates an empty address space with a chosen owner, and `kernelet_switch_mm()`, which makes the calling task run in a different address space. Both belong to chapter 12, where tenant memory is built; they are mentioned here only so that the patch's contents are complete.
 

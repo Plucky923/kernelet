@@ -34,6 +34,18 @@ waitpid(pid, &status, 0);          /* until the sandbox has ended */
 
 Everything the runtime set up on that child before the `execve`, such as its control group, its user identity and its seccomp filter, is inherited by every carrier, because every carrier descends from it. The prototype sets only the one `prctl`; a real runtime would set them all.
 
+<div class="linux">
+
+**Linux: control groups.** A control group is a set of tasks that Linux accounts and limits together: their share of the processors, their memory, and more. A child starts in its parent's group. Containers are built on them, and so is a sandbox: because every carrier is in the sandbox's group, everything the kernelet does is charged to the tenant by machinery Linux already has.
+
+</div>
+
+<div class="linux">
+
+**Linux: `TIF_NOTIFY_RESUME`.** Linux enters the exit loop of chapter 4, and so runs the resume hook, only if the task has a *work flag* set. A pending signal sets one. Kernel code that wants the loop to run sets the flag [`TIF_NOTIFY_RESUME`](https://elixir.bootlin.com/linux/v6.12/source/include/linux/resume_user_mode.h#L16) on the task: a plain flag-set on the current task, or `set_notify_resume()` on another, which also nudges the processor that task is on. The book says the endovisor *flags the carrier* when it means this.
+
+</div>
+
 The handler is where the child becomes the root carrier:
 
 *Simplified from `prototype/endovisor/main.c`: `klet_load_binary`, `klet_empty_mm`.*
@@ -77,7 +89,7 @@ static void klet_root_loop(struct klet_carrier *root)
 	for (i = 0; i < inst->nr_vcpus; i++)
 		klet_spawn_vcpu(inst, i);
 
-	for (;;) {                                   /* then stay alive until the sandbox ends */
+	for (;;) {                                   /* then sleep until the sandbox ends */
 		wait_event_interruptible(inst->root_wq,
 			inst->stopped || inst->dying || fatal_signal_pending(current));
 		if (inst->stopped || inst->dying || fatal_signal_pending(current))
@@ -99,7 +111,7 @@ static int klet_spawn_vcpu(struct klet_inst *inst, int vcpu)
 }
 ```
 
-Each clone is a separate process, not a thread: no `CLONE_VM`, no `CLONE_FILES`, no `CLONE_THREAD`. It gets a *copy* of the root's empty address space, a copy of its descriptor table, and, because Linux copies the task structure, the root's gate pointer, syscall-work bit, control group, credentials and seccomp filter. The endovisor sets none of those up per carrier; `fork` does.
+`wait_event_interruptible` is Linux's ordinary way to sleep until a condition holds: the task is woken whenever someone signals the wait queue it names, and checks the condition again. Each clone is a separate process, not a thread: no `CLONE_VM`, no `CLONE_FILES`, no `CLONE_THREAD`. It gets a *copy* of the root's empty address space, a copy of its descriptor table, and, because Linux copies the task structure, the root's gate pointer, syscall-work bit, control group, credentials and seccomp filter. The endovisor sets none of those up per carrier; `fork` does.
 
 ```mermaid
 flowchart TB

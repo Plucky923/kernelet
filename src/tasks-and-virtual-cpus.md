@@ -51,15 +51,9 @@ impl KernelStack {
 }
 ```
 
-The context switch is OSTD's `switch.S`, byte for byte: save seven words, load seven words, return on the other stack. It is the same idea as the endovisor's `klet_switch`, written on the Rust side, and it switches between two *kernelet* stacks, which is why the endovisor neither sees nor cares which of the kernelet's tasks is current. The endovisor remembers only where the kernelet was when it last left, and resumes there.
+The context switch is OSTD's `switch.S`, byte for byte: save eight words (the stack pointer, six callee-saved registers and the return address), load eight, return on the other stack. It is the same idea as the endovisor's `klet_switch`, written on the Rust side, and it switches between two *kernelet* stacks, which is why the endovisor neither sees nor cares which of the kernelet's tasks is current. The endovisor remembers only where the kernelet was when it last left, and resumes there.
 
-The kernel proper chooses the policy. It implements OSTD's `Scheduler` trait, a run queue per CPU with `enqueue`, `pick_next` and `update_current`, and registers it with `inject_scheduler` before it creates any task. If it registers none, OSTD's own first-in-first-out scheduler is used, which is what the hundred-line kernel gets. The test kernel in `prototype/sched/src/lib.rs` injects a strict-priority scheduler with round-robin inside each level, a policy Linux's own scheduler could never be made to produce, and the test `make sched-policy` checks every one of its switches against a model of the policy.
-
-<div class="rust">
-
-**Rust: traits.** A trait is an interface: a list of functions a type must provide. `Scheduler` is one; the kernel proper writes a struct with those functions and hands a reference to it to `inject_scheduler`. OSTD calls the functions without knowing the type, which is how a scheduler written for a bare-metal kernel runs unchanged in a kernelet.
-
-</div>
+The kernel proper chooses the policy. It implements OSTD's `Scheduler` trait (chapter 3's box), a run queue per CPU with `enqueue`, `pick_next` and `update_current`, and registers it with `inject_scheduler` before it creates any task; OSTD calls those functions without knowing the type, which is how a scheduler written for a bare-metal kernel runs unchanged in a kernelet. If the kernel proper registers none, OSTD's own first-in-first-out scheduler is used, which is what the hundred-line kernel gets. The test kernel in `prototype/sched/src/lib.rs` injects a strict-priority scheduler with round-robin inside each level, a policy that Linux's fair scheduler, under which every carrier runs, would never produce, and the test `make sched-policy` checks every one of its switches against a model of the policy.
 
 ## The virtual CPU record
 
@@ -135,6 +129,12 @@ The order of the first three lines is the one every Linux sleep uses so that no 
 
 **Kicking.** When the kernelet's scheduler puts a task on another virtual CPU's run queue, that virtual CPU should notice soon, as a machine would be told by an inter-processor interrupt. vOSTD calls `vcpu_kick(i)`, which sets a KICK bit in the target's record and does whichever of three things gets it seen: wakes the carrier if it is asleep in `vcpu_idle`, flags it if it is in user mode, or, if it is running kernelet code on another processor right now, sends that processor an interrupt whose handler delivers the kick at once (chapter 9).
 
+<div class="rust">
+
+**Rust: closures.** `|x, y| expr` is a closure: a function without a name, written where it is used, which may use the variables around it. A function that takes `f: F` where `F: FnMut(...)` accepts one, and calls it as `f(args)`. `reschedule` below takes the scheduling decision as a closure, so that `yield_now`, `park_current` and the others share its loop and differ only in the decision.
+
+</div>
+
 *Simplified from `prototype/vostd/src/task/scheduler/mod.rs`: `reschedule`, `set_need_preempt`.*
 
 ```rust
@@ -163,11 +163,17 @@ fn reschedule<F>(mut f: F) {                     // the heart of every schedulin
 }
 ```
 
+`Retry` means the run queue is empty: the virtual CPU spins a little, in case a sibling is about to enqueue something, and then calls `vcpu_idle` (a deadline of zero means "until the next tick"). When the sleep ends, TICK is pending, the closure runs again, and either finds a task or sleeps again.
+
 ## One carrier, many threads
 
 A virtual CPU runs the threads of many tenant processes in turn, and each process has its own address space. The kernel proper, as on a machine, activates the right `VmSpace` before it runs a thread; in vOSTD, `activate` records the space in the virtual CPU's record (the `space` field above), and the carrier switches to that process's Linux address space on its next trip to user mode. The switch itself is chapter 12's `klet_adopt_space`, which both hooks of chapter 7 call just before they apply the registers.
 
-The floating-point and vector registers belong to a tenant thread too, and Linux saves and restores them for the *carrier*, not knowing that the kernelet changes threads underneath. OSTD already has a type for the thread's copy, `FpuContext`, which the kernel proper saves when it leaves user mode and loads before it returns. vOSTD implements its `save` and `load` with two services, `fpu_save` and `fpu_load`, which make the registers live if Linux had deferred them, and then execute the same `xsave` and `xrstor` a machine would, through a staging page the endovisor owns and validates, never on the kernelet's buffer in place.
+The floating-point and vector registers belong to a tenant thread too. To Linux they are the *carrier's* user state: Linux saves them when it switches the carrier out and restores them, lazily, before the carrier next returns to user mode, and it does not know that the kernelet has put a different thread on the carrier in between.
+
+OSTD already has the type for a thread's own copy, `FpuContext`, which the kernel proper saves when a thread leaves user mode and loads before it returns. vOSTD implements its `save` and `load` with two services, `fpu_save` and `fpu_load`. Each first makes the registers live, if Linux had deferred restoring them, and then executes the same `xsave` or `xrstor` instruction a machine would.
+
+The instruction never touches the kernelet's buffer directly. `xrstor` reads a header from the buffer and acts on it, and the kernelet's buffer may lie in a frame that the kernelet has also mapped into a tenant, which could rewrite it between a check and the instruction. So the endovisor copies the buffer to a page of its own, validates the copy, and runs the instruction on that.
 
 <div class="recap">
 

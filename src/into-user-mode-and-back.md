@@ -127,7 +127,7 @@ static void klet_regs_to_ctx(struct klet_carrier *c, struct pt_regs *regs)
 
 Read the middle of it twice. `klet_enter` switches to the kernelet stack, where `user_run` is waiting inside `klet_switch`; `user_run` returns `0`; `execute` returns `UserSyscall`; the kernel proper's loop handles the call and calls `execute` again; `user_run` switches back to the Linux stack, which lands *here*, just after `klet_enter`. Then the hook copies the kernelet's new registers out, returns `true`, and Linux returns to user mode with them, skipping its own system-call table entirely.
 
-The layout of `pt_regs` already matches what the hardware did: `rcx` and `r11` hold the return address and the flags as the `syscall` instruction leaves them, and the call number is in `orig_ax`.
+The `syscall` instruction itself overwrites two registers on the way in: it puts the return address in `rcx` and the flags in `r11`. `pt_regs` holds them as the instruction left them, so the kernel proper sees exactly the registers it would see on a machine, and the call number is in `orig_ax`, where Linux's entry code put it.
 
 ```mermaid
 sequenceDiagram
@@ -203,7 +203,7 @@ static void klet_gate_resume(struct pt_regs *regs)
 			klet_carrier_die(c);                                 /* chapter 11 */
 			return;
 		}
-		if (c->state == KLET_NEW) {                              /* the first entry */
+		if (c->state == KLET_NEW) {                              /* never entered: defensive, the start function enters first */
 			klet_enter(c, KLET_RUN_EVENT);
 			continue;
 		}
