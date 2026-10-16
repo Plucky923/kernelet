@@ -12,9 +12,11 @@
  *    spinning in user mode all that time; afterwards it reads every page back.
  *  - "kill" (E11): once the kernelet has said it is ready, has Linux preempt
  *    the carrier of virtual CPU 1 (a competitor pinned to its processor),
- *    sends it SIGTERM and SIGUSR1 (and the root carrier a SIGTERM), and then
- *    a burst of the core-dump and stop signals, SIGQUIT, SIGABRT, SIGTSTP,
- *    SIGTTIN and SIGTTOU, all of which must leave both alive and running,
+ *    reads both carriers' signal dispositions (SigIgn, SigBlk) from
+ *    /proc/<pid>/status, sends it SIGTERM and SIGUSR1 (and the root carrier
+ *    a SIGTERM), and then a burst of the core-dump and stop signals,
+ *    SIGQUIT, SIGABRT, SIGTSTP, SIGTTIN and SIGTTOU (and the root carrier a
+ *    SIGQUIT and a SIGTSTP), all of which must leave both alive and running,
  *    stops it with SIGSTOP and lets it go on with SIGCONT,
  *    and then kills it with SIGKILL, while vCPU 0's tenant thread keeps
  *    faulting in the same address space. The kill must end the whole

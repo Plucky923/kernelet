@@ -15,7 +15,7 @@ The kernel proper is built the other way around. Its `execute` call must *return
 The resolution is to give kernelet code stacks of its own. A **kernelet stack** is a block of kernel memory that the endovisor allocates and that the kernelet's tasks run on. The carrier *switches* onto a kernelet stack to run kernelet code and back onto its Linux stack to let Linux return to user mode. Linux's stack is empty exactly when Linux expects it to be, and the kernelet's stack holds the suspended loop exactly as the kernel proper expects.
 
 ```mermaid
-flowchart LR
+flowchart TB
     subgraph L[" "]
         direction TB
         l0["<b>the carrier's Linux stack, 16 KiB</b>"] ~~~ l1["pt_regs: the user registers"] --> l2["entry code frames"] --> l3["the gate hook's frame<br/>(klet_carrier_main's, the first time)"] --> l4["klet_enter, parked in klet_switch"]
@@ -104,6 +104,8 @@ static void klet_enter(struct klet_carrier *c, u64 run_ret)
 	c->run_ret = run_ret;                   /* what user_run will return, if that is where it stopped */
 	c->state = KLET_RUNNING;
 	c->depth = 0;
+	klet_mirror_in(c);                      /* chapter 10: note Linux's preemption count */
+	klet_watch_arm(c);                      /* chapter 9: the watch timer on this processor */
 	klet_switch(&c->linux_sp, c->coro_sp);  /* returns when the kernelet leaves */
 }
 

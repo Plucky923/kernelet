@@ -36,7 +36,7 @@ flowchart LR
     end
 ```
 
-The third column is what this book is about. Each tenant gets a kernel of its own, as with a virtual machine. But that kernel is not a guest on simulated hardware. It is an ordinary piece of software loaded *into* the kernel that runs the machine, the **host kernel**, and it runs there in kernel mode, beside the host's own code. There is no hypervisor and no simulated hardware. Such a loaded kernel is a **kernelet**.
+The third panel is what this book is about. Each tenant gets a kernel of its own, as with a virtual machine. But that kernel is not a guest on simulated hardware. It is an ordinary piece of software loaded *into* the kernel that runs the machine, the **host kernel**, and it runs there in kernel mode, beside the host's own code. There is no hypervisor and no simulated hardware. Such a loaded kernel is a **kernelet**.
 
 Put that way it sounds reckless. Code in kernel mode can do anything: read any memory, write any page table, halt the machine. Loading a tenant's kernel into the host would seem to hand the tenant the whole computer. What makes it safe is how the kernel is written.
 
@@ -49,13 +49,13 @@ Asterinas is a kernel written in Rust that runs the same programs Linux runs: it
 
 <div class="rust">
 
-**Rust: what "safe" promises.** Rust programs are checked by the compiler for memory safety: a safe program cannot read freed memory, write past the end of an array, or turn an integer into a pointer and follow it. The escape hatch is the keyword `unsafe`, which marks a block in which the programmer takes that responsibility back. A crate (Rust's word for a library or program) can forbid the keyword outright with the attribute `#![deny(unsafe_code)]`, and then the compiler guarantees that nothing in it can corrupt memory, however wrong its logic is.
+**Rust: what "safe" promises.** Rust programs are checked by the compiler for memory safety: a safe program cannot read freed memory, write past the end of an array, or turn an integer into a pointer and follow it. The escape hatch is the keyword `unsafe`, which marks a block in which the programmer takes that responsibility back. A crate (Rust's word for a library or program) can forbid the keyword outright with the attribute `#![deny(unsafe_code)]` at its top and no `#[allow(unsafe_code)]` inside (`deny` can be overridden that way, `forbid` cannot), and then the compiler guarantees that nothing in it can corrupt memory, however wrong its logic is.
 
 </div>
 
 So the kernel proper can do only what OSTD's interface lets it do. It cannot forge a pointer to another tenant's memory, because safe Rust has no way to express that. It cannot execute a privileged instruction, because none of OSTD's functions do that for it. It can still have bugs, and a hostile tenant will look for them, but a bug in safe Rust can produce a wrong answer, never a corrupted page table.
 
-Who compiles it matters. The *operator* of the machine builds the kernel proper, and refuses any crate that does not carry `#![deny(unsafe_code)]`; the tenant never hands over code to be loaded into kernel mode. What the tenant controls is its own programs, and through them which paths of the kernel proper run, with which arguments. OSTD itself, the layer that does use `unsafe`, is written and audited by the operator, like the host kernel: it is trusted, as the host is.
+Who compiles it matters. The *operator* of the machine builds the kernel proper, and refuses any crate that does not carry `#![deny(unsafe_code)]`, or that allows the keyword back anywhere inside; the tenant never hands over code to be loaded into kernel mode. What the tenant controls is its own programs, and through them which paths of the kernel proper run, with which arguments. OSTD itself, the layer that does use `unsafe`, is written and audited by the operator, like the host kernel: it is trusted, as the host is.
 
 That is the opening.
 

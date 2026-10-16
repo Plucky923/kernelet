@@ -58,6 +58,16 @@ Each directory has a `README.md` saying what is in it.
   10.x (a 10.1 pre-release, which reports itself as 10.0.92) have both been
   tested. A QEMU that does not start fails the boot with a
   message saying so. The guests use two CPUs and 512 MiB.
+- **The kernel's configuration.** The Linux the tests boot is built here,
+  from `tinyconfig` and `linux/config.fragment`, and two of the fragment's
+  settings are preconditions rather than conveniences. Vsyscall emulation
+  (`CONFIG_X86_VSYSCALL_EMULATION`) must be off: with it, a tenant that jumps
+  to the vsyscall page has Linux run `gettimeofday`, `time` or `getcpu` for
+  it in the page-fault handler, without passing the gate, and the endovisor
+  refuses to load on such a kernel (it cannot read whether `vsyscall=none` was
+  given at boot, so it refuses either way). And `CONFIG_BUG` must be on:
+  `tinyconfig` turns it off, and then every `WARN_ON()` in Linux is silent,
+  so that the checks' search for `WARNING:` would prove nothing.
 - **Rust** through `rustup`: `rust-toolchain.toml` names the nightly
   (`nightly-2026-07-21`, with `rust-src` and the `x86_64-unknown-none`
   target), and `rustup` installs it on first use. The image is built with
@@ -67,7 +77,8 @@ Each directory has a `README.md` saying what is in it.
   Fedora), because the runtimes and `init` are linked `-static`; `make`,
   `patch`, `flex`, `bison`, `bc`, `perl`, the `libelf` headers (objtool),
   binutils (`ld`, `objcopy`, `readelf`, `nm`), `tar`, `xz`, `gzip`, `curl`,
-  `python3`, GNU coreutils (`timeout`, `truncate`, `stat`), GNU findutils
+  `python3`, `awk`, `sed`, `grep`, GNU coreutils (`timeout`, `truncate`,
+  `stat`, `seq`), GNU findutils
   (the initramfs list is written with `find -printf`), `cmp` (diffutils, for
   `kernel-proper-check`), and `mkswap` for `make mem-pressure`.
 - **No root.** Nothing is installed, and the initramfs is written by the
@@ -81,14 +92,24 @@ Each directory has a `README.md` saying what is in it.
   `make linux` while the tree has no `bzImage` or `Module.symvers` yet. Once
   the kernel is built, no target checks the free space, and a boot needs a
   few megabytes.
-- **Variables** a user may set: `QEMU` (above), `JOBS` (parallel jobs for the
-  Linux and module builds, default 8), `TIMEOUT` and `MIN_FREE_GB` (default
-  6). `TIMEOUT` is how many seconds one boot may take before QEMU is killed
-  and the boot fails. Each test sets its own (120 s for `hello`, `probe`,
-  `sched-policy` and `sched-fpu`, 180 s for the other boots, 300 s for
-  `mem-perf`'s); a `TIMEOUT` given on the command line, as in
-  `make test TIMEOUT=600`, wins over all of them, for every boot of every
-  target, so a slow host can raise it.
+- **Variables** a user may set on the command line: `QEMU` (above), `JOBS`
+  (parallel jobs for the Linux and module builds, default 8), `TIMEOUT`,
+  `MIN_FREE_GB` (default 6), and `MEM_PERF_BOOTS` (how many boots
+  `make mem-perf` makes, default 5). `TIMEOUT` is how many seconds one boot
+  may take before QEMU is killed and the boot fails. Each test sets its own
+  (120 s for `hello`, `probe`, `sched-policy` and `sched-fpu`, 180 s for the
+  other boots, 300 s for `mem-perf`'s); a `TIMEOUT` given on the command
+  line, as in `make test TIMEOUT=600`, wins over all of them, for every boot
+  of every target, so a slow host can raise it. For a single boot run by
+  hand: `KLET_KERNEL` (which kernel proper, above all for `make image` and
+  `make kernelet-module`), `WATCH=0` (load the module with `klet_watch=0`, for
+  `make stage-yield`) and `MIRROR=0` (`klet_mirror=0`, for the sched
+  kernel's boots). The rest, `SCHED_*` (`SCHED_VCPUS`, `SCHED_MODE`,
+  `SCHED_DUR`, `SCHED_ARGS`, `SCHED_RUNMODE`, `SCHED_TIMEOUT`), `MEM_*`
+  (`MEM_VCPUS`, `MEM_ARGS`, `MEM_MODPARAMS`, `MEM_RUNMODE`, `MEM_TIMEOUT`,
+  `MEM_LOG`, `MEM_TARGET`), `PROBE_RUNMODE`, `KILL_WHERE`, `BOOTS_ONLY` and
+  `REPORT_ONLY`, are how the tests drive their own boots and checks, and are
+  set by the targets themselves.
 
 ### From a fresh clone
 
@@ -106,11 +127,13 @@ cdn.kernel.org, unpacks it into `.build/linux-6.12`, deletes the tarball,
 applies the gate patch, configures and builds the kernel (a `tinyconfig`
 kernel, so this is quick), builds the Rust image, and then runs the tests:
 315 s measured from an empty `.build/` on an eight-core machine, 134 s of them
-in the first test. After that, `make test` takes about three and a half minutes
-(211 to 215 s measured), and `make bench` a little less (190 s: eight boots
-of the sched kernel and five of the mem kernel). Every build is `--offline`, so
-nothing after the crates and the one download needs the network; an offline
-build that finds a crate missing says to run `make crates`.
+in the first test (measured before the kernel gained `CONFIG_BUG` and `probe`
+its second boot, and not measured again since). After that, `make test` takes about three and a half
+minutes (217 to 221 s measured, the two boots of `probe` 13 s of them), and
+`make bench` a little less (190 s: eight boots of the sched kernel and five of
+the mem kernel). Every build is `--offline`, so only the toolchain (once,
+through `rustup`), the crates and the one download of Linux need the network;
+an offline build that finds a crate missing says to run `make crates`.
 
 `make test` runs, in order, and stops at the first failure: `hello`, `probe`,
 `yield`, `sched-policy`, `sched-coop`, `sched-fpu`, `mem-func`, `mem-r2`,
@@ -124,27 +147,31 @@ the verdict, `PASS` or `FAIL`.
 
 ## The targets
 
+Run them from `prototype/`, or from the repository root as
+`make -C prototype <target>`; the root `Makefile` itself has only `test`,
+`bench` and `crates` for the prototype.
+
 | target | what it does | chapter |
 |---|---|---|
 | `make test` | the eleven tests below, in order | – |
 | `make bench` | `sched-fair`, `sched-perf`, `mem-perf`, reported | 14 |
 | `make hello` | the 100-line kernel, byte-identical to `hello/upstream/`: "Hello, world", a clean stop, a clean module unload; also the one-off measurements of what a service costs ("service stub: N cycles") and of what a heap allocation and its free cost ("heap: ... N cycles the pair") | 2, 3, 6, 7 |
-| `make probe` | demand paging, exceptions other than page faults (`ud2` twice in a row, trap 6; `int3`, trap 3; `hlt`, trap 13, a general-protection fault), each fault signal ignored again after it was drained, and eviction of a kernelet spinning in kernel mode when the sandbox is killed | 7, 11, 12 |
+| `make probe` | two boots. The probe: demand paging, a 4 MiB `write` whose buffer the heap refuses (the kernel proper answers `-ENOMEM`, and Linux's page allocator is never asked), exceptions other than page faults (`ud2` twice in a row, trap 6; `int3`, trap 3; `hlt`, trap 13, a general-protection fault), each fault signal ignored again after it was drained, and eviction of a kernelet spinning in kernel mode when the sandbox is killed. Then the same tenant under a seccomp filter that kills the process on its endless system call: Linux forces `SIGSYS` on the carrier as a fatal signal, the resume hook leaves it to Linux, the carrier dies by it, and its death ends the sandbox, with no warning | 4, 7, 11, 12 |
 | `make yield` | two boots under `preempt=none`, the watch timer off (the competitor starves) and on (it does not, and the checksums agree) | 9, 10 |
 | `make sched-policy` | the kernelet's own scheduler: its trace checked against a reference model | 8 |
-| `make sched-coop` | three boots: the mirror on (no involuntary deschedule in a critical section), off (the control), and an overstayer forced to yield at the first tick at least a millisecond after the first strike, about 2 ms on this machine (the check allows 4000 us, because a late tick lengthens it) | 10 |
+| `make sched-coop` | three boots: the mirror on (no involuntary deschedule in a critical section), off (the control), and an overstayer forced to yield at the first tick at least a millisecond after the first strike, about 2 ms on the machine the book was measured on (the check allows 4000 us, because a late tick lengthens it) | 10 |
 | `make sched-fpu` | floating-point registers of two tenant threads in two address spaces survive every switch | 8 |
 | `make mem-func` | E2, E3, E4, E10: no Linux fault on mapped pages, fault-around, protection changes, a map under a guard, the withheld set | 12, 13 |
 | `make mem-r2` | E5: the sleeping contract, broken on purpose, ends the kernelet | 13 |
 | `make mem-conc` | E8, E11 on two vCPUs: lockless copies, the contended range lock, a process exiting under a copy, the retire list | 13 |
-| `make mem-kill` | E11 and the carriers as Linux tasks: one carrier of a two-thread process is preempted by a competitor, sent SIGTERM and SIGUSR1 and then 2000 rounds of SIGQUIT, SIGABRT, SIGTSTP, SIGTTIN and SIGTTOU (it lives and runs, and none of them reaches its queue), stopped and continued, and killed while its sibling faults in the same address space; the kill ends the whole sandbox cleanly. Its tenant runs the rewind check meanwhile: a register count and a memory count that must never part. Then two short boots, the carrier of vCPU 1 killed while it is idle in `vcpu_idle` and while it runs a kernel task that calls no service: each kill must end the sandbox within two seconds | 7, 11, 12 |
+| `make mem-kill` | E11 and the carriers as Linux tasks: one carrier of a two-thread process is preempted by a competitor, sent SIGTERM and SIGUSR1 and then 2000 rounds of SIGQUIT, SIGABRT, SIGTSTP, SIGTTIN and SIGTTOU (it lives and runs, and none of them reaches its queue; the root carrier is sent a SIGTERM, a SIGQUIT and a SIGTSTP, and lives too), stopped and continued, and killed while its sibling faults in the same address space; the kill ends the whole sandbox cleanly. Its tenant runs the rewind check meanwhile: a register count and a memory count that must never part. Then two short boots, the carrier of vCPU 1 killed while it is idle in `vcpu_idle` and while it runs a kernel task that calls no service: each kill must end the sandbox within two seconds | 7, 11, 12 |
 | `make mem-pressure` | E7: the area's entries survive reclaim and swap | 12 |
 | `make sched-fair` | measurement: a sibling group's share of the processors with 1, 50, and 50 tasks and an overstayer | 10, 14 |
 | `make sched-perf` | measurement: a kernelet task switch, a wake-up on the same and on the other vCPU, and a round trip between two tenant processes, beside native Linux, five boots; fails if a kernelet measurement has no samples | 14 |
 | `make mem-perf` | measurement: E6 and E9, the memory costs, five boots | 14 |
 | `make sched`, `make mem` | the sched tests (`sched-policy`, `sched-coop`, `sched-fpu`); the mem tests (`mem-func`, `mem-r2`, `mem-conc`, `mem-kill`, `mem-pressure`). The measurements are `make bench`'s | 8, 10, 12, 13 |
 | `make crates` | download the Rust crates, once | – |
-| `make source` | download and unpack Linux v6.12 if `.build/linux-6.12` is not there, and apply the gate patch | 4 |
+| `make source` | download and unpack Linux v6.12 if `.build/linux-6.12/Makefile` is not there, and apply the gate patch | 4 |
 | `make patch` | apply the gate patch; idempotent | 4 |
 | `make linux` | configure (once, from `linux/config.fragment`; `make config` does only that) and build `bzImage`, `modules` (which writes the tree's `Module.symvers`, without which no out-of-tree module links) and `modules_prepare` | 4 |
 | `make image` | build vOSTD and the kernel proper named by `KLET_KERNEL` (`hello`, `probe`, `yieldk`, `schedk`, `mem`) and pre-link the image | 3 |
@@ -181,14 +208,17 @@ runtime's. Each test keeps a copy of its boot's log before it checks it:
 
 | test | log |
 |---|---|
-| `hello`, `probe`, `sched-fpu` | `.build/serial-<test>.log` |
+| `hello`, `sched-fpu` | `.build/serial-<test>.log` |
+| `probe` | `.build/serial-probe.log`, `.build/serial-probe-seccomp.log` |
 | `yield` | `.build/serial-yield-off.log`, `.build/serial-yield-on.log` |
 | `sched-policy`, `sched-coop`, `sched-fair`, `sched-perf` | `.build/serial-sched-*.log` |
 | `mem-*` | `.build/mem/<name>.log` (`func`, `r2`, `conc`, `kill`, `kill-idle`, `kill-spin`, `pressure`, `perf-1` ... `perf-5`) |
 
 A check fails on any `BUG:`, `Oops`, `WARNING:`, `Call Trace` or `switching
 to a task already running` (vOSTD's report of a scheduler handing it a task
-that is still running elsewhere) in the log, on a missing line it expects, on
+that is still running elsewhere) in any of its boots' logs, the control boots
+included (Linux prints `WARNING:` only because the kernel is built with
+`CONFIG_BUG`, above), on a missing line it expects, on
 a sandbox whose end did not give back what it held, and on an unclean module
 unload: init's `delete_module kernelet failed`, a log without the endovisor's
 `kernelet: STATS` line or init's `INIT: done`, or anything the endovisor
@@ -226,7 +256,16 @@ requires 0 live in each of the last three.
   instruction, and seccomp's `SIGSYS`. The resume hook drains it before
   Linux can deliver it, since it was queued before the exit loop began, and
   then ignores it again, so that the next fault is forced, and drained, the
-  same way. A fault signal becomes the CPU exception the kernel proper sees:
+  same way. The one exception is a signal Linux has made fatal for good,
+  which it marks `SA_IMMUTABLE`: seccomp's `SIGSYS` when a filter kills
+  (`SECCOMP_RET_KILL_PROCESS` or `_THREAD`), which arrives before the gate
+  ever sees the call. Seccomp has then already marked the task dead, and a
+  carrier that lived on would hit seccomp's `WARN` at its next system call.
+  So the drain never takes such a signal, and the resume hook, finding one
+  pending, returns at once and lets Linux deliver it: the carrier dies by it
+  (`ended by signal 31` in the log), and its death ends the sandbox. A
+  filter that only traps (`SECCOMP_RET_TRAP`) sends an ordinary `SIGSYS`,
+  which is drained and dropped, and the call it trapped is never served. A fault signal becomes the CPU exception the kernel proper sees:
   `SIGSEGV`, `SIGBUS`, `SIGILL`, `SIGFPE` and `SIGTRAP` with a fault's
   `si_code`, and `SIGSEGV`, `SIGBUS`, `SIGTRAP` and `SIGFPE` with
   `SI_KERNEL`, which is how Linux reports #GP, #TS, #NP, #SS, #BP and the
@@ -287,8 +326,8 @@ requires 0 live in each of the last three.
 
 - **`make sched-coop`'s deferral is measured in wall clock.** The design
   forces a critical section off the processor at the first watch tick at
-  least 1 ms after the first strike, two ticks at most, and on this machine
-  the longest deferral is 2.0 to 2.1 ms. The check allows 4000 us, and prints
+  least 1 ms after the first strike, two ticks at most, and on the machine
+  the book was measured on the longest deferral is 2.0 to 2.1 ms. The check allows 4000 us, and prints
   beside the deferral the boot's `stolen_ms` (the time its carriers spent off
   a processor while running kernelet code) and the longest gap between two
   watch ticks, because a tick that a busy host delivers late lengthens a
@@ -303,3 +342,11 @@ requires 0 live in each of the last three.
   samples; a kernelet measurement without samples fails it too, but that is a
   fault of the scenario, not noise. They are measurements, which is why `make bench` does not
   fail on them; rerun them on a quiet machine.
+- **The heap does not catch every bad free.** `mem_free` refuses a pointer
+  that `mem_alloc` never handed out, and reads the block's number below it
+  without trusting it (`get_kernel_nofault`), so a wild pointer is refused
+  rather than an oops. It cannot catch a double free after `kmalloc` has
+  handed the same address out again for a later block: the number and the
+  address then match the new block, which is freed while the kernelet still
+  uses it. Safe Rust cannot free twice; only a bug in vOSTD's unsafe code can,
+  and such a bug could harm the host anyway.

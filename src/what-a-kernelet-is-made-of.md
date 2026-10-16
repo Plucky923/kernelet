@@ -89,7 +89,7 @@ pub struct EntryTable {
 
 </div>
 
-Two rules shape every service. Arguments are integers or pointers into the kernelet's own memory: a space number, a virtual address, a physical address, a buffer to log. The one exception is `mem_free`, whose pointer is into host memory that `mem_alloc` returned, below, and the endovisor checks it against a table of the blocks it handed out, kept where the kernelet cannot reach, and refuses any other. And the host keeps no pointer into the kernelet after a call returns. Both keep a buggy vOSTD from steering the endovisor into writing wherever the kernelet says.
+Two rules shape every service. Arguments are integers or pointers into the kernelet's own memory: a space number, a virtual address, a physical address, a buffer to log. The one exception is `mem_free`, whose pointer is into host memory that `mem_alloc` returned, below; the endovisor checks it against a table of the blocks it handed out, kept where the kernelet cannot reach, reads the block's number below the pointer with a read that tolerates a fault, and refuses what it does not recognize (a stale pointer to a block that was freed and handed out again at the same address is the one case it cannot tell apart). And the host writes into the kernelet only through the two pointers vOSTD hands it for that purpose, the context of chapter 7 and the floating-point area of chapter 8, and keeps no other. Both keep a buggy vOSTD from steering the endovisor into writing wherever the kernelet says.
 
 The image's one exported symbol is the entry table:
 
@@ -134,6 +134,12 @@ static int klet_grant_alloc(struct klet_inst *inst)
 
 vOSTD's frame allocator runs over the grant exactly as OSTD's runs over a machine's RAM: a bitmap with one bit per 4 KiB frame, a first-fit search for `n` contiguous free frames, and a reference count per frame (the count matters in chapter 13). When the kernel proper's `FrameAllocOptions` asks for a segment, this is what answers.
 
+<div class="rust">
+
+**Rust: loop labels.** A label such as `'outer:` before a loop names it, so that `continue 'outer` or `break 'outer` inside a nested loop applies to the outer one; the apostrophe is the one lifetimes use, but a label always precedes a loop.
+
+</div>
+
 *Simplified from `prototype/vostd/src/mm/frame.rs`: `alloc`, `FrameAllocOptions`.*
 
 ```rust
@@ -173,7 +179,7 @@ Three of the services need no more than a sentence each, and the hundred-line ke
 
 <div class="rust">
 
-**Rust: traits.** A trait is an interface: a list of functions a type must provide. `impl GlobalAlloc for HostHeap` says that the type `HostHeap` provides the two functions the `GlobalAlloc` trait names, and the attribute `#[global_allocator]` tells Rust to use it for every heap allocation. A function written `fn f<T: SomeTrait>(x: &T)` accepts any type that provides the trait's functions. Implementing a trait is `unsafe` when the trait's contract is one the compiler cannot check, as an allocator's is. A label such as `'outer:` before a loop names it, so that `continue 'outer` or `break 'outer` inside a nested loop applies to the outer one; the apostrophe is the one lifetimes use, but a label always precedes a loop.
+**Rust: traits.** A trait is an interface: a list of functions a type must provide. `impl GlobalAlloc for HostHeap` says that the type `HostHeap` provides the two functions the `GlobalAlloc` trait names, and the attribute `#[global_allocator]` tells Rust to use it for every heap allocation. A function written `fn f<T: SomeTrait>(x: &T)` accepts any type that provides the trait's functions. Implementing a trait is `unsafe` when the trait's contract is one the compiler cannot check, as an allocator's is.
 
 </div>
 

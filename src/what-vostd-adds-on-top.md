@@ -93,7 +93,7 @@ On a machine, OSTD's page table holds a counted reference on every mapped frame,
 
 <div class="rust">
 
-**Rust: destructors, and forgetting.** A frame handle's `Drop` (chapter 2's box) decrements the frame's count, and frees the frame when the count reaches zero. `core::mem::forget(x)` ends the life of `x` *without* running its destructor, so the count stays as it was: that is how a reference is handed to something Rust cannot see, such as a page-table entry. `from_raw` is the reverse: it makes a handle out of an address without incrementing, taking the reference back; `Box::from_raw(p)` does the same for a heap object. `core::mem::take(&mut x)` moves the value out of `x` and leaves an empty one in its place. `let _ = e` evaluates `e` and discards the result at once, destructor included, while a named `_guard` keeps its value alive to the end of the block.
+**Rust: destructors, and forgetting.** A frame handle's `Drop` (chapter 2's box) decrements the frame's count, and frees the frame when the count reaches zero. `core::mem::forget(x)` ends the life of `x` *without* running its destructor, so the count stays as it was: that is how a reference is handed to something Rust cannot see, such as a page-table entry. `from_raw` is the reverse: it makes a handle out of an address without incrementing, taking the reference back; `Box::from_raw(p)` does the same for a heap object. `core::mem::take(&mut x)` moves the value out of `x` and leaves an empty one in its place; `x.take()` on an `Option` does the same and leaves `None`. `let _ = e` evaluates `e` and discards the result at once, destructor included, while a named `_guard` keeps its value alive to the end of the block.
 
 </div>
 

@@ -12,8 +12,10 @@
 # One test each (every one builds what it needs, boots, and checks the log):
 #
 #   make hello        the unedited 100-line kernel: Hello, world
-#   make probe        demand paging, exceptions other than page faults (ud2
-#                     twice, int3, hlt), eviction
+#   make probe        demand paging, a 4 MiB write the heap refuses,
+#                     exceptions other than page faults (ud2 twice, int3,
+#                     hlt), eviction; then a second boot under a seccomp
+#                     filter that kills the carrier
 #   make yield        the watch timer: two boots under preempt=none, off and on
 #   make sched-policy the sched kernel's own scheduler obeys its policy
 #   make sched-coop   the mirror: with it, without it, and with an overstayer
@@ -34,13 +36,17 @@
 #   make source       fetch and unpack Linux v6.12 if it is not there yet, and
 #                     apply the gate patch
 #   make patch        apply patches/0001-kernelet-gate.patch (idempotent)
+#   make config       configure the tree: tinyconfig, then linux/config.fragment
 #   make linux        configure (once) and build bzImage, modules and
 #                     modules_prepare
 #   make image        build the kernelet image (vostd + a kernel proper) and
 #                     pre-link it; KLET_KERNEL names the kernel proper
+#   make kernelet-module  the image, then endovisor/kernelet.ko
+#   make runtime      the static runtimes, .build/run-*
 #   make initramfs    compile init and pack .build/initramfs.cpio.gz
 #   make run          boot the kernel under QEMU, serial log to .build/serial.log
 #   make clean        remove the harness artifacts (keeps the kernel build)
+#   make distclean    clean, then mrproper in the Linux tree (keeps the source)
 #   make sched        the sched tests: sched-policy sched-coop sched-fpu
 #   make mem          the mem tests: mem-func mem-r2 mem-conc mem-kill mem-pressure
 #
@@ -122,7 +128,7 @@ KLET_BUILD_STD := -Zbuild-std=core,alloc,compiler_builtins \
 .PHONY: all linux config initramfs run clean distclean module stage-module
 .PHONY: patch kernel-proper-check image kernelet-module runtime
 .PHONY: stage-hello stage-probe stage-yield hello probe yield
-.PHONY: check-log check-probe-log check-yield-log
+.PHONY: check-log check-probe-log check-probe-seccomp check-yield-log
 
 all: linux initramfs
 
@@ -404,6 +410,9 @@ stage-yield: kernelet-module runtime
 	chmod +x $(STAGE)/yield.klet
 	@echo "staged: kernelet.ko (yield, klet_watch=$(WATCH)), /tests/10-yield, /yield.klet"
 
+# PROBE_RUNMODE is the word run-probe reads from /tests/10-probe.arg: empty
+# for the probe's own boot, `seccomp` for the boot under a seccomp filter.
+PROBE_RUNMODE ?=
 stage-probe: kernelet-module runtime
 	mkdir -p $(STAGE)/modules $(STAGE)/tests
 	rm -f $(STAGE)/tests/* $(STAGE)/*.klet
@@ -411,6 +420,7 @@ stage-probe: kernelet-module runtime
 	printf 'kernelet.ko\n' > $(STAGE)/modules/order
 	cp $(BUILD)/run-probe $(STAGE)/tests/10-probe
 	chmod +x $(STAGE)/tests/10-probe
+	printf '$(PROBE_RUNMODE)\n' > $(STAGE)/tests/10-probe.arg
 	printf 'KLET\002\000\000\000\001\000\000\000\n' > $(STAGE)/probe.klet
 	chmod +x $(STAGE)/probe.klet
 	@echo "staged: kernelet.ko (probe), /tests/10-probe, /probe.klet"
@@ -614,7 +624,7 @@ check-sched-coop:
 check-sched-fair:
 	@rc=0; \
 	for f in $(SCHED_FAIR1) $(SCHED_FAIR50) $(SCHED_FAIR50O); do \
-	  echo "--- $$f"; grep -E 'SIB-USEC|KLET-USEC|competitor rounds|runnable task|STATS|SCHED-RESULT fair' $$f | sed 's/\r$$//'; \
+	  echo "--- $$(basename $$f)"; grep -E 'SIB-USEC|KLET-USEC|competitor rounds|runnable task|STATS|SCHED-RESULT fair' $$f | sed 's/\r$$//'; \
 	done; \
 	s1=$$(grep -o 'SIB-USEC [0-9]*' $(SCHED_FAIR1) | tail -1 | awk '{print $$2}'); \
 	s2=$$(grep -o 'SIB-USEC [0-9]*' $(SCHED_FAIR50) | tail -1 | awk '{print $$2}'); \
@@ -641,11 +651,11 @@ check-sched-fair:
 	for f in $(SCHED_FAIR1) $(SCHED_FAIR50) $(SCHED_FAIR50O); do \
 	  n=$$(grep -o 'at most [0-9]* runnable' $$f | tail -1 | awk '{print $$3}'); \
 	  if [ "$${n:-99}" -le 3 ]; then \
-	    echo "  ok      $$f: the host never saw more than $$n runnable task(s) of the sandbox"; \
-	  else echo "  BAD     $$f: the host saw $$n runnable tasks of the sandbox"; rc=1; fi; \
+	    echo "  ok      $$(basename $$f): the host never saw more than $$n runnable task(s) of the sandbox"; \
+	  else echo "  BAD     $$(basename $$f): the host saw $$n runnable tasks of the sandbox"; rc=1; fi; \
 	  $(call CHECK_UNLOAD,$$f); \
 	  for pat in $(CHECK_BAD); do \
-	    if grep -qF "$$pat" $$f; then echo "  BAD     $$f contains $$pat"; rc=1; fi; \
+	    if grep -qF "$$pat" $$f; then echo "  BAD     $$(basename $$f) contains $$pat"; rc=1; fi; \
 	  done; \
 	done; \
 	if [ $$rc -eq 0 ]; then echo "make sched-fair: PASS"; else echo "make sched-fair: FAIL"; fi; \
@@ -895,6 +905,7 @@ $(BZIMAGE):
 # log, is a QEMU that did not start.
 run: $(BZIMAGE) $(INITRAMFS)
 	rm -f $(SERIAL)
+	@echo "booting with $(QEMU): $$($(QEMU) --version 2>&1 | head -1)"
 	@echo "booting (timeout $(TIMEOUT)s), serial -> $(SERIAL)"
 	@timeout $(TIMEOUT) $(QEMU) \
 	  -enable-kvm -cpu host -smp 2 -m 512M \
@@ -922,11 +933,22 @@ hello:
 	cp $(SERIAL) $(BUILD)/serial-hello.log
 	@$(MAKE) --no-print-directory check-log
 
+# Two boots of the same image: the probe itself, and then the same tenant
+# under a seccomp filter that kills it on its endless system call.
+PROBE_LOG         := $(BUILD)/serial-probe.log
+PROBE_SECCOMP_LOG := $(BUILD)/serial-probe-seccomp.log
 probe:
+	rm -f $(PROBE_LOG) $(PROBE_SECCOMP_LOG)
 	$(MAKE) KLET_KERNEL=probe linux stage-probe initramfs
 	$(MAKE) run
-	cp $(SERIAL) $(BUILD)/serial-probe.log
-	@$(MAKE) --no-print-directory check-probe-log
+	cp $(SERIAL) $(PROBE_LOG)
+	$(MAKE) KLET_KERNEL=probe PROBE_RUNMODE=seccomp stage-probe initramfs
+	$(MAKE) run
+	cp $(SERIAL) $(PROBE_SECCOMP_LOG)
+	@rc=0; \
+	$(MAKE) --no-print-directory check-probe-log || rc=1; \
+	$(MAKE) --no-print-directory check-probe-seccomp || rc=1; \
+	if [ $$rc -eq 0 ]; then echo "make probe: PASS"; else echo "make probe: FAIL"; fi; exit $$rc
 
 # Two boots, both with preempt=none so that Linux will not preempt kernel code:
 # first the control with the watch timer off, then the real run with it on.
@@ -1001,47 +1023,93 @@ check-yield-log:
 	done; \
 	$(call CHECK_UNLOAD,$(YIELD_OFF_LOG)); \
 	$(call CHECK_UNLOAD,$(SERIAL)); \
-	for pat in $(CHECK_BAD); do \
-	  if grep -qF "$$pat" $(SERIAL); then \
-	    echo "  BAD     the log contains $$pat"; \
-	    grep -nF "$$pat" $(SERIAL) | head -3; rc=1; \
-	  else echo "  ok      no $$pat"; fi; \
+	for f in $(YIELD_OFF_LOG) $(SERIAL); do \
+	  for pat in $(CHECK_BAD); do \
+	    if grep -qF "$$pat" $$f; then \
+	      echo "  BAD     $$(basename $$f) contains $$pat"; \
+	      grep -nF "$$pat" $$f | head -3; rc=1; \
+	    else echo "  ok      $$(basename $$f): no $$pat"; fi; \
+	  done; \
 	done; \
 	if [ $$rc -eq 0 ]; then echo "make yield: PASS"; else echo "make yield: FAIL"; fi; \
 	exit $$rc
 
 check-probe-log:
-	@test -f $(SERIAL) || { echo "check-log: no $(SERIAL)"; exit 1; }
+	@test -f $(PROBE_LOG) || { echo "check-log: no $(PROBE_LOG)"; exit 1; }
 	@echo "--- serial log, from the module load to the end -----------------"
-	@sed -n '/INIT: loading kernelet.ko/,$$p' $(SERIAL) | sed 's/\r$$//'
+	@sed -n '/INIT: loading kernelet.ko/,$$p' $(PROBE_LOG) | sed 's/\r$$//'
 	@echo "----------------------------------------------------------------"
 	@rc=0; \
-	n=$$(grep -c 'probe: illegal instruction at' $(SERIAL)); \
+	n=$$(grep -c 'probe: illegal instruction at' $(PROBE_LOG)); \
 	if [ "$$n" -eq 2 ]; then echo "  ok      two illegal instructions in a row, both handed over as trap 6"; \
 	else echo "  BAD     $$n illegal instruction(s) handed over, not 2"; rc=1; fi; \
-	n=$$(grep -c 'is trap [0-9]* -> exception; ignored again' $(SERIAL)); \
+	n=$$(grep -c 'is trap [0-9]* -> exception; ignored again' $(PROBE_LOG)); \
 	if [ "$$n" -eq 4 ]; then echo "  ok      each of the four fault signals was ignored again after the drain took it"; \
 	else echo "  BAD     $$n fault signal(s) ignored again, not 4"; rc=1; fi; \
-	if grep -qF 'RUN-PROBE: vcpu 0 carrier SigIgn fffffffffffbfeff SigBlk 0000000000000000 SigPnd 0000000000000000' $(SERIAL); then \
+	if grep -qF 'RUN-PROBE: vcpu 0 carrier SigIgn fffffffffffbfeff SigBlk 0000000000000000 SigPnd 0000000000000000' $(PROBE_LOG); then \
 	  echo "  ok      after the faults, the vCPU carrier ignores every signal but SIGKILL and SIGSTOP again"; \
-	else echo "  BAD     the vCPU carrier's signals after the faults: $$(grep -o 'RUN-PROBE: vcpu 0 carrier Sig.*' $(SERIAL) | tr -d '\r')"; rc=1; fi; \
+	else echo "  BAD     the vCPU carrier's signals after the faults: $$(grep -o 'RUN-PROBE: vcpu 0 carrier Sig.*' $(PROBE_LOG) | tr -d '\r')"; rc=1; fi; \
+	if grep -qF 'probe: a write of 4194304 bytes refused: no memory for its buffer' $(PROBE_LOG); then \
+	  echo "  ok      a 4 MiB write was refused for want of a buffer: the endovisor refused the allocation, and kmalloc never saw it"; \
+	else echo "  MISSING probe: a write of 4194304 bytes refused: no memory for its buffer"; rc=1; fi; \
 	for pat in 'probe: demand paging: read back "PROBE-OK"' \
 	           'probe: breakpoint before' \
 	           'probe: general protection fault at' \
 	           'probe: spinning inside the kernelet at depth 0' \
 	           'kernelet: evicting vcpu carrier' \
 	           'INIT: unloading kernelet' 'INIT: done'; do \
-	  if grep -qF "$$pat" $(SERIAL); then echo "  ok      $$pat"; \
+	  if grep -qF "$$pat" $(PROBE_LOG); then echo "  ok      $$pat"; \
 	  else echo "  MISSING $$pat"; rc=1; fi; \
 	done; \
-	$(call CHECK_UNLOAD,$(SERIAL)); \
+	$(call CHECK_UNLOAD,$(PROBE_LOG)); \
 	for pat in $(CHECK_BAD); do \
-	  if grep -qF "$$pat" $(SERIAL); then \
+	  if grep -qF "$$pat" $(PROBE_LOG); then \
 	    echo "  BAD     the log contains $$pat"; \
-	    grep -nF "$$pat" $(SERIAL) | head -3; rc=1; \
+	    grep -nF "$$pat" $(PROBE_LOG) | head -3; rc=1; \
 	  else echo "  ok      no $$pat"; fi; \
 	done; \
-	if [ $$rc -eq 0 ]; then echo "make probe: PASS"; else echo "make probe: FAIL"; fi; \
+	if [ $$rc -eq 0 ]; then echo "make probe, boot probe: PASS"; else echo "make probe, boot probe: FAIL"; fi; \
+	exit $$rc
+
+# The probe's tenant under a seccomp filter that kills on system call 1000.
+# Seccomp runs before the gate, so the kernelet never sees that call: Linux
+# forces SIGSYS on the carrier as a fatal signal, the resume hook must leave it
+# for Linux to deliver rather than drain it, and the carrier's death must end
+# the sandbox by itself. A drained SIGSYS would let the tenant run on, and its
+# next system call would hit seccomp's WARN for a task it had already killed.
+check-probe-seccomp:
+	@test -f $(PROBE_SECCOMP_LOG) || { echo "check-log: no $(PROBE_SECCOMP_LOG)"; exit 1; }
+	@echo "--- $$(basename $(PROBE_SECCOMP_LOG)), from the module load to the end ---"
+	@sed -n '/INIT: loading kernelet.ko/,$$p' $(PROBE_SECCOMP_LOG) | sed 's/\r$$//'
+	@echo "----------------------------------------------------------------"
+	@f=$(PROBE_SECCOMP_LOG); rc=0; \
+	for pat in 'RUN-PROBE: seccomp filter installed: system call 1000 kills the process' \
+	           'probe: demand paging: read back "PROBE-OK"' \
+	           'probe: general protection fault at' \
+	           'kernelet: vcpu 0 carrier (pid' \
+	           'has signal 31 pending that Linux made fatal (seccomp killed it); left for Linux to deliver' \
+	           'ended by signal 31' \
+	           'a carrier is gone, the sandbox is dying' \
+	           'RUN-PROBE: the sandbox ended by itself' \
+	           'RUN-PROBE: no carrier left (module references: 0)' \
+	           'INIT: unloading kernelet' 'INIT: done'; do \
+	  if grep -qF "$$pat" $$f; then echo "  ok      $$pat"; \
+	  else echo "  MISSING $$pat"; rc=1; fi; \
+	done; \
+	if grep -qF 'probe: spinning inside the kernelet' $$f; then \
+	  echo "  BAD     the kernelet saw the system call the filter kills on"; rc=1; \
+	else echo "  ok      the kernelet never saw the system call the filter kills on"; fi; \
+	if grep -qE 'kernelet: signal 31 .* dropped' $$f; then \
+	  echo "  BAD     the drain took the SIGSYS"; rc=1; \
+	else echo "  ok      the drain left the SIGSYS in the queue"; fi; \
+	$(call CHECK_UNLOAD,$$f); \
+	for pat in $(CHECK_BAD); do \
+	  if grep -qF "$$pat" $$f; then \
+	    echo "  BAD     the log contains $$pat"; \
+	    grep -nF "$$pat" $$f | head -3; rc=1; \
+	  else echo "  ok      no $$pat"; fi; \
+	done; \
+	if [ $$rc -eq 0 ]; then echo "make probe, boot probe-seccomp: PASS"; else echo "make probe, boot probe-seccomp: FAIL"; fi; \
 	exit $$rc
 
 check-log:

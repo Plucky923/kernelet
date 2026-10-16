@@ -401,6 +401,8 @@ struct klet_carrier {
 	 */
 	bool doomed;
 	const char *killed_in;
+	/* The resume hook has said that Linux made a pending signal fatal. */
+	bool forced_fatal_seen;
 
 	/* Set while the carrier is asleep in vcpu_idle. */
 	bool idle;
@@ -740,7 +742,7 @@ void klet_watch_arm(struct klet_carrier *c);
 bool klet_virq_redirect(struct klet_carrier *c, struct pt_regs *regs);
 void klet_watch_fire_now(void);
 
-/* kstack.c, in carrier.c */
+/* the kernelet-stack pool, in carrier.c */
 u64 klet_kstack_alloc(struct klet_inst *inst);
 void klet_kstack_put(struct klet_inst *inst, u64 base);
 unsigned int klet_kstack_pool_destroy(struct klet_inst *inst, unsigned int *busy);

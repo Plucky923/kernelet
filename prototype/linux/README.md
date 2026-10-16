@@ -6,7 +6,10 @@
 lets `olddefconfig` settle the rest. Editing the fragment makes the next
 `make linux` reconfigure and rebuild.
 
-What it turns on, by section:
+What it turns on, by section (and one thing it keeps off: vsyscall
+emulation, `X86_VSYSCALL_EMULATION`, through which a tenant could have Linux
+run `gettimeofday`, `time` or `getcpu` for it without passing the gate; the
+endovisor refuses to load on a kernel built with it):
 
 - the basics of a bootable 64-bit guest with a serial console, an initramfs,
   modules, `/proc`, `/sys`, `devtmpfs`, and the system calls the runtimes use;
@@ -21,6 +24,9 @@ What it turns on, by section:
   exercised;
 - `DEBUG_ATOMIC_SLEEP`, so that every memory test would see a service that
   slept under a raised preemption count;
+- `BUG`, which `tinyconfig` turns off: without it every `WARN_ON()` in Linux
+  is silent, and the tests' check that a log has no `WARNING:` would prove
+  nothing; and `DEBUG_BUGVERBOSE`, so that a warning names its file and line;
 - swap on virtio, `LRU_GEN`, compaction and transparent huge pages, so that
   `make mem-pressure` drives the reclaim paths a distribution kernel has.
 

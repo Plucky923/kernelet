@@ -247,21 +247,21 @@ The handler cannot run the kernel proper where it stands, inside Linux's fault p
 
 ```mermaid
 sequenceDiagram
-    participant U as tenant (user mode)
-    participant L as Linux fault path
+    participant U as tenant
+    participant L as Linux
     participant E as endovisor
     participant K as kernel proper
-    U->>L: touches an unmapped page: page fault
-    L->>E: vma->vm_ops->fault
-    E->>E: record address and error code, flag the carrier
+    U->>L: page fault
+    L->>E: vm_ops->fault
+    E->>E: record it, flag the carrier
     E-->>L: VM_FAULT_NOPAGE
-    L->>E: exit loop: the resume hook
-    E->>K: klet_enter: user_run returns 1 (exception)
-    K->>K: its page-fault handler allocates a frame and maps it
-    K->>E: vm_map: vmf_insert_pfn_prot
-    K->>E: execute calls user_run
+    L->>E: the resume hook
+    E->>K: user_run returns 1
+    K->>K: allocate a frame
+    K->>E: vm_map
+    K->>E: user_run again
     E->>L: ctx -> pt_regs
-    L->>U: retry the instruction, no second fault
+    L->>U: retry, no fault
 ```
 
 One case never reaches the handler. An instruction fetch from a *present* entry marked no-execute raises `SIGSEGV` inside Linux directly (short of protection keys, which the design never sets, a present x86-64 entry cannot forbid a read), and the resume hook turns that signal into an exception as it does for any other (chapter 7). A write to a present read-only entry reaches the handler only because the area supplies `pfn_mkwrite`; without it, Linux would make the entry writable on its own authority.

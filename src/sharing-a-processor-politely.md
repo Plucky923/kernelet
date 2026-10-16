@@ -181,16 +181,16 @@ The note of the first strike is dropped when the carrier leaves the processor, s
 
 ```mermaid
 flowchart TB
+    subgraph bound["the bound"]
+        direction TB
+        e["tick: critical and need_resched<br/>(strike one)"] --> f["tick, 1 ms later:<br/>still so (strike two)"]
+        f --> g["forced yield:<br/>lift the mirror, schedule(), restore"]
+    end
     subgraph rule["the rule"]
         direction TB
         a["kernelet takes a lock:<br/>guards 1, Linux's count +1"] --> b["Linux marks the carrier<br/>need_resched, and waits"]
         b --> c["kernelet drops the lock:<br/>count reaches 0 and Linux wants the processor"]
         c --> d["vcpu_yield: schedule()"]
-    end
-    subgraph bound["the bound"]
-        direction TB
-        e["tick: critical and need_resched<br/>(strike one)"] --> f["tick, 1 ms later:<br/>still so (strike two)"]
-        f --> g["forced yield:<br/>lift the mirror, schedule(), restore"]
     end
 ```
 

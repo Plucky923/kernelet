@@ -51,6 +51,13 @@
  *  - nothing the kernelet writes decides how much the endovisor changes Linux's
  *    own state. The mirrored preemption count is un-mirrored by measuring
  *    Linux's count, not by believing the kernelet's `masked`.
+ *
+ * Also here, because they belong to the sandbox and end with its carriers: the
+ * kernelet-stack pool, and the kernelet's heap, kmalloc with a table of every
+ * block mem_alloc handed out and mem_free has not taken back. When the last
+ * carrier's lifeline closes, klet_sandbox_gone() frees the sandbox's address
+ * spaces, every block still in the table and the whole stack pool, so that
+ * nothing the kernelet held outlives the sandbox.
  */
 
 #include <linux/compat.h>
@@ -70,6 +77,7 @@
 #include <linux/signal.h>
 #include <linux/slab.h>
 #include <linux/thread_info.h>
+#include <linux/uaccess.h>
 #include <linux/vmalloc.h>
 #include <linux/freezer.h>
 #include <linux/hrtimer.h>
@@ -144,10 +152,6 @@ struct klet_carrier *klet_carrier_new(struct klet_inst *inst, enum klet_kind kin
 {
 	struct klet_carrier *c;
 
-	/* A clone the root started just before it died: see below. */
-	if (kind != KLET_ROOT && READ_ONCE(inst->root_gone))
-		return NULL;
-
 	c = kzalloc(sizeof(*c), GFP_KERNEL);
 	if (!c)
 		return NULL;
@@ -168,43 +172,25 @@ struct klet_carrier *klet_carrier_new(struct klet_inst *inst, enum klet_kind kin
 	c->vrec.irq_off = 0;
 	/* OSTD's preemption word starts at "no guards, no preemption wanted". */
 	c->vrec.preempt_info = 0x80000000u;
-
-	if (kind != KLET_ROOT) {
-		c->stack = (void *)(unsigned long)klet_kstack_alloc(inst);
-		if (!c->stack) {
-			kfree(c);
-			return NULL;
-		}
-		c->fpu_stage = (void *)__get_free_page(GFP_KERNEL | __GFP_ZERO);
-		if (!c->fpu_stage) {
-			klet_kstack_put(inst, (u64)(unsigned long)c->stack);
-			kfree(c);
-			return NULL;
-		}
-		klet_coro_prepare(c);
-		/* Until the kernelet runs its first task, the stack an upcall may be
-		 * pushed onto is this vCPU's bootstrap stack. */
-		c->vrec.stack_limit = (u64)(unsigned long)c->stack;
-	} else {
-		c->state = KLET_RUNNING;
-	}
+	c->state = kind == KLET_ROOT ? KLET_RUNNING : KLET_NEW;
 
 	/*
 	 * Counted under the lock, together with the test of root_gone that the
-	 * root's death notice sets under it: either this carrier is counted
-	 * first, and the root's death is then not the last and kills it, or the
-	 * root's death comes first, its notice ends the sandbox and frees what
-	 * the sandbox held, and this carrier never starts. Without the test, a
-	 * clone the root made just before it died would enter the kernelet after
-	 * the sandbox's heap and stacks were gone.
+	 * root's death notice sets under it, and before anything is taken from
+	 * the sandbox: either this carrier is counted first, and the root's death
+	 * is then not the last and kills it, or the root's death comes first, its
+	 * notice ends the sandbox and frees what the sandbox held, and this
+	 * carrier never starts. A clone the root made just before it died must
+	 * not enter the kernelet after the sandbox's heap and stacks were gone,
+	 * and it must not have taken a stack from the pool either before it is
+	 * counted: the notice of a root that was the last carrier would then
+	 * give that stack back to vmalloc under it.
 	 */
 	c->task = get_task_struct(current);
 	spin_lock(&inst->lock);
 	if (kind != KLET_ROOT && inst->root_gone) {
 		spin_unlock(&inst->lock);
 		put_task_struct(c->task);
-		free_page((unsigned long)c->fpu_stage);
-		klet_kstack_put(inst, (u64)(unsigned long)c->stack);
 		kfree(c);
 		return NULL;
 	}
@@ -213,6 +199,29 @@ struct klet_carrier *klet_carrier_new(struct klet_inst *inst, enum klet_kind kin
 	spin_unlock(&inst->lock);
 	atomic_inc(&inst->carriers_made);
 
+	if (kind == KLET_ROOT)
+		return c;
+
+	/*
+	 * Counted, so the sandbox's stacks stay until this carrier is gone. A
+	 * failure from here on is a carrier that dies before it starts: it goes
+	 * through the death notice, which gives back what was taken, uncounts
+	 * it, ends the sandbox if it is live, and frees the sandbox's holdings if
+	 * this was its last carrier.
+	 */
+	c->stack = (void *)(unsigned long)klet_kstack_alloc(inst);
+	if (c->stack)
+		c->fpu_stage = (void *)__get_free_page(GFP_KERNEL | __GFP_ZERO);
+	if (!c->stack || !c->fpu_stage) {
+		pr_info("kernelet: vcpu %d carrier (pid %d): no %s for it\n", vcpu,
+			current->pid, c->stack ? "FPU staging page" : "kernelet stack");
+		klet_carrier_lifeline_closed(c);
+		return NULL;
+	}
+	klet_coro_prepare(c);
+	/* Until the kernelet runs its first task, the stack an upcall may be
+	 * pushed onto is this vCPU's bootstrap stack. */
+	c->vrec.stack_limit = (u64)(unsigned long)c->stack;
 	return c;
 }
 
@@ -348,8 +357,9 @@ void klet_carrier_lifeline_closed(struct klet_carrier *c)
 	 * A carrier killed from outside while in user mode dies in Linux's exit
 	 * path without the gate ever running again, so klet_detach() never ran
 	 * for it. Whatever detach did not release is released here, which runs
-	 * however the carrier died (the lifeline is closed in exit_files(), in the
-	 * dying task's context): the blank mm's reference, and with it the module
+	 * however the carrier died (the lifeline's last fput() in exit_files()
+	 * defers its release to task work, so it runs from exit_task_work(), in
+	 * the dying task's context): the blank mm's reference, and with it the module
 	 * reference its binfmt holds, the kernelet stack and the FPU staging page.
 	 */
 	{
@@ -389,6 +399,21 @@ void klet_carrier_lifeline_closed(struct klet_carrier *c)
 	 * and the unload counts it.
 	 */
 	if (c->task == current) {
+		int sig = current->exit_code & 0x7f;
+
+		/*
+		 * Every carrier ends by a signal; SIGKILL is the endovisor's own
+		 * and the operator's, anything else is Linux's verdict on the
+		 * carrier (seccomp's SIGSYS, say), so it is worth saying.
+		 */
+		if ((current->flags & PF_EXITING) && sig && sig != SIGKILL) {
+			if (c->kind == KLET_ROOT)
+				pr_info("kernelet: root carrier (pid %d) ended by signal %d\n",
+					current->pid, sig);
+			else
+				pr_info("kernelet: vcpu %d carrier (pid %d) ended by signal %d\n",
+					c->vcpu, current->pid, sig);
+		}
 		clear_syscall_work(KERNELET);
 		WRITE_ONCE(current->kernelet, NULL);
 		barrier();
@@ -855,12 +880,48 @@ static bool klet_is_fault_signal(int signr, int si_code)
 }
 
 /*
+ * Whether Linux has made a signal fatal to this task for good:
+ * force_sig_info_to_task() with HANDLER_EXIT, which seccomp's kill actions
+ * (force_sig_seccomp(..., true)), force_fatal_sig() and force_exit_sig() use,
+ * resets the handler to SIG_DFL and marks it SA_IMMUTABLE, which sigaction()
+ * then refuses to change (kernel/signal.c). Such a signal is Linux's verdict
+ * that the task dies, and the endovisor must not overrule it: seccomp, for
+ * one, has already marked the task dead, and the task's next system call
+ * would find it alive, WARN, and kill it then, if it ever made one. Read
+ * under the siglock, or without it by the task itself: only the task's own
+ * forced signals set the flag, and nothing clears it.
+ */
+static bool klet_sig_immutable(int sig)
+{
+	return current->sighand->action[sig - 1].sa.sa_flags & SA_IMMUTABLE;
+}
+
+/* The first signal pending that Linux has made fatal for good, or 0. */
+static int klet_forced_fatal(void)
+{
+	int sig, found = 0;
+
+	if (!signal_pending(current))
+		return 0;
+	spin_lock_irq(&current->sighand->siglock);
+	for (sig = 1; sig <= _NSIG && !found; sig++)
+		if (klet_sig_immutable(sig) &&
+		    (sigismember(&current->pending.signal, sig) ||
+		     sigismember(&current->signal->shared_pending.signal, sig)))
+			found = sig;
+	spin_unlock_irq(&current->sighand->siglock);
+	return found;
+}
+
+/*
  * Drains the carrier's pending signals and turns the ones Linux raised for a
  * fault of the tenant's own making into a kernelet exception; every other
  * signal is dropped. SIGKILL is never drained, so that Linux kills the carrier
- * as it would any task. Nor is a vCPU carrier's SIGSTOP: Linux's own stop
- * handling applies to it on its way to user mode, as to any task, and a
- * stopped vCPU carrier is a stopped virtual CPU. The root carrier never
+ * as it would any task, and nor is a signal Linux has made fatal for good
+ * (klet_sig_immutable): the resume hook leaves both for Linux to deliver.
+ * Nor is a vCPU carrier's SIGSTOP: Linux's own stop handling applies to it
+ * on its way to user mode, as to any task, and a stopped vCPU carrier is a
+ * stopped virtual CPU. The root carrier never
  * returns to user mode, so a stop could never take effect on it, and one left
  * pending would make every kernel_clone() of its vCPU carriers fail; it drops
  * SIGSTOP like any other signal.
@@ -884,7 +945,16 @@ static bool klet_drain_signals(struct klet_carrier *c)
 		sigaddset(&mask, SIGSTOP);
 
 	spin_lock_irq(&current->sighand->siglock);
-	while ((signr = dequeue_signal(&mask, &info, &type)) != 0) {
+	for (;;) {
+		int sig;
+
+		/* Under the lock, at every turn, since it is dropped in between. */
+		for (sig = 1; sig <= _NSIG; sig++)
+			if (klet_sig_immutable(sig))
+				sigaddset(&mask, sig);
+		signr = dequeue_signal(&mask, &info, &type);
+		if (!signr)
+			break;
 		spin_unlock_irq(&current->sighand->siglock);
 
 		/*
@@ -894,9 +964,17 @@ static bool klet_drain_signals(struct klet_carrier *c)
 		 * SIGSYS. Ignore it again, so that the next one is forced, and so
 		 * drained, too, and the same signal sent by a process in the
 		 * meantime is discarded rather than left for Linux to deliver.
+		 * Never an SA_IMMUTABLE action, which is not dequeued here at all.
+		 *
+		 * kernel_sigaction() is documented for kernel threads only, and
+		 * not for a task whose sighand is shared (CLONE_SIGHAND): it
+		 * changes the action without the checks of do_sigaction(), which
+		 * would be wrong for a thread group that shares it. A carrier is
+		 * a process of its own, single-threaded, cloned without
+		 * CLONE_SIGHAND, so the action it changes is its own alone.
 		 */
 		reignored = false;
-		if (!sig_kernel_only(signr) &&
+		if (!sig_kernel_only(signr) && !klet_sig_immutable(signr) &&
 		    current->sighand->action[signr - 1].sa.sa_handler != SIG_IGN) {
 			kernel_sigaction(signr, SIG_IGN);
 			reignored = true;
@@ -950,6 +1028,8 @@ static int klet_spawn_vcpu(struct klet_inst *inst, int vcpu)
 		 * it drains its own signals first and retries.
 		 */
 		klet_drain_signals(klet_current_carrier());
+		if (klet_forced_fatal())
+			return -EINTR;
 
 		pid = kernel_clone(&args);
 		if (pid >= 0)
@@ -988,7 +1068,8 @@ static void klet_root_loop(struct klet_carrier *root)
 		wait_event_interruptible(inst->root_wq,
 					 inst->stopped || inst->dying ||
 					 fatal_signal_pending(current));
-		if (inst->stopped || inst->dying || fatal_signal_pending(current))
+		if (inst->stopped || inst->dying || fatal_signal_pending(current) ||
+		    klet_forced_fatal())
 			break;
 		klet_drain_signals(root);
 	}
@@ -1258,8 +1339,28 @@ static void klet_gate_resume(struct pt_regs *regs)
 	}
 
 	for (;;) {
+		int fatal;
+
 		if (c->state == KLET_DEAD || c->inst->stopped || c->inst->dying) {
 			klet_carrier_die(c);
+			return;
+		}
+
+		/*
+		 * Linux has decided that this carrier dies (seccomp killed it on
+		 * one of the tenant's system calls, which the gate never saw): go
+		 * no further, and let the exit loop deliver the signal, which
+		 * ends the task, and the lifeline then the sandbox. The kernelet
+		 * must not run again on a task Linux considers dead.
+		 */
+		fatal = klet_forced_fatal();
+		if (fatal) {
+			if (c->forced_fatal_seen)
+				return;
+			c->forced_fatal_seen = true;
+			pr_info("kernelet: vcpu %d carrier (pid %d) has signal %d pending that Linux made fatal%s; left for Linux to deliver\n",
+				c->vcpu, current->pid, fatal,
+				fatal == SIGSYS ? " (seccomp killed it)" : "");
 			return;
 		}
 
@@ -1390,9 +1491,20 @@ static void klet_do_log_write(struct klet_inst *inst, const char *ptr, u64 len)
  * the endovisor never writes through anything it read from a block.
  *
  * The table doubles when it is full, allocated outside the lock; it never
- * shrinks while the sandbox lives.
+ * shrinks while the sandbox lives, and it stops at KLET_HEAP_MAX blocks live
+ * at once, beyond which mem_alloc fails: 2^24 blocks, a 128 MiB table of
+ * addresses and a 64 MiB stack of numbers, far more than any kernel proper
+ * here holds, and well short of the sizes at which kvmalloc() itself would
+ * refuse with a warning.
+ *
+ * Every allocation the kernelet causes here is __GFP_NOWARN: what it asks for
+ * is the kernelet's business, often the tenant's (the hello kernel allocates
+ * a buffer of whatever length a tenant passes to write), and a failure is an
+ * answer the kernelet gets, as NULL, not a fault of the host to warn about.
  */
 #define KLET_HEAP_FIRST 256
+#define KLET_HEAP_MAX	(1u << 24)
+#define KLET_HEAP_GFP	(GFP_KERNEL_ACCOUNT | __GFP_NOWARN)
 
 void klet_heap_init(struct klet_inst *inst)
 {
@@ -1422,9 +1534,11 @@ static int klet_heap_grow(struct klet_heap *h)
 		void **block, **old_block;
 		u32 *free, *old_free;
 
+		if (old >= KLET_HEAP_MAX)
+			return -ENOMEM;
 		spin_unlock(&h->lock);
-		block = kvcalloc(size, sizeof(*block), GFP_KERNEL_ACCOUNT);
-		free = kvmalloc_array(size, sizeof(*free), GFP_KERNEL_ACCOUNT);
+		block = kvcalloc(size, sizeof(*block), KLET_HEAP_GFP);
+		free = kvmalloc_array(size, sizeof(*free), KLET_HEAP_GFP);
 		spin_lock(&h->lock);
 		if (!block || !free || h->size != old) {
 			/* No memory, or another carrier grew it meanwhile. */
@@ -1460,15 +1574,23 @@ static void *klet_do_mem_alloc(struct klet_inst *inst, u64 size, u64 align)
 	void *base, *ptr;
 	u32 n;
 
+	/*
+	 * The block is size + align bytes (klet_heap_ptr), and that is what
+	 * must not exceed what kmalloc can give, or the page allocator warns
+	 * of an order beyond MAX_PAGE_ORDER: size alone up to KMALLOC_MAX_SIZE
+	 * would let a 4 MiB request through. Both are the kernelet's numbers,
+	 * so each is bounded before the sum is formed.
+	 */
 	align = klet_heap_align(align);
-	if (!is_power_of_2(align) || size > KMALLOC_MAX_SIZE)
+	if (!is_power_of_2(align) || align > KMALLOC_MAX_SIZE ||
+	    size > KMALLOC_MAX_SIZE - align)
 		return NULL;
 
 	/*
 	 * Charged to the memory cgroup of the calling carrier, the sandbox's,
 	 * and so is the table.
 	 */
-	base = kmalloc(size + align, GFP_KERNEL_ACCOUNT);
+	base = kmalloc(size + align, KLET_HEAP_GFP);
 	if (!base)
 		return NULL;
 
@@ -1496,7 +1618,23 @@ static void klet_do_mem_free(struct klet_inst *inst, void *ptr, u64 align)
 
 	if (!ptr)
 		return;
-	n = ((u64 *)ptr)[-1];
+	/*
+	 * The number is read without trusting the pointer: one that is not a
+	 * block's, say a kernelet stack's base just past vmalloc's guard page,
+	 * may have nothing mapped below it, and a plain load would oops the
+	 * host. get_kernel_nofault() refuses user addresses as well.
+	 *
+	 * What the table cannot catch is a double free after kmalloc has handed
+	 * the same address out again for a later block: the number and the
+	 * address then match the new block, and the second free frees it, so
+	 * that the kernelet goes on using memory kmalloc may give to Linux.
+	 * Safe Rust cannot free twice; only a bug in vOSTD's unsafe code can,
+	 * and such a bug can corrupt the host whatever this function does. The
+	 * table guards against a pointer that was never a block, not against
+	 * that.
+	 */
+	if (get_kernel_nofault(n, (u64 *)ptr - 1))
+		n = U64_MAX;
 
 	spin_lock(&h->lock);
 	if (n < h->size && h->block[n] &&

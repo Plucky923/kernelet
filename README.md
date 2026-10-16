@@ -16,6 +16,8 @@ make check          # every link resolves; every file and identifier the caption
 make render PAGE=the-gate.html OUT=/tmp/gate.png   # screenshot a page and check its diagrams rendered
 ```
 
+The book is built with mdbook 0.5.2 and mdbook-mermaid 0.17.0. `make build` then prints `Warning: The mdbook-mermaid preprocessor was built against version 0.5.0 of mdbook, but we're being called from version 0.5.2`; it is harmless, and the diagrams render.
+
 ## Building and running the prototype
 
 ```sh
@@ -24,4 +26,4 @@ make test           # build everything, boot it in QEMU, run the tests the book 
 make bench          # the measurements of the last chapter
 ```
 
-All three delegate to `prototype/Makefile`, which has the details and the individual targets. The first `make test` downloads Linux 6.12 (about 140 MB), builds it, and runs the tests, about five minutes on eight cores; later runs take about three minutes. It needs no root, about 2.5 GB of disk under `prototype/.build/` (the download and the first build of Linux refuse to start with less than 6 GiB free), a Rust nightly toolchain (`prototype/rust-toolchain.toml` names it; `rustup` installs it), `gcc` with a static C library including the static `libpthread` (`libc6-dev` on Debian and Ubuntu, `glibc-static` on Fedora), `make`, `patch`, `flex`, `bison`, `bc`, `libelf` headers, `xz`, `gzip`, `curl`, `python3` and QEMU with KVM (`qemu-system-x86_64` on `PATH`, or `make QEMU=...`). `prototype/README.md` has the full list.
+All three delegate to `prototype/Makefile`, which has the details and the individual targets; run those from `prototype/`, or from here as `make -C prototype <target>` (for example `make -C prototype hello`). The root `make clean` cleans only the book (`book/` and the renderer's cache); `make -C prototype clean` removes the prototype's build products and logs, and leaves the Linux tree and its build. The first `make test` downloads Linux 6.12 (about 140 MB), builds it, and runs the tests; `prototype/README.md` gives the times measured, from a fresh clone and after. It needs no root, about 2.5 GB of disk under `prototype/.build/` (the download and the first build of Linux refuse to start with less than 6 GiB free), a Rust nightly toolchain (`prototype/rust-toolchain.toml` names it; `rustup` installs it), `gcc` with a static C library including the static `libpthread` (`libc6-dev` on Debian and Ubuntu, `glibc-static` on Fedora), `make`, `patch`, `flex`, `bison`, `bc`, `libelf` headers, `xz`, `gzip`, `curl`, `python3` and QEMU with KVM (`qemu-system-x86_64` on `PATH`, or `make QEMU=...`). `prototype/README.md` has the full list.

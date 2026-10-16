@@ -3,10 +3,14 @@
 //! vOSTD: the OSTD-shaped API, virtualized.
 //!
 //! This crate's library name is `ostd`. It exposes the same paths, generics and
-//! signatures as Asterinas's `ostd` at commit `ab9a4cfdc`, for every item that the
-//! kernel propers in this prototype use, and nothing else. The 100-line Hello
-//! World kernel (`../hello/src/lib.rs`) is compiled against it without a single
-//! edit.
+//! signatures as Asterinas's `ostd` at commit `ab9a4cfdc`, for everything the
+//! kernel propers in this prototype use, plus a few members of the same
+//! interface that none of them calls but a kernel written against OSTD would
+//! reasonably reach for, kept for completeness: `Task::need_yield`,
+//! `CpuId::bsp`, `SpinLock::try_lock`, `WaitQueue::wake_one`,
+//! `VmSpace::reader_writer`, and `UserContext::general_regs` and
+//! `general_regs_mut`. The 100-line Hello World kernel (`../hello/src/lib.rs`)
+//! is compiled against it without a single edit.
 //!
 //! Where real OSTD talks to hardware, vOSTD talks to the host through the service
 //! table of [`abi`]. It never calls a Linux symbol.

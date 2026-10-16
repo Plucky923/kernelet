@@ -13,6 +13,11 @@ CONFIG_NR_CPUS=8
 # 32-bit userspace is out of scope for the prototype.
 # CONFIG_IA32_EMULATION is not set
 # CONFIG_X86_X32_ABI is not set
+# No vsyscall page. With emulation on (Linux's default outside tinyconfig), a
+# tenant that jumps to 0xffffffffff600000 has Linux run gettimeofday, time or
+# getcpu for it in the page-fault handler, and the gate never sees the call.
+# The endovisor refuses to load on a kernel built with it.
+# CONFIG_X86_VSYSCALL_EMULATION is not set
 # UMIP emulation is not needed; leaving it off is fine.
 # CONFIG_X86_UMIP is not set
 # KASLR, and the relocatable image it needs.
@@ -99,6 +104,11 @@ CONFIG_MEMCG=y
 CONFIG_CPUSETS=y
 
 # --- debugging, without debug info (no pahole, so no BTF) ---------------
+# tinyconfig turns BUG() support off, and with it every WARN_ON() in Linux
+# becomes silent: the condition is evaluated and nothing is printed. Every
+# test checks that the log has no "WARNING:", which would then prove nothing.
+CONFIG_BUG=y
+CONFIG_DEBUG_BUGVERBOSE=y
 CONFIG_DEBUG_KERNEL=y
 CONFIG_DEBUG_INFO_NONE=y
 # CONFIG_DEBUG_INFO_BTF is not set

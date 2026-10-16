@@ -9,7 +9,9 @@
 //!    [`ReturnReason::UserException`] carrying a page-fault [`CpuException`] with
 //!    the faulting address, maps a fresh frame there with a cursor, and returns to
 //!    user mode, where the store is retried. The program then reads back what it
-//!    wrote and reports it with a `write` system call.
+//!    wrote and reports it with a `write` system call. A second `write`, of
+//!    4 MiB, asks for a buffer larger than the heap gives: the allocation
+//!    fails, and the kernel refuses the call with `-ENOMEM` and carries on.
 //! 2. **Exceptions other than page faults.** The program executes `ud2`, twice
 //!    in a row. Each time the kernel gets [`CpuException::InvalidOpcode`], logs
 //!    it, and steps over the two bytes. Then `int3`, which Linux reports as a SIGTRAP with `SI_KERNEL`; the kernel
@@ -30,7 +32,7 @@ use align_ext::AlignExt;
 use core::str;
 
 use alloc::sync::Arc;
-use alloc::vec;
+use alloc::vec::Vec;
 
 use ostd::arch::cpu::context::{CpuException, UserContext};
 use ostd::mm::{
@@ -181,7 +183,19 @@ fn handle_syscall(user_context: &mut UserContext, vm_space: &VmSpace) {
                 user_context.rdx(),
             );
             let buf = {
-                let mut buf = vec![0u8; buf_len];
+                // A tenant names the length, so the buffer may be more than
+                // the heap can give: refuse the call then, rather than let the
+                // allocation's failure end the kernel.
+                let mut buf = Vec::new();
+                if buf.try_reserve_exact(buf_len).is_err() {
+                    println!(
+                        "probe: a write of {} bytes refused: no memory for its buffer",
+                        buf_len
+                    );
+                    user_context.set_rax(-12isize as usize); // -ENOMEM
+                    return;
+                }
+                buf.resize(buf_len, 0u8);
                 let mut reader = vm_space.reader(buf_addr, buf_len).unwrap();
                 reader
                     .read_fallible(&mut VmWriter::from(&mut buf as &mut [u8]))

@@ -68,12 +68,12 @@ void klet_carrier_lifeline_closed(struct klet_carrier *c)
 	if ((c->kind == KLET_ROOT || live) && !last)
 		klet_kill_instance(inst);                /* a carrier's death is the sandbox's death */
 	/* release what a carrier killed in user mode never detached: its stack, its empty address space */
-	if (c->task == current) {                    /* and undo its attachment, which only its own task may do */
+	if (last)
+		klet_sandbox_gone(inst);                 /* the address spaces, the heap blocks still held, the stack pool */
+	if (c->task == current) {                    /* undo its attachment, which only its own task may do */
 		current->kernelet = NULL;
 		klet_sched_detach(c);
 	}
-	if (last)
-		klet_sandbox_gone(inst);                 /* the address spaces, the heap blocks still held, the stack pool */
 	if (!c->pnotifier_on && c->task->kernelet != &c->gate)
 		klet_carrier_put(c);                     /* the carrier's own reference; the lifeline file holds the other */
 	else
@@ -165,11 +165,11 @@ A carrier that is not on a processor at that instant is sent nothing; it is caug
 
 ## The test
 
-`make probe` runs the kernel in `prototype/probe/src/lib.rs`, whose handler for system call number 1000 is `loop {}`. The test's runtime waits a second and then kills the root carrier. The log shows the root's lifeline closing, the sweep being armed, the spinning carrier evicted by an early sweep at an address Linux's symbol lookup places inside the kernelet's user-task function, both carriers dying, and the module unloading with its reference count at zero. The build checks each of those lines and that Linux printed no warning.
+`make probe` runs the kernel in `prototype/probe/src/lib.rs`, whose handler for system call number 1000 is `loop {}`. The test's runtime waits a second and then kills the root carrier. The log shows the root's lifeline closing, the sweep being armed, the spinning carrier evicted by an early sweep at an address Linux's symbol lookup places inside the kernelet's user-task function, both carriers dying, and the module unloading with its reference count at zero. The build checks each of those lines and that Linux printed no warning, a check that means something only because the guest kernel is built with `CONFIG_BUG` on, which the minimal configuration it starts from turns off.
 
-The same test exercises the other mechanisms of chapter 7 that the hundred-line kernel never reaches: a demand-paging fault (chapter 12), an illegal instruction (`ud2`), a breakpoint (`int3`) and a privileged instruction (`hlt`), the last two being exceptions Linux reports with `SI_KERNEL`; the kernel proper steps past all three.
+The same test exercises the other mechanisms of chapter 7 that the hundred-line kernel never reaches: a demand-paging fault (chapter 12), an illegal instruction (`ud2`, twice, so that the drain's re-ignoring of chapter 7 is exercised), a breakpoint (`int3`) and a privileged instruction (`hlt`), the last two being exceptions Linux reports with `SI_KERNEL`; the kernel proper steps past the three instructions, and the test reads the carrier's signal dispositions back and checks that everything but `SIGKILL` and `SIGSTOP` is ignored. The tenant also asks for a 4 MiB write, which the kernel proper refuses for want of memory rather than letting the host warn, and a second boot of the same test runs the tenant under a seccomp filter that kills on its endless system call, and checks that the sandbox ends by that signal.
 
-One of the memory tests, `make mem-kill`, kills a virtual CPU's carrier instead of the root, while its sibling is taking page faults in the same address space, and checks that the whole sandbox ends cleanly, with the module's reference count at zero. On the way it sends that carrier `SIGTERM` and `SIGUSR1`, which chapter 7 said are discarded, and checks that it lives. Two more boots of the same test kill the carrier where Linux by itself would never act on the signal: once while it is idle in `vcpu_idle` with nothing to run, and once while it runs a kernel task that loops and calls no service. The log must show the sandbox ending within a bounded time after the kill, the endovisor's counter saying which path caught it, no stall report from Linux, and a clean unload.
+One of the memory tests, `make mem-kill`, kills a virtual CPU's carrier instead of the root, while its sibling is taking page faults in the same address space, and checks that the whole sandbox ends cleanly, with the module's reference count at zero. On the way it sends that carrier `SIGTERM` and `SIGUSR1`, and then two thousand rounds of `SIGQUIT`, `SIGABRT`, `SIGTSTP`, `SIGTTIN` and `SIGTTOU`, which chapter 7 said are discarded, and checks that it lives and that none of them reached its queue. Two more boots of the same test kill the carrier where Linux by itself would never act on the signal: once while it is idle in `vcpu_idle` with nothing to run, and once while it runs a kernel task that loops and calls no service. The log must show the sandbox ending within a bounded time after the kill, the endovisor's counter saying which path caught it, no stall report from Linux, and a clean unload.
 
 <div class="recap">
 

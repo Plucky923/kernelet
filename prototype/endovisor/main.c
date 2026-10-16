@@ -2,8 +2,16 @@
 /*
  * Module init and exit, the grant, the carrier lifeline, the four host offsets
  * the kernelet needs in order to find its own vCPU record and Linux's
- * preemption count without a call, and the binary-format
- * handler that turns a Linux task into the root carrier of a sandbox.
+ * preemption count without a call, and the binary-format handler that turns a
+ * Linux task into the root carrier of a sandbox and sets every signal it can
+ * to ignored, for the root and for every carrier cloned from it.
+ *
+ * Also here: the module parameters (klet_mirror; klet_test_hooks and
+ * klet_test_sleep_ms, the test hook; klet_watch is in watch.c), the refusal
+ * to load on a kernel that emulates the vsyscall page, and the counters
+ * printed at unload, which end with "endovisor unloaded" and which the tests
+ * read: the watch timer's ticks and upcalls, the kicks, STATS, MEMSTATS, the
+ * kills, the heap, the kernelet stacks and the carrier records.
  */
 
 #include <linux/anon_inodes.h>
@@ -199,7 +207,12 @@ static void klet_empty_mm(void)
 
 /*
  * set_personality_64bit() is not exported, so the part of it that matters to a
- * carrier is open-coded. The vsyscall bit is deliberately left clear.
+ * carrier is open-coded. The vsyscall bit (MM_CONTEXT_HAS_VSYSCALL) is
+ * deliberately left clear. That is no protection, though: emulate_vsyscall(),
+ * Linux's page-fault path for a jump into the vsyscall page, does not look at
+ * it. What keeps a tenant from having Linux run a system call for it there is
+ * that the endovisor does not load on a kernel that emulates the page at all
+ * (klet_init).
  */
 static void klet_personality_64bit(void)
 {
@@ -353,6 +366,14 @@ static int klet_load_binary(struct linux_binprm *bprm)
 		sigset_t none;
 		int sig;
 
+		/*
+		 * kernel_sigaction() is documented for kernel threads only, and
+		 * not for a task that shares its sighand (CLONE_SIGHAND), because
+		 * it skips do_sigaction()'s checks and would change the action of
+		 * a whole thread group. The root carrier is single-threaded, and
+		 * each carrier is cloned from it without CLONE_SIGHAND, so every
+		 * one has its own copy of the actions set here.
+		 */
 		sigemptyset(&none);
 		sigprocmask(SIG_SETMASK, &none, NULL);
 		for (sig = 1; sig <= _NSIG; sig++)
@@ -439,6 +460,20 @@ static int __init klet_init(void)
 {
 	struct klet_inst *inst = &klet_inst;
 	int err;
+
+	/*
+	 * With vsyscall emulation, a tenant that jumps to the vsyscall page
+	 * faults, and Linux's fault handler runs gettimeofday, time or getcpu
+	 * for it (emulate_vsyscall()) and returns to user mode: a system call
+	 * the gate never sees, which no other path in the endovisor can
+	 * catch. Whether `vsyscall=none` was given at boot is held in a static
+	 * of Linux's that no module can read, so a kernel built with emulation
+	 * is refused outright.
+	 */
+#ifdef CONFIG_X86_VSYSCALL_EMULATION
+	pr_err("kernelet: refusing to load: this kernel emulates the vsyscall page (CONFIG_X86_VSYSCALL_EMULATION=y), through which a tenant could have Linux run a system call without passing the gate; build Linux with it off\n");
+	return -EINVAL;
+#endif
 
 	if (kernelet_entry_table.abi_version != KLET_ABI_VERSION) {
 		pr_err("kernelet: image ABI %llu, endovisor ABI %llu\n",

@@ -103,7 +103,7 @@ bool klet_virq_redirect(struct klet_carrier *c, struct pt_regs *regs)
 }
 ```
 
-When the timer interrupt returns, it returns into the kernelet's upcall stub rather than into the interrupted instruction. `klet_in_kernelet(c)` is the endovisor's own bookkeeping, state `RUNNING` and depth 0, from chapter 6: a carrier inside a service call is never redirected, because it may hold Linux's locks.
+When the timer interrupt returns, it returns into the kernelet's **upcall** stub, the kernelet's own interrupt handler, entered by a redirected interrupt, rather than into the interrupted instruction. `klet_in_kernelet(c)` is the endovisor's own bookkeeping, state `RUNNING` and depth 0, from chapter 6: a carrier inside a service call is never redirected, because it may hold Linux's locks.
 
 ## The upcall
 
@@ -234,7 +234,7 @@ static void klet_kick_ipi(void *arg)            /* runs in interrupt context on 
 }
 ```
 
-A requested firing is not a tick, unless the period it cut short has already run out: the callback raises no TICK for it, takes no strike (chapter 10), and puts the timer back on the expiry of the period it cut short, so a kick neither advances the kernelet's clock nor delays its next tick. A kick whose bit is already set does nothing at all, so a thousand kicks cost one delivery.
+A requested firing is not a tick, unless the period it cut short has already run out: the callback raises no TICK for it, takes no strike (chapter 10's bound on critical sections), and puts the timer back on the expiry of the period it cut short, so a kick neither advances the kernelet's clock nor delays its next tick. A kick whose bit is already set does nothing at all, so a thousand kicks cost one delivery.
 
 <div class="recap">
 

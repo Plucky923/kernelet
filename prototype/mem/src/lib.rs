@@ -35,7 +35,7 @@
 //!
 //! Where the kernel proper does what the tree's kernel proper does, it does it
 //! the same way: fault-around maps the 64 KiB window under one cursor
-//! (`vm_mapping.rs:641-700`), fork is the tree's `cow_copy_pt` (child's cursor
+//! (`vm_mapping.rs:641-716`), fork is the tree's `cow_copy_pt` (child's cursor
 //! first, then the parent's; one `protect_next` and one child `map` per page;
 //! one `for_all` flush at the end), protection changes are `protect_next` loops
 //! followed by one flush.
@@ -868,7 +868,8 @@ fn perf_main() {
 
 const BIG_PAGES: usize = 16384; // 64 MiB
 
-/// The tree's `cow_copy_pt` (`fork.rs:76-130` at `ab9a4cfdc`), RAM only.
+/// The tree's `cow_copy_pt` (`fork.rs:81-131` at `ab9a4cfdc`, its doc comment
+/// from 74), RAM only.
 fn cow_copy_pt(src: &mut CursorMut<'_>, dst: &mut CursorMut<'_>, size: usize) -> usize {
     let start_va = src.virt_addr();
     let end_va = start_va + size;

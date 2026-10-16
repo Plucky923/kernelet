@@ -19,6 +19,18 @@ _start:
 	movq	$8, %rdx
 	syscall
 
+	# 1b. A write far bigger than the kernel will buffer: 4 MiB, which is
+	#     as much as kmalloc can give at all, so that the endovisor, which
+	#     puts a few bytes of its own in front of every block, must refuse
+	#     it rather than ask kmalloc for more. The kernel proper's buffer
+	#     allocation fails, it says so and returns -ENOMEM, and this
+	#     program carries on regardless.
+	movq	$1, %rax			# write(1, 0x900000, 4 MiB)
+	movq	$1, %rdi
+	movq	%rbx, %rsi
+	movq	$0x400000, %rdx
+	syscall
+
 	# 2. A non-page-fault exception: Linux turns #UD into SIGILL, and the
 	#    gate's resume hook must hand it to the kernel proper as trap 6.
 	#    The kernel proper advances rip by these two bytes.
