@@ -10,14 +10,18 @@
  *    process until /proc/vmstat shows that reclaim has run and swapped out at
  *    least HOG_SWAP_PAGES pages, then frees it. The kernelet's tenant is
  *    spinning in user mode all that time; afterwards it reads every page back.
- *  - "kill" (E11): once the kernelet has said it is ready, stops the carrier
- *    of virtual CPU 1 with SIGSTOP and lets it go on with SIGCONT, then kills
- *    it from outside with SIGKILL, while vCPU 0's tenant thread keeps
- *    faulting in the same address space.
+ *  - "kill" (E11): once the kernelet has said it is ready, has Linux preempt
+ *    the carrier of virtual CPU 1 (a competitor pinned to its processor),
+ *    sends it SIGTERM and SIGUSR1 (and the root carrier a SIGTERM), which must
+ *    leave both alive, stops it with SIGSTOP and lets it go on with SIGCONT,
+ *    and then kills it with SIGKILL, while vCPU 0's tenant thread keeps
+ *    faulting in the same address space. The kill must end the whole
+ *    sandbox. Meanwhile vCPU 1's tenant runs the rewind check.
  */
 #define _GNU_SOURCE
 
 #include <errno.h>
+#include <sched.h>
 #include <fcntl.h>
 #include <stdarg.h>
 #include <stdio.h>
@@ -238,6 +242,63 @@ static char task_state(long pid)
 }
 
 /*
+ * Linux preempting a vCPU carrier in user mode: the carrier and a CPU-bound
+ * competitor, both pinned to processor 1 for `ms`, so that the scheduler takes
+ * the processor from the carrier at its ticks and every return to its tenant
+ * passes through the exit loop with a reschedule pending.
+ */
+static void preempt_with_competitor(long pid, int ms)
+{
+	struct timespec t = { .tv_sec = ms / 1000, .tv_nsec = (ms % 1000) * 1000000L };
+	cpu_set_t one, all;
+	pid_t comp;
+	int i;
+
+	CPU_ZERO(&one);
+	CPU_SET(1, &one);
+	CPU_ZERO(&all);
+	for (i = 0; i < 2; i++)
+		CPU_SET(i, &all);
+	if (sched_setaffinity((pid_t)pid, sizeof(one), &one) != 0) {
+		outf("RUN-MEM: cannot pin the carrier of vcpu 1: %s\n", strerror(errno));
+		return;
+	}
+	comp = fork();
+	if (comp == 0) {
+		volatile unsigned long x = 0;
+
+		sched_setaffinity(0, sizeof(one), &one);
+		for (;;)
+			x++;
+	}
+	nanosleep(&t, NULL);
+	kill(comp, SIGKILL);
+	waitpid(comp, NULL, 0);
+	sched_setaffinity((pid_t)pid, sizeof(all), &all);
+	outf("RUN-MEM: preempted the carrier of vcpu 1 for %d ms with a competitor on cpu 1\n", ms);
+}
+
+/*
+ * Signals whose default action would end a task: the endovisor ignores them for
+ * every carrier, so an operator's SIGTERM or a stray SIGUSR1 must leave both the
+ * vCPU carrier and the root carrier alive.
+ */
+static void signal_and_check(long pid, long root)
+{
+	struct timespec t = { .tv_sec = 0, .tv_nsec = 200 * 1000 * 1000 };
+	char s;
+
+	kill((pid_t)pid, SIGTERM);
+	kill((pid_t)pid, SIGUSR1);
+	kill((pid_t)root, SIGTERM);
+	nanosleep(&t, NULL);
+	s = task_state(pid);
+	outf("RUN-MEM: after SIGTERM and SIGUSR1 the carrier of vcpu 1 is %s (state %c), the root carrier %s\n",
+	     kill((pid_t)pid, 0) == 0 && s != 'Z' && s != '?' ? "alive" : "gone", s,
+	     kill((pid_t)root, 0) == 0 && task_state(root) != 'Z' ? "alive" : "gone");
+}
+
+/*
  * SIGSTOP and SIGCONT to a vCPU carrier, as an operator would send them: Linux
  * must stop it like any task (a stopped virtual CPU) and let it go on.
  */
@@ -320,7 +381,10 @@ int main(void)
 			cpid = strtol(kmsg_hit + strlen("vcpu 1 carrier starting (pid "), NULL, 10);
 		if (cpid > 0 && wait_kmsg("MEM-KILL-ME", 30) == 0) {
 			usleep(500 * 1000);	/* let the sibling fault for a while first */
+			preempt_with_competitor(cpid, 1500);
+			signal_and_check(cpid, (long)pid);
 			stop_and_continue(cpid);
+			usleep(300 * 1000);	/* and let the check run after the continue */
 			outf("RUN-MEM: killing the carrier of vcpu 1 (pid %ld) from outside\n", cpid);
 			kill((pid_t)cpid, SIGKILL);
 		} else {

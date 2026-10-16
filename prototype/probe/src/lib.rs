@@ -12,6 +12,9 @@
 //!    wrote and reports it with a `write` system call.
 //! 2. **A non-page-fault exception.** The program executes `ud2`. The kernel gets
 //!    [`CpuException::InvalidOpcode`], logs it, and steps over the two bytes.
+//!    Then `int3`, which Linux reports as a SIGTRAP with `SI_KERNEL`; the kernel
+//!    gets [`CpuException::BreakPoint`] (trap 3) and carries on, since rip is
+//!    already past the instruction.
 //! 3. **Eviction.** The program makes a system call whose handler never returns.
 //!    The only way the host gets that CPU back is to evict the kernelet.
 
@@ -130,6 +133,12 @@ fn handle_exception(user_context: &mut UserContext, vm_space: &VmSpace) {
                 info.error_code.bits()
             );
             map_on_demand(vm_space, info.addr);
+        }
+        Some(CpuException::BreakPoint) => {
+            println!(
+                "probe: breakpoint before {:#x} (trap 3), continuing",
+                user_context.rip()
+            );
         }
         Some(CpuException::InvalidOpcode) => {
             let rip = user_context.rip();

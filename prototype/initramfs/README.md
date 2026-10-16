@@ -13,15 +13,19 @@ crashes the kernel.
 
 It belongs to the harness rather than to the design; the book describes the
 harness, and how to read a serial log, where it first boots the prototype
-(chapter 3).
+(chapter 7, where `make hello` first boots).
 
 ## How it is built
 
 `make initramfs`: `gcc -static -O2 -Wall -Wextra` into `.build/init`, copied to
 `.build/stage/init` beside what the `stage-*` targets put there (the module,
-the test's runtime, the `.klet` file), and packed with `cpio` into
-`.build/initramfs.cpio.gz`. The archive is repacked on every run, because what
-is staged changes independently of `init.c`.
+the test's runtime, the `.klet` file), and packed into
+`.build/initramfs.cpio.gz` by the kernel's own `usr/gen_init_cpio`, from a
+list of the staged files written to `.build/initramfs.list`. The list also
+names the one device node the archive needs, `/dev/console`, so the archive
+is built without `mknod` and without root, and everything in it is owned by
+root. The archive is repacked on every run, because what is staged changes
+independently of `init.c`.
 
 ## Files
 

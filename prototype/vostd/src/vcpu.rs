@@ -212,13 +212,6 @@ pub(crate) fn host_preempt_dec_and_test() -> bool {
     zero != 0
 }
 
-/// Turns the mirror off. Used by the endovisor's module parameter through the
-/// boot arguments, for the experiment that shows what the mirror buys.
-#[allow(dead_code)]
-pub(crate) fn set_mirror(on: bool) {
-    MIRROR_ON.store(if on { 1 } else { 0 }, Ordering::Release);
-}
-
 // ---------------------------------------------------------------------------
 // Virtual interrupts
 // ---------------------------------------------------------------------------

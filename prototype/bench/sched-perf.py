@@ -24,13 +24,15 @@ NOTES = {
         "two kernelet kernel tasks yielding to each other on one vCPU; "
         "two OSTD context switches, no system call, no address-space change",
     "kernelet_wake_same_vcpu_cycles":
-        "a blocked level-0 kernelet task woken by a level-2 one on the same vCPU",
+        "a blocked level-0 kernelet task woken by a level-1 one on the same vCPU, "
+        "timed from the waker's stamp to the woken task running",
     "kernelet_wake_other_vcpu_cycles":
         "the same, woken from the other vCPU: the endovisor's kick and upcall",
     "kernelet_user_switch_other_mm_cycles":
         "two tenant threads of two different tenant processes alternating on one "
-        "vCPU through a yield system call: two gate entries, one OSTD switch, one "
-        "kernelet_switch_mm and one floating-point swap",
+        "vCPU through a yield system call, a round trip timed in user mode: per "
+        "thread a gate entry and exit, an OSTD switch, an address-space adoption "
+        "(kernelet_switch_mm) and the kernel proper's floating-point save and load",
     "linux_process_yield_roundtrip_cycles":
         "two Linux processes on one CPU calling sched_yield(): the same plus an "
         "address-space switch",
@@ -40,6 +42,14 @@ NOTES = {
     "linux_pipe_wake_other_cpu_cycles":
         "the same, across processors",
 }
+
+# The measurements the sched kernel's perf scenario must produce in every boot.
+KERNELET = [
+    "kernelet_yield_roundtrip_cycles",
+    "kernelet_wake_same_vcpu_cycles",
+    "kernelet_wake_other_vcpu_cycles",
+    "kernelet_user_switch_other_mm_cycles",
+]
 
 FAIR = [
     ("kernelet_user_switch_other_mm_cycles", "linux_process_yield_roundtrip_cycles",
@@ -59,7 +69,9 @@ FAIR = [
 def main(paths):
     med = {}
     p99 = {}
+    count = {}
     ns_per_cycle = None
+    rc = 0
 
     for path in paths:
         with open(path, "rb") as f:
@@ -69,6 +81,13 @@ def main(paths):
             khz = int(m.group(1))
             if khz:
                 ns_per_cycle = 1.0e6 / khz
+        # Every kernelet measurement must be in every boot, with samples: one
+        # that reports n=0 has not measured anything, and that is a failure of
+        # the scenario, not of the host.
+        for name in KERNELET:
+            if not re.search(r"SCHED-PERF %s n=[1-9]" % name, text):
+                print("  BAD     %s: %s has no samples" % (path, name))
+                rc = 1
         for rx in (re_k, re_n):
             for m in rx.finditer(text):
                 name, n = m.group(1), int(m.group(2))
@@ -76,6 +95,7 @@ def main(paths):
                     continue
                 med.setdefault(name, []).append(int(m.group(3)))
                 p99.setdefault(name, []).append(int(m.group(4)))
+                count[name] = count.get(name, 0) + n
 
     if not med:
         print("  BAD     no measurements in %s" % " ".join(paths))
@@ -91,20 +111,19 @@ def main(paths):
     print("  info    %d boot(s); cycle counter %s"
           % (len(paths),
              ("%.4f ns per cycle" % ns_per_cycle) if ns_per_cycle else "unknown"))
-    print("  %-46s %10s %10s %8s %8s" % ("measurement", "median", "p99", "med ns",
-                                         "p99 ns"))
-    rc = 0
+    print("  %-46s %10s %10s %8s %8s %8s" % ("measurement", "median", "p99", "med ns",
+                                              "p99 ns", "samples"))
     for name in sorted(med):
         s = summarise(name)
         if not s:
             continue
         m, p, runs = s
         if ns_per_cycle:
-            print("  %-46s %10d %10d %8.0f %8.0f   (%d runs)"
-                  % (name, m, p, m * ns_per_cycle, p * ns_per_cycle, runs))
+            print("  %-46s %10d %10d %8.0f %8.0f %8d   (%d runs)"
+                  % (name, m, p, m * ns_per_cycle, p * ns_per_cycle, count[name], runs))
         else:
-            print("  %-46s %10d %10d %8s %8s   (%d runs)"
-                  % (name, m, p, "-", "-", runs))
+            print("  %-46s %10d %10d %8s %8s %8d   (%d runs)"
+                  % (name, m, p, "-", "-", count[name], runs))
 
     print("  --- what may honestly be compared with what ---")
     for a, b, why in FAIR:
@@ -117,13 +136,10 @@ def main(paths):
               % (a, sa[0], b, sb[0], ratio))
         print("          %s" % why)
 
-    required = ["kernelet_yield_roundtrip_cycles",
-                "kernelet_wake_same_vcpu_cycles",
-                "linux_process_yield_roundtrip_cycles"]
     for name in NOTES:
-        if name in med:
+        if name in med or name in KERNELET:
             continue
-        if name in required:
+        if name == "linux_process_yield_roundtrip_cycles":
             print("  BAD     %s was not measured" % name)
             rc = 1
         else:
@@ -139,7 +155,8 @@ def main(paths):
               "Linux process yield round trip %d on the same machine; the first "
               "does strictly less work, so read it as an upper bound on what the "
               "kernelet's own scheduler costs, not as a speed-up" % (sk[0], sl[0]))
-    print("  ok      the measurements were taken over %d boot(s)" % len(paths))
+    if rc == 0:
+        print("  ok      every kernelet measurement has samples in all %d boot(s)" % len(paths))
     return rc
 
 

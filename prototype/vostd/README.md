@@ -5,8 +5,12 @@ kernelet on Linux. Its crate is `vostd` and its library name is `ostd`, so a
 kernel proper says `ostd = { package = "vostd", ... }` and its source does not
 change: the 100-line kernel in `../hello` is compiled against it byte for
 byte. It exposes the same paths, types and signatures as Asterinas's OSTD at
-commit `ab9a4cfdc` for everything the kernels in this repository use, and
-nothing else.
+commit `ab9a4cfdc` for everything the kernels in this repository use, plus a
+few members of the same interface that no kernel here calls but a kernel
+written against OSTD would reasonably reach for, kept for completeness:
+`Task::need_yield`, `CpuId::bsp`, `SpinLock::try_lock`, `WaitQueue::wake_one`,
+`VmSpace::reader_writer`, and `UserContext::general_regs` and
+`general_regs_mut`. Nothing else.
 
 Where real OSTD talks to hardware, vOSTD talks to the endovisor through the
 image ABI (`src/abi.rs`): a table of services the kernelet may call, a table
@@ -46,6 +50,8 @@ endovisor's pool hands out.
 | `src/user.rs` | `UserMode`, its hooks and return reasons | 7 |
 | `src/arch/cpu/context.rs` | `UserContext`, its `execute` loop over `user_run`, CPU exceptions, `FpuContext` on the `fpu_save`/`fpu_load` services | 7, 8 |
 | `src/arch/trap.rs` | `RawUserContext::run`, the call of `user_run` | 7 |
+| `src/arch/mod.rs` | the architecture module: x86-64 only, and `read_tsc` | 9 |
+| `src/arch/cpu/mod.rs` | the CPU module: `context` | 7 |
 | `src/arch/irq.rs` | interrupt masking: the vCPU record's `irq_off` | 9 |
 | `src/arch/mm.rs` | x86-64 paging constants; what this vCPU has activated | 12 |
 | `src/arch/task/mod.rs`, `src/arch/task/switch.S` | OSTD's context switch, `switch.S` byte for byte | 6, 8 |

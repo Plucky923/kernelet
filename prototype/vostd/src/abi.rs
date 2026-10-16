@@ -2,14 +2,16 @@
 
 //! The image ABI: the only thing that couples the kernelet image to a host.
 //!
-//! Four `#[repr(C)]` structures, mirrored by `endovisor/kernelet.h`:
+//! Six `#[repr(C)]` structures, mirrored by `endovisor/kernelet.h`:
 //!
 //! - [`BootArgs`], what the endovisor tells the kernelet about the machine it
 //!   was given;
 //! - [`Services`], the host functions the kernelet may call;
 //! - [`EntryTable`], the kernelet functions the host may call, exported as the
 //!   single symbol `kernelet_entry_table`;
-//! - [`VcpuRec`], the one page per virtual CPU that both sides write.
+//! - [`VcpuRec`], the one page per virtual CPU that both sides write;
+//! - [`SpaceRec`], one per address space: its root and its range-lock words;
+//! - [`MemStats`], counters of the host's memory paths, for the tests.
 //!
 //! vOSTD calls no Linux symbol. Everything it needs from the host arrives
 //! through [`Services`], except the three facts in [`BootArgs`] that let it find

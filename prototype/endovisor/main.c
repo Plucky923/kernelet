@@ -313,6 +313,30 @@ static int klet_load_binary(struct linux_binprm *bprm)
 	/* Children are reaped without anybody waiting for them. */
 	kernel_sigaction(SIGCHLD, SIG_IGN);
 
+	/*
+	 * begin_new_exec() reset every handler to SIG_DFL, and a signal whose
+	 * default action is to terminate without a core dump is fatal at the
+	 * moment it is sent (complete_signal() turns it into SIGKILL): it would
+	 * never reach the drain. An operator's SIGTERM to a carrier, or a stray
+	 * SIGPIPE, would end the sandbox. So they are ignored, here, and the
+	 * vCPU carriers inherit it from the root; SIGKILL and SIGSTOP cannot be,
+	 * and keep their meaning. The core-dump class (SIGQUIT, SIGABRT, the
+	 * fault signals, SIGSYS, SIGXCPU, SIGXFSZ) still goes through the queue
+	 * and the drain.
+	 */
+	{
+		static const int terminate[] = {
+			SIGHUP, SIGINT, SIGTERM, SIGUSR1, SIGUSR2, SIGALRM, SIGPIPE,
+			SIGIO, SIGPROF, SIGVTALRM, SIGSTKFLT, SIGPWR,
+		};
+		int i;
+
+		for (i = 0; i < ARRAY_SIZE(terminate); i++)
+			kernel_sigaction(terminate[i], SIG_IGN);
+		for (i = SIGRTMIN; i <= SIGRTMAX; i++)
+			kernel_sigaction(i, SIG_IGN);
+	}
+
 	pr_info("kernelet: root carrier exec (pid %d), address space emptied, %u virtual CPU(s), cmdline \"%s\"\n",
 		current->pid, nr_vcpus, inst->cmdline ? inst->cmdline : "");
 

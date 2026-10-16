@@ -2,7 +2,7 @@
 
 A kernelet's user program runs in user mode on a real processor. When it executes `syscall`, the processor jumps into whatever the hardware's system-call entry register points at, and on a Linux machine that is Linux's entry code. Linux would then look the call number up in its own table and run `write`. Nothing in the hundred-line kernel would ever hear of it.
 
-So the first thing the design needs from Linux is a way to **hand a system call to a kernelet before Linux handles it**. Linux has no such interface, and this chapter adds one. It is the only change the design makes to Linux's own code, and it is small: a pointer in the task structure, one bit, two calls in the entry path, two helper functions and five exports. The patch is `prototype/patches/0001-kernelet-gate.patch`, applied to Linux 6.12.
+So the first thing the design needs from Linux is a way to **hand a system call to a kernelet before Linux handles it**. Linux has no such interface, and this chapter adds one. It is the only change the design makes to Linux's own code, and it is small: a pointer in the task structure, one bit, two calls in the entry path, two helper functions and two exports. The patch is `prototype/patches/0001-kernelet-gate.patch`, applied to Linux 6.12.
 
 ## The entry path
 
@@ -94,7 +94,7 @@ This runs whenever a task with pending work is about to return to user mode. It 
 
 **Two helper functions.** `kernel/fork.c` gains two functions that the endovisor cannot write itself because everything they touch is private to the core kernel: `kernelet_mm_alloc()`, which creates an empty address space with a chosen owner, and `kernelet_switch_mm()`, which makes the calling task run in a different address space. Both belong to chapter 12, where tenant memory is built; they are mentioned here only so that the patch's contents are complete.
 
-**Five exports.** `kernel_clone` (chapter 5 creates tasks with it), `flush_tlb_mm_range` (chapter 12 flushes with it), and the three `set_memory_*` functions, which a full endovisor would use to make a loaded image executable and which this prototype, with its image linked into the module, does not call.
+**Two exports.** `kernel_clone` (chapter 5 creates tasks with it) and `flush_tlb_mm_range` (chapter 12 flushes with it): the two functions the endovisor needs that Linux does not already export to modules.
 
 **A configuration option.** `CONFIG_KERNELET` guards all of it. The prototype's kernel configuration turns it on; a kernel built without it is byte-for-byte a stock kernel in these files.
 
@@ -104,6 +104,6 @@ It adds no new system call, no boot parameter, and no change to Linux's schedule
 
 <div class="recap">
 
-**Recap.** The gate is two hooks in Linux's generic entry layer, selected by a pointer in `task_struct` and a syscall-work bit: `syscall` runs after seccomp and can answer the call so that Linux's table is skipped; `resume` runs on the way back to user mode, before signals are delivered. A child inherits the attachment because Linux copies the task structure. The rest of the patch is two helpers and five exports for later chapters.
+**Recap.** The gate is two hooks in Linux's generic entry layer, selected by a pointer in `task_struct` and a syscall-work bit: `syscall` runs after seccomp and can answer the call so that Linux's table is skipped; `resume` runs on the way back to user mode, before signals are delivered. A child inherits the attachment because Linux copies the task structure. The rest of the patch is two helpers and two exports for later chapters.
 
 </div>

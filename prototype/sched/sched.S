@@ -7,20 +7,23 @@
 # first entry to user mode.
 #
 #   rdi = 0            be CPU-bound and yield through a system call
-#   rdi = 1            the same, but measure nothing (the kernel times it)
-#   rdi = seed != 0    the floating-point test: keep four distinct values in
+#   rdi = 2            the switch measurement: yield in a tight loop, timing
+#                      each yield from user mode with rdtsc, and pass the last
+#                      one's cycles to the kernel in rsi on the next yield
+#   rdi = other seed   the floating-point test: keep four distinct values in
 #                      xmm0..xmm3 across every trip through the kernel and
 #                      report the moment one of them changes
 #
 # System calls the kernel proper understands (its own numbers, not Linux's):
-#   3000  yield: give up the processor
+#   3000  yield: give up the processor (rsi: the last yield's cycles, or 0)
 #   3001  fpu check-in: the values in xmm0..3 are still right
 #   3002  fpu failure
-#   3003  user-space cycle report, rsi = cycles
 
 	.global _start
 	.section .text
 _start:
+	cmpq	$2, %rdi
+	je	pingpong
 	testq	%rdi, %rdi
 	jnz	fpu_start
 
@@ -33,6 +36,26 @@ burn:
 	decl	%ecx
 	jnz	burn
 	jmp	cpu_loop
+
+	# --- the switch measurement -------------------------------------------
+	# The cycles from just before a yield to just after it, read in user mode
+	# as the native measurement in runtime/run-sched.c reads them, so that the
+	# two are counted from the same point. r12 survives the system call; rax,
+	# rdx (rdtsc) and rcx, r11 (syscall) do not need to.
+pingpong:
+	xorl	%esi, %esi		# no sample yet
+1:	rdtsc
+	shlq	$32, %rdx
+	orq	%rdx, %rax
+	movq	%rax, %r12		# t0
+	movq	$3000, %rax		# yield, rsi = the previous sample
+	syscall
+	rdtsc
+	shlq	$32, %rdx
+	orq	%rdx, %rax
+	subq	%r12, %rax
+	movq	%rax, %rsi		# this sample, for the next yield
+	jmp	1b
 
 	# --- the floating-point tenant thread --------------------------------
 	# Four distinct values derived from the seed, one per xmm register. If

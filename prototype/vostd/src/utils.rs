@@ -73,9 +73,4 @@ impl<T> Once<T> {
         }
     }
 
-    /// Whether the value has been initialised.
-    #[allow(dead_code)]
-    pub fn is_completed(&self) -> bool {
-        self.state.load(Ordering::Acquire) == DONE
-    }
 }

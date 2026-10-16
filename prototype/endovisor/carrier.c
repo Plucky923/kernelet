@@ -67,9 +67,6 @@
 
 #include "kernelet.h"
 
-/* A sane bound on how much of Linux's preemption count may be the kernelet's. */
-#define KLET_MIRROR_MAX 64
-
 const char *klet_kind_name(enum klet_kind kind)
 {
 	return kind == KLET_ROOT ? "root" : "vcpu";
@@ -232,6 +229,7 @@ void klet_carrier_lifeline_closed(struct klet_carrier *c)
 {
 	struct klet_inst *inst = c->inst;
 	bool was_root = (c->kind == KLET_ROOT);
+	bool live = !inst->stopped && !inst->dying;
 	bool last;
 
 	spin_lock(&inst->lock);
@@ -243,17 +241,26 @@ void klet_carrier_lifeline_closed(struct klet_carrier *c)
 	last = atomic_dec_and_test(&inst->nr_carriers);
 	if (c->kind == KLET_ROOT)
 		pr_info("kernelet: root carrier (pid %d) lifeline closed%s\n",
-			c->task ? c->task->pid : 0, last ? ", the last one" : "");
+			c->task ? c->task->pid : 0,
+			last ? ", the last one" : live ? ", the sandbox is dying" : "");
 	else
 		pr_info("kernelet: vcpu %d carrier (pid %d) lifeline closed%s\n",
 			c->vcpu, c->task ? c->task->pid : 0,
-			last ? ", the last one" : "");
+			last ? ", the last one" : live ? ", the sandbox is dying" : "");
 
 	/*
-	 * The root carrier's death is the sandbox's death: everything else is
-	 * killed, and whatever is spinning inside the kernelet is evicted.
+	 * The root carrier's death is always the sandbox's death: everything else
+	 * is killed, and whatever is spinning inside the kernelet is evicted. That
+	 * holds after the kernelet stopped itself too, because a vCPU it left
+	 * spinning in kernel mode on a lock the stopped vCPU held never returns to
+	 * the gate to die: only eviction gets it out.
+	 *
+	 * A vCPU carrier's death while the sandbox is live is the sandbox's death
+	 * as well: killed by the OOM killer or an operator, it takes its virtual
+	 * CPU with it, and the others would spin for ever on whatever locks it
+	 * held.
 	 */
-	if (was_root && !last)
+	if ((was_root || live) && !last)
 		klet_kill_instance(inst);
 
 	/*
@@ -670,23 +677,27 @@ void klet_virq_raise(struct klet_carrier *c, u32 bit)
  * Whether a signal is Linux's report of a fault of the tenant's own making,
  * which the kernelet must see as the CPU exception it was. Those are the
  * synchronous fault signals with a fault's si_code (0 < si_code < SI_KERNEL),
- * and SIGSEGV with SI_KERNEL, which is how x86's general-protection handler
- * reports a #GP (arch/x86/kernel/traps.c, do_general_protection(), force_sig()).
- * Everything else that has a positive si_code is not a trap, and
- * thread.trap_nr is stale for it: SIGXCPU from RLIMIT_CPU and the other
- * SI_KERNEL signals, and seccomp's SIGSYS (SYS_SECCOMP).
+ * and four of them with SI_KERNEL too, which is what x86's do_trap() and
+ * do_general_protection() send through force_sig() when there is no finer
+ * code (arch/x86/kernel/traps.c): SIGSEGV for #GP and #TS, SIGBUS for #NP and
+ * #SS, SIGTRAP for #BP (int3), SIGFPE for #MF on the legacy coprocessor
+ * vector. A process cannot forge SI_KERNEL: kill() and sigqueue() send SI_USER
+ * or a negative code. SIGILL is a fault only with a fault code. Everything
+ * else is not a trap, and thread.trap_nr is stale for it: SIGXCPU from
+ * RLIMIT_CPU and the other SI_KERNEL signals, and seccomp's SIGSYS
+ * (SYS_SECCOMP).
  */
 static bool klet_is_fault_signal(int signr, int si_code)
 {
 	switch (signr) {
 	case SIGSEGV:
+	case SIGBUS:
+	case SIGTRAP:
+	case SIGFPE:
 		if (si_code == SI_KERNEL)
 			return true;
 		fallthrough;
-	case SIGBUS:
 	case SIGILL:
-	case SIGFPE:
-	case SIGTRAP:
 		return si_code > 0 && si_code < SI_KERNEL;
 	default:
 		return false;
@@ -873,12 +884,13 @@ static int klet_carrier_main(void *arg)
 		/*
 		 * Killable rather than interruptible: a SIGSTOP stays pending on a
 		 * vCPU carrier until it goes to user mode, and must not cut this
-		 * wait short.
+		 * wait short. TASK_NOLOAD: waiting to be booted is not load on the
+		 * host.
 		 */
-		wait_event_killable(c->idle_wq,
-					 c->boot_requested || inst->stopped ||
-					 inst->dying ||
-					 fatal_signal_pending(current));
+		wait_event_state(c->idle_wq,
+				 c->boot_requested || inst->stopped ||
+				 inst->dying || fatal_signal_pending(current),
+				 (TASK_KILLABLE | TASK_NOLOAD));
 		if (!c->boot_requested) {
 			klet_carrier_die(c);
 			return 0;
@@ -924,12 +936,12 @@ void klet_stop_instance(struct klet_inst *inst, u64 code)
 	klet_kill_carriers(inst);
 }
 
-/* The sandbox is being destroyed from outside: the root carrier has died. */
+/* The sandbox is being destroyed from outside: one of its carriers has died. */
 void klet_kill_instance(struct klet_inst *inst)
 {
 	if (!inst->dying) {
 		inst->dying = true;
-		pr_info("kernelet: root carrier gone, the sandbox is dying; %d carrier(s) left\n",
+		pr_info("kernelet: a carrier is gone, the sandbox is dying; %d carrier(s) left\n",
 			atomic_read(&inst->nr_carriers));
 	}
 	klet_kill_carriers(inst);
@@ -1062,7 +1074,20 @@ static void klet_gate_resume(struct pt_regs *regs)
 		}
 
 		/*
-		 * KLET_USER: the kernelet wants this carrier in user mode, in the
+		 * Nothing for the kernelet, and the tenant's own registers are live
+		 * in pt_regs: the exit loop is running this hook for work of Linux's
+		 * own (a reschedule, a signal the drain dropped, a stop and continue,
+		 * ...). Leave them alone, or the tenant would restart at its last
+		 * system call's return. The carrier is in the right address space
+		 * already: it went to user mode in it, and only this vCPU's kernelet
+		 * code, which has not run since, could have activated another.
+		 */
+		if (c->state == KLET_USER && c->user_live)
+			return;
+
+		/*
+		 * KLET_USER, with a context the kernelet has just handed over through
+		 * user_run: the kernelet wants this carrier in user mode, in the
 		 * address space its vCPU has activated.
 		 */
 		if (klet_space_adopt(c, READ_ONCE(c->vrec.space))) {
@@ -1210,7 +1235,8 @@ static void klet_do_vcpu_idle(struct klet_carrier *c, u64 deadline_ns)
 	 * mark ourselves idle, *then* look at the pending word. A raiser sets the bit
 	 * and then looks at the mark, so one of the two always sees the other.
 	 */
-	set_current_state(TASK_KILLABLE | TASK_FREEZABLE);
+	/* TASK_NOLOAD: an idle virtual CPU is not load on the host. */
+	set_current_state(TASK_KILLABLE | TASK_FREEZABLE | TASK_NOLOAD);
 	WRITE_ONCE(c->idle, true);
 	smp_mb();
 

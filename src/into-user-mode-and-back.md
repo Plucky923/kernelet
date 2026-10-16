@@ -183,11 +183,13 @@ static bool klet_drain_signals(struct klet_carrier *c)
 }
 ```
 
-A fault signal is recognized by its number and its `si_code` together. The number is one of `SIGSEGV`, `SIGBUS`, `SIGILL`, `SIGFPE` and `SIGTRAP`, and the code is one a trap handler uses: positive, and below `SI_KERNEL`, the code Linux puts on signals it sends on its own account. One more pair is accepted, because Linux reports a general-protection fault as `SIGSEGV` with `si_code` `SI_KERNEL`. Anything else is discarded: a signal sent by a process, which on the host side can only be the operator, since a tenant's `kill` is a system call and the gate takes those; or a signal Linux sends for a reason of its own, such as a resource limit.
+A fault signal is recognized by its number and its `si_code` together. The number is one of `SIGSEGV`, `SIGBUS`, `SIGILL`, `SIGFPE` and `SIGTRAP`, and the code is one a trap handler uses: positive, and below `SI_KERNEL`, the code Linux puts on signals it sends on its own account. Four more pairs are accepted, because some of x86's trap handlers have no finer code to give and send `SI_KERNEL` themselves ([`arch/x86/kernel/traps.c`](https://elixir.bootlin.com/linux/v6.12/source/arch/x86/kernel/traps.c)): `SIGSEGV` for a general-protection fault and an invalid task-state segment, `SIGBUS` for a segment-not-present and a stack fault, `SIGTRAP` for a breakpoint (`int3`), and `SIGFPE` for the coprocessor segment overrun that no current processor raises. No process can forge that code, since `kill` sends `SI_USER`. Anything else is discarded: a signal sent by a process, which on the host side can only be the operator, since a tenant's `kill` is a system call and the gate takes those; or a signal Linux sends for a reason of its own, such as a resource limit.
 
 `SIGKILL` and `SIGSTOP` are left in the queue. The first is how the operator and the endovisor end a carrier, and Linux acts on it in the same loop. The second takes effect at the carrier's next return to user mode, where Linux stops it as it stops any task; a stopped carrier is a stopped virtual CPU until `SIGCONT`, and a virtual CPU that does not return to user mode, because it is idle or runs only kernel tasks, keeps running with the stop pending.
 
 The root carrier is the exception for `SIGSTOP`, and drops it with the rest. It never returns to user mode, so a stop could never act on it; and `kernel_clone` refuses to run while its caller has a signal pending, so a `SIGSTOP` left in the root's queue would make every clone it attempts fail.
+
+One class of signal never reaches the queue, and has to be dealt with earlier. A signal whose default action is to end the task without a core dump, `SIGTERM`, `SIGINT`, `SIGHUP`, the two user signals, `SIGPIPE` and their kind, is fatal at the moment it is *sent*: the sender sees that nothing will catch it and turns it into a `SIGKILL` on the spot ([`complete_signal()`](https://elixir.bootlin.com/linux/v6.12/source/kernel/signal.c#L1034)), so the drain would never see it. The binary-format handler of chapter 5 therefore sets every signal of that class, the real-time signals included, to be ignored, and the clones inherit the setting with the rest of the task structure; an operator's `SIGTERM` to a carrier is discarded like any other signal from the host side. The signals whose default action is a core dump, `SIGQUIT`, `SIGABRT`, `SIGSYS`, `SIGXCPU` and the fault signals themselves, are queued and go through the drain.
 
 The resume hook brings the exception into the kernelet:
 
@@ -210,7 +212,7 @@ static void klet_gate_resume(struct pt_regs *regs)
 			continue;
 		}
 		if (c->state == KLET_USER && !c->exc_pending && klet_drain_signals(c) && c->user_live)
-			klet_regs_snapshot(c, regs);                         /* the faulting registers, into ctx */
+			klet_regs_snapshot(c, regs);                         /* the faulting registers, into ctx; clears user_live */
 		if (c->exc_pending) {                                    /* from a signal, or from the fault handler of chapter 12 */
 			c->exc_pending = false;
 			if (c->state == KLET_USER && c->user_live)
@@ -224,15 +226,20 @@ static void klet_gate_resume(struct pt_regs *regs)
 			klet_enter(c, KLET_RUN_EVENT);                       /* user_run returns 2 */
 			continue;
 		}
-		/* KLET_USER and nothing pending: the kernelet wants user mode */
+		if (c->state == KLET_USER && c->user_live)               /* nothing for the kernelet, and the tenant's registers */
+			return;                                              /* are live in pt_regs: work of Linux's own brought us here */
+		/* KLET_USER with a context the kernelet has just handed over: it wants user mode */
 		klet_space_adopt(c, c->vrec.space);
 		klet_ctx_to_regs(c, regs);
+		c->user_live = true;
 		return;
 	}
 }
 ```
 
 The loop shape matters: each `klet_enter` returns when the kernelet calls `user_run` again, and the hook then goes round once more to see whether anything else is pending before it finally applies the registers and returns to Linux. Two lines are easy to miss and were a bug once: before an exception is reported, by either route, the hook must copy the *current* `pt_regs` into the context (`klet_regs_snapshot`), because the context still holds the registers of the previous trip, and the kernel proper must see the registers of the faulting instruction. `user_live` records that the tenant has run since the context was last applied, so that the snapshot is taken exactly once per trip.
+
+The same flag guards the end of the loop, and that too was a bug once. The exit loop runs the hook for work of Linux's own as well, a reschedule, a signal the drain dropped, a stop and a continue, and then nothing is pending for the kernelet and the registers in `pt_regs` are the tenant's live ones. Applying the context over them would send the tenant back to the return of its last system call, a rewind of everything it had done since, so the hook leaves them alone and returns. One of the memory tests, `make mem-kill`, runs a tenant that keeps a count in a register and the same count in memory and reports the first moment they part, while it is preempted, signaled, and stopped and continued.
 
 Page faults on tenant memory take a shorter path through the endovisor's own fault handler, which sets `exc_pending` directly; that is chapter 12. What the kernel proper sees is the same in both cases: `execute` returns `UserException`, with a `CpuException::PageFault` carrying the address.
 
@@ -242,24 +249,24 @@ With chapters 3 to 7 built, `make hello` boots Linux in QEMU, loads the module, 
 
 ```
 INIT: loading kernelet.ko
-kernelet: kernelet image text [0xffffffffc02bf4a4, 0xffffffffc02cc945), 54433 bytes; virq_entry at +0x1ef9
-kernelet: endovisor loaded: grant 4096 KiB at 0xc00000, linear map 0xffff96b340000000, watch on, mirror on, fpu area 1088 B, tsc 3791992 kHz
+kernelet: kernelet image text [0xffffffffc012f534, 0xffffffffc013cf65), 55857 bytes; virq_entry at +0x1ef9
+kernelet: endovisor loaded: grant 4096 KiB at 0xc00000, linear map 0xffff91a540000000, watch on, mirror on, fpu area 1088 B, tsc 3791992 kHz
 INIT: running /tests/10-hello
 RUN-HELLO: creating a sandbox from /hello.klet
 kernelet: host offsets: gs:current 0x1fac0, gs:preempt_count 0x1fac8, task->kernelet +1968, gate->vrec +8
-kernelet: root carrier exec (pid 34), address space emptied, 1 virtual CPU(s), cmdline ""
-kernelet: vcpu 0 carrier starting (pid 35)
-kernelet: service stub: 34 cycles through the stack switch, 25 for the service body alone (least of 7 rounds of 2000, rdtsc, interrupts off)
-kernelet: vOSTD up: grant 0xc00000..0x1000000, linear map 0xffff96b340000000, 1 vCPU(s), tsc 3791992 kHz, fpu area 1088 B
-kernelet: space 1 created: root 0x902000, area [0x10000, 0x7ffffffff000), its own inode, mm owner a task
+kernelet: root carrier exec (pid 33), address space emptied, 1 virtual CPU(s), cmdline ""
+kernelet: vcpu 0 carrier starting (pid 34)
+kernelet: service stub: 37 cycles through the stack switch, 22 for the service body alone (least of 7 rounds of 2000, rdtsc, interrupts off)
+kernelet: vOSTD up: grant 0xc00000..0x1000000, linear map 0xffff91a540000000, 1 vCPU(s), tsc 3791992 kHz, fpu area 1088 B
+kernelet: space 1 created: root 0x8ad000, area [0x10000, 0x7ffffffff000), its own inode, mm owner a task
 kernelet: Hello, world
 kernelet:
 kernelet: stopped, exit code 0
-kernelet: vcpu 0 carrier (pid 35) dying
-kernelet: root carrier (pid 34) dying
-kernelet: vcpu 0 carrier (pid 35) lifeline closed
-kernelet: root carrier (pid 34) lifeline closed, the last one
-RUN-HELLO: root carrier (pid 34) killed by signal 9
+kernelet: vcpu 0 carrier (pid 34) dying
+kernelet: root carrier (pid 33) dying
+kernelet: vcpu 0 carrier (pid 34) lifeline closed
+kernelet: root carrier (pid 33) lifeline closed, the last one
+RUN-HELLO: root carrier (pid 33) killed by signal 9
 RUN-HELLO: no carrier left (module references: 0)
 RUN-HELLO: done
 INIT: /tests/10-hello exited 0

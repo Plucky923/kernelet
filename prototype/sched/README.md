@@ -11,10 +11,10 @@ sandbox's command line picks one with `mode=`:
 | mode | test | what it shows |
 |---|---|---|
 | `policy` | `make sched-policy` | the policy is obeyed and it preempts; the trace is checked against a reference model (`bench/sched-model.py`) |
-| `coop`, `coop-over` | `make sched-coop` | with the mirror on, Linux never deschedules a carrier inside a kernelet critical section; with it off it does; an overstayer is forced to yield within two ticks |
+| `coop`, `coop-over` | `make sched-coop` | with the mirror on, Linux never deschedules a carrier inside a kernelet critical section; with it off it does; an overstayer is forced to yield at the first tick at least a millisecond after the first strike, about 2 ms on this machine (the check allows 4000 us, because a late tick lengthens it) |
 | `fpu` | `make sched-fpu` | two tenant threads in two address spaces on one vCPU keep their floating-point registers across every switch |
 | `fair` | `make sched-fair` (measurement) | a sibling control group's share of the processors does not depend on how many tasks the sandbox runs |
-| `perf` | `make sched-perf` (measurement) | the cost of a kernelet task switch and wake-up, beside native Linux's |
+| `perf` | `make sched-perf` (measurement) | the cost of a kernelet task switch, a wake-up on the same and on the other vCPU, and a round trip between two tenant processes on one vCPU (timed in user mode, like the native one), beside native Linux's |
 
 The book explains the task layer and virtual CPUs in chapter 8, the mirror,
 the yield stubs and the bound in chapter 10, and the numbers in chapter 14.

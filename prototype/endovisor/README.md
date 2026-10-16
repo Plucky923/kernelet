@@ -28,7 +28,8 @@ in this directory is the Kbuild file.
 |---|---|---|
 | `klet_watch` | 1 | the per-processor watch timer: the kernelet's tick, the delivery of virtual interrupts into kernelet code, and the bound on a critical section; `make yield` turns it off for its control boot |
 | `klet_mirror` | 1 | vOSTD mirrors its guard depth into Linux's preemption count; `make sched-coop` turns it off for its control boot |
-| `klet_test_hooks` | 0 | the test hook: a `vm_map` whose protection carries `KLET_PROT_TEST_SLEEP` sleeps `klet_test_sleep_ms` (20 ms) in Linux; `make mem-conc` turns it on |
+| `klet_test_hooks` | 0 | the test hook: a `vm_map` whose protection carries `KLET_PROT_TEST_SLEEP` sleeps in Linux; `make mem-conc` turns it on |
+| `klet_test_sleep_ms` | 20 | how long such a `vm_map` sleeps, in milliseconds |
 
 ## Files
 

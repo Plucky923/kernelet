@@ -39,9 +39,10 @@ The kernel proper and vOSTD are one Rust static library, pre-linked into one
 relocatable object, the **image**, which is linked into the endovisor module.
 The image calls no Linux symbol: everything it needs from the host is a
 service in the table the endovisor hands it at entry. The endovisor is an
-ordinary out-of-tree module apart from the gate, a patch to Linux of 183
-added lines, most of them in the generic entry code and `kernel/fork.c`. The kernelet runtime is the user-space
-program that creates a sandbox, by exec'ing a `.klet` file that the
+ordinary out-of-tree module apart from the gate, a patch to Linux that adds
+197 lines (175 of them not blank) and removes none, most of them in the generic
+entry code and `kernel/fork.c`. The kernelet runtime is the user-space program
+that creates a sandbox, by exec'ing a `.klet` file that the
 endovisor's binary-format handler turns into the sandbox's root carrier.
 
 Each directory has a `README.md` saying what is in it.
@@ -54,20 +55,29 @@ Each directory has a `README.md` saying what is in it.
   (or `make QEMU=/path/to/qemu-system-x86_64 ...`). The guests use two CPUs and
   512 MiB.
 - **Rust** through `rustup`: `rust-toolchain.toml` names the nightly
-  (`nightly-2026-07-21`, with `rust-src`), and `rustup` installs it on first
-  use. The image is built with `-Zbuild-std` for `x86_64-unknown-none`.
-- **What a Linux build needs**: `gcc`, `make`, `flex`, `bison`, `bc`, `perl`,
-  the `libelf` headers (objtool), and `cpio`, `xz`, `curl`, `python3`,
-  `mkswap`.
+  (`nightly-2026-07-21`, with `rust-src` and the `x86_64-unknown-none`
+  target), and `rustup` installs it on first use. The image is built with
+  `-Zbuild-std` for `x86_64-unknown-none`.
+- **What the build needs**: `gcc` with a static C library, including the
+  static `libpthread` (`libc6-dev` on Debian and Ubuntu, `glibc-static` on
+  Fedora), because the runtimes and `init` are linked `-static`; `make`,
+  `patch`, `flex`, `bison`, `bc`, `perl`, the `libelf` headers (objtool),
+  binutils (`ld`, `objcopy`, `readelf`, `nm`), `xz`, `gzip`, `curl`,
+  `python3`, and `mkswap` and `truncate` for `make mem-pressure`.
+- **No root.** Nothing is installed, and the initramfs is written by the
+  kernel's own `usr/gen_init_cpio` from a file list, so its `/dev/console`
+  node needs no `mknod`. QEMU needs read and write access to `/dev/kvm`.
 - **Disk**: the unpacked and built kernel tree takes 1.8 GB under `.build/`,
   the Rust build about 230 MB, the logs and the 512 MiB sparse swap file of
   `make mem-pressure` about 120 MB. `make source` and `make linux` refuse to
-  start with less than 6 GiB free on `/` (`MIN_FREE_GB`).
+  start with less than 6 GiB free on the filesystem `.build/` is on
+  (`MIN_FREE_GB`).
 
 ### From a fresh clone
 
 ```sh
 make crates   # once, online: the Rust crates of Cargo.lock and of -Zbuild-std
+              # (the first build does this itself if the registry lacks them)
 make test     # fetches, unpacks, patches, configures and builds Linux the first
               # time; then builds the image, the module, the runtime and the
               # initramfs for each test, boots, and checks the log
@@ -80,9 +90,10 @@ applies the gate patch, configures and builds the kernel (a `tinyconfig`
 kernel, so this is quick), builds the Rust image, and then runs the tests:
 315 s measured from an empty `.build/` on an eight-core machine, 134 s of them
 in the first test. After that, `make test` takes about three minutes (185 s
-measured), and `make bench` about the same (190 s: eight boots of the sched
-kernel and five of the mem kernel). Every build is `--offline`, so nothing
-after `make crates` and the one download needs the network.
+measured), and `make bench` about the same (about 200 s: eight boots of the
+sched kernel and five of the mem kernel). Every build is `--offline`, so
+nothing after the crates and the one download needs the network; an offline
+build that finds a crate missing says to run `make crates`.
 
 `make test` runs, in order, and stops at the first failure: `hello`, `probe`,
 `yield`, `sched-policy`, `sched-coop`, `sched-fpu`, `mem-func`, `mem-r2`,
@@ -100,38 +111,44 @@ to `.build/bench/<name>.table`.
 | `make test` | the eleven tests below, in order | – |
 | `make bench` | `sched-fair`, `sched-perf`, `mem-perf`, reported | 14 |
 | `make hello` | the 100-line kernel, byte-identical to `hello/upstream/`: "Hello, world", a clean stop, a clean module unload; also the one-off measurement of what a service costs ("service stub: N cycles") | 2, 3, 6 |
-| `make probe` | demand paging, a non-page-fault exception, and eviction of a kernelet spinning in kernel mode when the sandbox is killed | 7, 11, 12 |
+| `make probe` | demand paging, two non-page-fault exceptions (`ud2`, trap 6, and `int3`, trap 3), and eviction of a kernelet spinning in kernel mode when the sandbox is killed | 7, 11, 12 |
 | `make yield` | two boots under `preempt=none`, the watch timer off (the competitor starves) and on (it does not, and the checksums agree) | 9, 10 |
 | `make sched-policy` | the kernelet's own scheduler: its trace checked against a reference model | 8 |
-| `make sched-coop` | three boots: the mirror on (no involuntary deschedule in a critical section), off (the control), and an overstayer forced to yield within two ticks | 10 |
+| `make sched-coop` | three boots: the mirror on (no involuntary deschedule in a critical section), off (the control), and an overstayer forced to yield at the first tick at least a millisecond after the first strike, about 2 ms on this machine (the check allows 4000 us, because a late tick lengthens it) | 10 |
 | `make sched-fpu` | floating-point registers of two tenant threads in two address spaces survive every switch | 8 |
 | `make mem-func` | E2, E3, E4, E10: no Linux fault on mapped pages, fault-around, protection changes, a map under a guard, the withheld set | 12, 13 |
 | `make mem-r2` | E5: the sleeping contract, broken on purpose, ends the kernelet | 13 |
 | `make mem-conc` | E8, E11 on two vCPUs: lockless copies, the contended range lock, a process exiting under a copy, the retire list | 13 |
-| `make mem-kill` | E11: one carrier of a process stopped and continued, then killed from outside; its sibling carries on | 11, 12 |
+| `make mem-kill` | E11 and the carriers as Linux tasks: one carrier of a two-thread process is preempted by a competitor, sent SIGTERM and SIGUSR1 (it lives), stopped and continued, and killed while its sibling faults in the same address space; the kill ends the whole sandbox cleanly. Its tenant runs the rewind check meanwhile: a register count and a memory count that must never part | 7, 11, 12 |
 | `make mem-pressure` | E7: the area's entries survive reclaim and swap | 12 |
 | `make sched-fair` | measurement: a sibling group's share of the processors with 1, 50, and 50 tasks and an overstayer | 10, 14 |
-| `make sched-perf` | measurement: kernelet task switch and wake-up beside native Linux, five boots | 14 |
+| `make sched-perf` | measurement: a kernelet task switch, a wake-up on the same and on the other vCPU, and a round trip between two tenant processes, beside native Linux, five boots; fails if a kernelet measurement has no samples | 14 |
 | `make mem-perf` | measurement: E6 and E9, the memory costs, five boots | 14 |
+| `make sched`, `make mem` | the four sched targets; the six mem targets | 8, 10, 12, 13 |
 | `make crates` | download the Rust crates, once | – |
 | `make source` | download and unpack Linux v6.12 | 4 |
 | `make patch` | apply the gate patch; idempotent | 4 |
-| `make linux` | configure (once, from `linux/config.fragment`) and build the kernel and `modules_prepare` | 4 |
+| `make linux` | configure (once, from `linux/config.fragment`; `make config` does only that) and build the kernel and `modules_prepare` | 4 |
 | `make image` | build vOSTD and the kernel proper named by `KLET_KERNEL` (`hello`, `probe`, `yieldk`, `schedk`, `mem`) and pre-link the image | 3 |
 | `make kernelet-module` | the image, then `endovisor/kernelet.ko` | 3 |
-| `make runtime`, `make initramfs`, `make run` | the runtimes; the initramfs from `.build/stage`; one boot | 3 |
-| `make clean`, `make distclean` | remove the harness's artifacts; also the kernel build | – |
+| `make runtime`, `make initramfs`, `make run` | the runtimes; the initramfs from `.build/stage`; one boot | 5, 7 |
+| `make clean`, `make distclean` | remove the harness's artifacts (the image and module, the runtimes, the staging area and the initramfs, the Rust build, every log and test output); also the kernel build. Neither touches the Linux source tree or the Cargo registry | – |
+
+Internal targets, which the ones above call: `all` (`linux initramfs`),
+`module DIR=<dir>` and `stage-module DIR=<dir>` (an out-of-tree module, built
+against the tree and staged), the `stage-*`, `*-boot` and `check-*` targets.
 
 ## Module parameters
 
-The endovisor takes three, which the tests set through the initramfs's
+The endovisor takes four, which the tests set through the initramfs's
 `/modules/order`:
 
 | parameter | default | what it does | used by |
 |---|---|---|---|
 | `klet_watch` | 1 | the per-processor watch timer: the kernelet's tick, the delivery of virtual interrupts into kernelet code, and the two-tick bound on a critical section | `make yield` (0 for the control boot) |
 | `klet_mirror` | 1 | vOSTD mirrors its guard depth into Linux's preemption count, so that Linux does not deschedule a carrier in a kernelet critical section | `make sched-coop` (0 for the control boot) |
-| `klet_test_hooks` | 0 | the test hook: a `vm_map` carrying `KLET_PROT_TEST_SLEEP` sleeps `klet_test_sleep_ms` (default 20) in Linux | `make mem-conc` (1) |
+| `klet_test_hooks` | 0 | the test hook: a `vm_map` carrying `KLET_PROT_TEST_SLEEP` sleeps in Linux | `make mem-conc` (1) |
+| `klet_test_sleep_ms` | 20 | how long such a `vm_map` sleeps, in milliseconds | – |
 
 ## The serial log
 
@@ -155,16 +172,32 @@ ticks and upcalls), which is the last thing in every log.
 
 ## Signals, stops and memory
 
-- **Signals.** A carrier's pending signals are drained by the endovisor on its
-  way to user mode. A fault signal Linux raised for the tenant's own
-  instruction (`SIGSEGV`, `SIGBUS`, `SIGILL`, `SIGFPE`, `SIGTRAP` with a
-  fault's `si_code`, and the `SIGSEGV` of a general-protection fault) becomes
-  the CPU exception the kernel proper sees; every other signal is dropped,
-  except two. `SIGKILL` is Linux's, and kills the carrier. `SIGSTOP` stops a
-  vCPU carrier the way it stops any task, and **a stopped carrier is a stopped
-  virtual CPU**: the kernelet's tasks on it do not run, a sibling vCPU waiting
-  for one of them waits, until `SIGCONT`. The root carrier never returns to
-  user mode and cannot stop; it drops `SIGSTOP`.
+- **Signals.** A signal whose default action is to end a task without a core
+  dump (`SIGHUP`, `SIGINT`, `SIGTERM`, `SIGUSR1`, `SIGUSR2`, `SIGALRM`,
+  `SIGPIPE`, `SIGIO`, `SIGPROF`, `SIGVTALRM`, `SIGSTKFLT`, `SIGPWR` and the
+  real-time signals) is ignored by every carrier: the endovisor sets them to
+  `SIG_IGN` when the root carrier execs the `.klet` file, and the vCPU
+  carriers inherit it. Otherwise Linux would kill the carrier the moment
+  such a signal was sent, before the endovisor ever saw it. Every other
+  signal is drained by the endovisor on the carrier's way to user mode. A
+  fault signal Linux raised for the tenant's own instruction becomes the CPU
+  exception the kernel proper sees: `SIGSEGV`, `SIGBUS`, `SIGILL`, `SIGFPE`
+  and `SIGTRAP` with a fault's `si_code`, and `SIGSEGV`, `SIGBUS`, `SIGTRAP`
+  and `SIGFPE` with `SI_KERNEL`, which is how Linux reports #GP, #TS, #NP,
+  #SS, #BP and the legacy #MF. The rest are dropped, except two. `SIGKILL` is
+  Linux's, and kills the carrier. `SIGSTOP` stops a vCPU carrier the way it
+  stops any task, and **a stopped carrier is a stopped virtual CPU**: the
+  kernelet's tasks on it do not run, a sibling vCPU waiting for one of them
+  waits, until `SIGCONT`. The root carrier never returns to user mode and
+  cannot stop; it drops `SIGSTOP`.
+- **Losing a carrier ends the sandbox.** When any carrier dies while the
+  sandbox is live, killed by an operator or by the OOM killer, the endovisor
+  kills the rest and evicts whatever is still running kernelet code: a
+  sandbox that has lost a virtual CPU would otherwise run on with the others
+  spinning on whatever locks the lost one held.
+- **An idle virtual CPU is not load.** A carrier asleep in `vcpu_idle`, or
+  waiting to be booted, sleeps with `TASK_NOLOAD`, so it does not count in
+  the host's load average.
 - **Memory.** What the kernelet allocates through the host is charged to the
   memory cgroup of the carrier that asked, which is the sandbox's: its heap
   (`mem_alloc`, `GFP_KERNEL_ACCOUNT`), its kernelet stacks (`__vmalloc` with

@@ -115,14 +115,6 @@ impl<'a, G: PinCurrentCpu> TlbFlusher<'a, G> {
         self.num_pages += n;
     }
 
-    /// Issues an operation and a frame reference that may be released only
-    /// after it has been performed. The reference is taken over raw.
-    #[allow(dead_code)]
-    pub(crate) fn issue_tlb_flush_with(&mut self, op: TlbFlushOp, frame: Paddr) {
-        self.frames.push(frame);
-        self.issue_tlb_flush(op);
-    }
-
     fn is_empty(&self) -> bool {
         !self.all && self.num_ops == 0 && self.frames.is_empty()
     }

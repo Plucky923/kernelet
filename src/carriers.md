@@ -67,6 +67,8 @@ static int klet_load_binary(struct linux_binprm *bprm)
 	root = klet_carrier_new(inst, KLET_ROOT, -1);
 	klet_carrier_attach(root);                  /* install the gate and the lifeline */
 	kernel_sigaction(SIGCHLD, SIG_IGN);         /* children are reaped without a wait */
+	for (i = 0; i < ARRAY_SIZE(terminate); i++)  /* SIGTERM, SIGINT, SIGUSR1 and their kind: ignored, see chapter 7 */
+		kernel_sigaction(terminate[i], SIG_IGN);
 
 	set_thread_flag(TIF_NOTIFY_RESUME);         /* make the resume hook run on the way out */
 	return 0;
@@ -196,7 +198,7 @@ static int klet_lifeline_release(struct inode *inode, struct file *file)
 
 A clone starts with a copy of its parent's descriptor table, which is why `klet_carrier_main` closes the inherited copy of the root's lifeline first: otherwise the root's death notice would wait until the last carrier died. A tenant cannot close a lifeline, because closing a descriptor is a Linux system call, and the gate takes those.
 
-When a lifeline closes, the endovisor takes the carrier off its lists. If it was the *root's* lifeline, the sandbox is over: the endovisor marks the kernelet dying and ends every other carrier, which is chapter 11.
+When a lifeline closes, the endovisor takes the carrier off its lists. If the sandbox was still running, whichever carrier's lifeline it was, the sandbox is over: the endovisor marks the kernelet dying and ends every other carrier, which is chapter 11. The root's lifeline ends it even after the kernelet has stopped itself, for a reason chapter 11 gives.
 
 <div class="recap">
 

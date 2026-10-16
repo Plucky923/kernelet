@@ -176,6 +176,8 @@ Two separate fields in the record stand for the two ways a kernel holds things o
 
 Both are updated by the virtual CPU that owns the record, with single instructions where it matters, because the endovisor reads them from an interrupt on the same processor and the upcall writes them. If a guard's increment compiled to a load, an add and a store, and an upcall ran between the load and the store and changed the word itself, the store would overwrite the upcall's change; a single `inc` cannot be split by an interrupt.
 
+Kernel-mode preemption has one more consequence, which OSTD on a machine never meets, because its interrupts never switch tasks underneath kernel code. `reschedule` (chapter 8) makes its decision and then switches; between the two, the run queue has already made the chosen task its current one and put the still-running task back in the queue. An upcall that lands in that window and calls `might_preempt` would decide again, and could pick the task that is still running, which the switch then waits for without end. So vOSTD marks the window with a flag in the virtual CPU's local storage, set when the decision is made and cleared by the task switched to, and `might_preempt` does nothing while it is set. The preemption is not lost: the need-preempt flag stays set, and is acted on after the switch.
+
 A bit that was left pending while interrupts were masked must still be delivered. The guard that unmasks does it:
 
 *Simplified from `prototype/vostd/src/task/preempt/cpu_local.rs` and `prototype/vostd/src/vcpu.rs`: `irq_unmask`, `deliver_if_pending`, `handle_virq`.*

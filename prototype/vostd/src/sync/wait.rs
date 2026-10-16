@@ -1,8 +1,9 @@
 // SPDX-License-Identifier: MPL-2.0
 
-//! Wait queues. Ported verbatim from real OSTD at `ab9a4cfdc`, minus its
-//! `#[ktest]` module; the memory-order reasoning in the original comments holds
-//! unchanged.
+//! Wait queues. The code is real OSTD's at `ab9a4cfdc`, verbatim but for the
+//! order of one `use` list and without its `#[ktest]` module; most of its doc
+//! comments are not carried over, and the memory-order reasoning in the
+//! original's holds unchanged.
 
 use alloc::{collections::VecDeque, sync::Arc};
 use core::sync::atomic::{AtomicBool, AtomicU32, Ordering};

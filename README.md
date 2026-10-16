@@ -19,8 +19,9 @@ make render PAGE=the-gate.html OUT=/tmp/gate.png   # screenshot a page and check
 ## Building and running the prototype
 
 ```sh
+make crates         # once, with a network: the Rust crates (make test does it too if they are missing)
 make test           # build everything, boot it in QEMU, run the tests the book mentions
 make bench          # the measurements of the last chapter
 ```
 
-Both delegate to `prototype/Makefile`, which has the details and the individual targets. The first `make test` downloads Linux 6.12 (about 140 MB), builds it, and runs the tests, about five minutes on eight cores; later runs take about three minutes. It needs about 2.5 GB of disk under `prototype/.build/`, a Rust nightly toolchain (`prototype/rust-toolchain.toml` names it; `rustup` installs it), `gcc`, `make`, `flex`, `bison`, `bc`, `libelf` headers, `cpio`, `xz`, `curl`, `python3` and QEMU with KVM. `prototype/README.md` has the full list.
+All three delegate to `prototype/Makefile`, which has the details and the individual targets. The first `make test` downloads Linux 6.12 (about 140 MB), builds it, and runs the tests, about five minutes on eight cores; later runs take about three minutes. It needs no root, about 2.5 GB of disk under `prototype/.build/`, a Rust nightly toolchain (`prototype/rust-toolchain.toml` names it; `rustup` installs it), `gcc` with a static C library including the static `libpthread` (`libc6-dev` on Debian and Ubuntu, `glibc-static` on Fedora), `make`, `patch`, `flex`, `bison`, `bc`, `libelf` headers, `xz`, `gzip`, `curl`, `python3` and QEMU with KVM. `prototype/README.md` has the full list.

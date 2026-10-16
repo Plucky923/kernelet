@@ -55,17 +55,18 @@ Where each carrier is at the moment of the mark decides what stops it:
 
 ## Stopping from outside
 
-The operator kills the root carrier, or the out-of-memory killer does, or the test's runtime does it (`make probe`, at the end of this chapter): `kill(pid, SIGKILL)` on the root carrier's process id. The root carrier is in its resume hook, sleeping in `wait_event_interruptible`; the signal wakes it, it dies, and Linux closes its descriptors, among them its lifeline. The lifeline's release is the endovisor's notice:
+The operator kills a carrier, or the out-of-memory killer does, or the test's runtime does it (`make probe`, at the end of this chapter): `kill(pid, SIGKILL)` on the root carrier's process id, or on a virtual CPU's. The root carrier is in its resume hook, sleeping in `wait_event_interruptible`; the signal wakes it, it dies, and Linux closes its descriptors, among them its lifeline. A virtual CPU's carrier dies the same way wherever the signal can reach it. Either lifeline's release is the endovisor's notice:
 
 *Simplified from `prototype/endovisor/carrier.c`: `klet_carrier_lifeline_closed`, `klet_kill_instance`.*
 
 ```c
 void klet_carrier_lifeline_closed(struct klet_carrier *c)
 {
+	bool live = !inst->stopped && !inst->dying;  /* the sandbox was running when this carrier died */
 	list_del_init(&c->link);
 	last = atomic_dec_and_test(&inst->nr_carriers);
-	if (c->kind == KLET_ROOT && !last)
-		klet_kill_instance(inst);                /* the root's death is the sandbox's death */
+	if ((c->kind == KLET_ROOT || live) && !last)
+		klet_kill_instance(inst);                /* a carrier's death is the sandbox's death */
 	/* release what a carrier killed in user mode never detached: its stack, its empty address space */
 	klet_carrier_put(c);
 }
@@ -79,7 +80,9 @@ void klet_kill_instance(struct klet_inst *inst)
 }
 ```
 
-A carrier of a virtual CPU that the operator kills directly while it is in user mode, before any mark is set, passes through the resume hook once more, since the signal counts as pending work, but the hook finds no mark and steps aside; Linux kills the task, and `klet_detach` never runs for it. The lifeline's release frees what the detach would have: this is why the death notice, not the detach, is the place where a carrier's records are finally released.
+Any carrier's death while the sandbox is running ends it: a sandbox that had lost a virtual CPU would otherwise run on, with the others spinning on whatever locks the lost one held. The root's death ends it even after the kernelet has stopped itself, for a reason the next section makes clear: a virtual CPU that the stop left spinning in kernel mode never returns to the gate to die, and only the eviction that `klet_kill_instance` arms gets it out.
+
+A carrier of a virtual CPU that the operator kills directly while it is in user mode, before any mark is set, passes through the resume hook once more, since the signal counts as pending work, but the hook finds no mark and steps aside; Linux kills the task, and `klet_detach` never runs for it. The lifeline's release frees what the detach would have: this is why the death notice, not the detach, is the place where a carrier's records are finally released, and, since the sandbox was running, where the rest of the sandbox is told to die.
 
 ## Eviction
 
@@ -153,10 +156,12 @@ A carrier that is not on a processor at that instant is sent nothing; it is caug
 
 `make probe` runs the kernel in `prototype/probe/src/lib.rs`, whose handler for system call number 1000 is `loop {}`. The test's runtime waits a second and then kills the root carrier. The log shows the root's lifeline closing, the sweep being armed, the spinning carrier evicted within one or two sweeps at an address Linux's symbol lookup places inside the kernelet's user-task function, both carriers dying, and the module unloading with its reference count at zero. The build checks each of those lines and that Linux printed no warning.
 
-The same test exercises the two other mechanisms of chapter 7 that the hundred-line kernel never reaches: a demand-paging fault (chapter 12) and an illegal instruction, which the kernel proper steps over.
+The same test exercises the other mechanisms of chapter 7 that the hundred-line kernel never reaches: a demand-paging fault (chapter 12), an illegal instruction (`ud2`), which the kernel proper steps over, and a breakpoint (`int3`), the one exception Linux reports with `SI_KERNEL` that a test can raise at will.
+
+One of the memory tests, `make mem-kill`, kills a virtual CPU's carrier instead of the root, while its sibling is taking page faults in the same address space, and checks that the whole sandbox ends cleanly, with the module's reference count at zero. On the way it sends that carrier `SIGTERM` and `SIGUSR1`, which chapter 7 said are discarded, and checks that it lives.
 
 <div class="recap">
 
-**Recap.** A kernelet ends by the `stop` service or by the root carrier's death; either marks the instance and sends `SIGKILL` to every carrier. A carrier in user mode dies by Linux's own exit path, after the gate's hook sees the mark and detaches it; one asleep in a killable service is woken, and either leaves for good itself or returns into kernelet code to be evicted. A carrier running kernelet code is evicted: a timer on its processor finds the interrupted instruction in the image's text at depth 0 and points it at an exit stub, which leaves through the stack switch for good. The last lifeline's release is the sandbox's end.
+**Recap.** A kernelet ends by the `stop` service or by the death of any of its carriers; either marks the instance and sends `SIGKILL` to every carrier. A carrier in user mode dies by Linux's own exit path, after the gate's hook sees the mark and detaches it; one asleep in a killable service is woken, and either leaves for good itself or returns into kernelet code to be evicted. A carrier running kernelet code is evicted: a timer on its processor finds the interrupted instruction in the image's text at depth 0 and points it at an exit stub, which leaves through the stack switch for good. The last lifeline's release is the sandbox's end.
 
 </div>

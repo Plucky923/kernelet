@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MPL-2.0
 
-//! Scheduling related information in a task. Ported verbatim from real OSTD at
-//! `ab9a4cfdc`.
+//! Scheduling related information in a task. The code is real OSTD's at
+//! `ab9a4cfdc`, verbatim; its doc comments are not carried over.
 
 use core::sync::atomic::{AtomicU32, Ordering};
 

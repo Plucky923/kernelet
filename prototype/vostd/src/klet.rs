@@ -108,9 +108,3 @@ pub fn mem_stats() -> MemStats {
 pub fn set_map_test_sleep(on: bool) {
     vm_space::MAP_TEST_SLEEP.store(on, Ordering::Relaxed);
 }
-
-/// How many kernelet spin locks this virtual CPU holds (the sleeping
-/// contract's count).
-pub fn spin_locks_held() -> u32 {
-    crate::sync::r2::held()
-}

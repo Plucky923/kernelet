@@ -24,6 +24,11 @@ _start:
 	#    The kernel proper advances rip by these two bytes.
 	ud2
 
+	# 2b. A breakpoint: Linux turns #BP into SIGTRAP with SI_KERNEL, which
+	#     the resume hook must also hand over, as trap 3. int3 is a trap, so
+	#     rip is already past it and the kernel proper changes nothing.
+	int3
+
 	# 3. A system call whose handler spins inside the kernelet for ever, so
 	#    that the only way to get the CPU back is eviction.
 	movq	$1000, %rax

@@ -673,21 +673,28 @@ static USER_SWITCH_SAMPLES: SpinLock<Vec<u64>> = SpinLock::new(Vec::new());
 fn handle_syscall(info: &TaskInfo, ctx: &mut UserContext) -> bool {
     match ctx.rax() {
         SYS_YIELD => {
-            // For the switch-cost measurement: how long since the *other* tenant
-            // thread of this virtual CPU was last here.
-            let now = read_tsc();
+            // For the switch measurement (tenant role 2): rsi is this thread's
+            // last yield as it timed it in user mode. It is a round trip through
+            // the other tenant thread, and a sample, only if the other thread
+            // was the last to yield on this virtual CPU, i.e. it ran in between:
+            // the same rule as the native measurement's `turn` flag.
             let guard = disable_preempt();
             let v = guard.current_cpu().as_usize();
             {
                 let mut last = USER_SWITCH_LAST.disable_irq().lock();
-                let (last_id, last_tsc) = last[v];
-                if last_id != 0 && last_id != info.id && last_tsc != 0 {
+                let (last_id, _) = last[v];
+                let sample = ctx.rsi() as u64;
+                if info.user.as_ref().is_some_and(|u| u.role == ROLE_PINGPONG)
+                    && last_id != 0
+                    && last_id != info.id
+                    && sample != 0
+                {
                     let mut s = USER_SWITCH_SAMPLES.disable_irq().lock();
                     if s.len() < 8192 {
-                        s.push(now - last_tsc);
+                        s.push(sample);
                     }
                 }
-                last[v] = (info.id, now);
+                last[v] = (info.id, read_tsc());
             }
             drop(guard);
             ctx.set_rax(0);
@@ -923,6 +930,11 @@ static WAKE_Q: WaitQueue = WaitQueue::new();
 static WAKE_READY: AtomicBool = AtomicBool::new(false);
 static WAKE_STAMP: AtomicU64 = AtomicU64::new(0);
 static PERF_PHASE: AtomicU32 = AtomicU32::new(0);
+/// The tenant program's switch-measurement mode (`sched.S`).
+const ROLE_PINGPONG: u64 = 2;
+/// Where the remote waker sleeps until the local half of (b) is over, so that
+/// vCPU 1 is quiet while vCPU 0 is being measured.
+static PHASE2_Q: WaitQueue = WaitQueue::new();
 
 const PERF_ROUNDS: usize = 1500;
 
@@ -1013,12 +1025,14 @@ fn scenario_perf() {
         }
         PERF_PHASE.store(2, Ordering::Release);
         WAKE_Q.wake_all();
+        PHASE2_Q.wake_all();
     })
     .run();
-    kernel_task(34, 1, Some(1), || {
-        while PERF_PHASE.load(Ordering::Acquire) < 2 {
-            Task::yield_now();
-        }
+    // (c), below, runs on vCPU 1 too, at level 0, where it would keep this
+    // level-1 waker from ever running; so the waker starts (c) when it is done.
+    let program_c = program;
+    kernel_task(34, 1, Some(1), move || {
+        PHASE2_Q.wait_until(|| (PERF_PHASE.load(Ordering::Acquire) >= 2 || past_deadline()).then_some(()));
         for _ in 0..PERF_ROUNDS {
             if past_deadline() {
                 break;
@@ -1029,15 +1043,15 @@ fn scenario_perf() {
             burn_us(20);
         }
         PERF_PHASE.store(3, Ordering::Release);
+
+        // (c) two tenant threads of two different address spaces, alternating
+        //     on virtual CPU 1 through a yield system call.
+        let vm_a = new_vm_space(program_c);
+        let vm_b = new_vm_space(program_c);
+        user_task(40, 0, Some(1), vm_a, ROLE_PINGPONG, u64::MAX).run();
+        user_task(41, 0, Some(1), vm_b, ROLE_PINGPONG, u64::MAX).run();
     })
     .run();
-
-    // (c) two tenant threads of one address space, and two of different ones,
-    //     both alternating on virtual CPU 1 through a yield system call.
-    let vm_a = new_vm_space(program);
-    let vm_b = new_vm_space(program);
-    user_task(40, 0, Some(1), vm_a.clone(), 0, u64::MAX).run();
-    user_task(41, 0, Some(1), vm_b.clone(), 0, u64::MAX).run();
 
     reaper(move || {
         percentiles(

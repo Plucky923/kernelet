@@ -54,11 +54,3 @@ pub fn now_ns() -> u64 {
     (cycles / khz) * 1_000_000 + ((cycles % khz) * 1_000_000) / khz
 }
 
-/// Converts a cycle count to nanoseconds.
-pub fn cycles_to_ns(cycles: u64) -> u64 {
-    let khz = TSC_KHZ.load(Ordering::Relaxed);
-    if khz == 0 {
-        return 0;
-    }
-    (cycles / khz) * 1_000_000 + ((cycles % khz) * 1_000_000) / khz
-}

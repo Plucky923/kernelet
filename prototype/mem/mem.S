@@ -26,6 +26,8 @@ dispatch:
 	je	read_one
 	cmpq	$6, %rdi
 	je	write_one
+	cmpq	$7, %rdi
+	je	count
 	movq	$-1, %rbx
 	jmp	report
 
@@ -138,6 +140,48 @@ read_one:
 write_one:
 	.byte	0x4c, 0x89, 0x06	# movq %r8, (%rsi)
 	xorq	%rbx, %rbx
+	jmp	report
+
+# 7: the rewind check, for r8 cycles. Count in a register (r13) and in memory
+# at (rsi) together, rdx iterations at a time, with a checkpoint system call
+# (3101) after each batch. After each checkpoint the two must agree: a return
+# to user mode that put back the registers of an earlier system call would
+# restore the register and not the memory, and then the instructions after the
+# checkpoint see a register that is behind. A mismatch is reported at once
+# (3102: rdi the register, rsi the memory), the two are brought back together,
+# and the count goes on; rbx is how many there were.
+count:
+	movq	%rdx, %r12		# iterations per batch
+	movq	%rsi, %r15		# the memory copy
+	movq	%r8, %r10		# for r10 cycles
+	movq	$0, (%r15)
+	xorq	%r13, %r13		# the register copy
+	xorq	%rbx, %rbx
+	rdtsc
+	shlq	$32, %rdx
+	orq	%rax, %rdx
+	movq	%rdx, %r14		# the start
+1:	movq	%r12, %r9
+2:	incq	%r13
+	incq	(%r15)
+	decq	%r9
+	jnz	2b
+	movq	$3101, %rax		# the checkpoint
+	syscall
+	cmpq	(%r15), %r13
+	je	3f
+	incq	%rbx
+	movq	%r13, %rdi
+	movq	(%r15), %rsi
+	movq	$3102, %rax		# report the mismatch
+	syscall
+	movq	(%r15), %r13		# and resynchronise
+3:	rdtsc
+	shlq	$32, %rdx
+	orq	%rax, %rdx
+	subq	%r14, %rdx
+	cmpq	%r10, %rdx
+	jb	1b
 	jmp	report
 
 report:

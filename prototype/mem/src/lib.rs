@@ -90,6 +90,8 @@ const REGION_W: Vaddr = 0x7000_0000;
 const REGION_BIG: Vaddr = 0x1_0000_0000;
 
 const SYS_REPORT: usize = 3100;
+const SYS_CHECKPOINT: usize = 3101;
+const SYS_REWIND: usize = 3102;
 
 const CMD_TOUCH_READ: u64 = 1;
 const CMD_TOUCH_WRITE: u64 = 2;
@@ -97,6 +99,12 @@ const CMD_CHECK: u64 = 3;
 const CMD_SPIN: u64 = 4;
 const CMD_READ_ONE: u64 = 5;
 const CMD_WRITE_ONE: u64 = 6;
+const CMD_COUNT: u64 = 7;
+
+/// The rewind check's tally (E11, `make mem-kill`): checkpoints the tenant
+/// made, and how many of them found its register and memory counts apart.
+static CHECKPOINTS: AtomicU64 = AtomicU64::new(0);
+static REWINDS: AtomicU64 = AtomicU64::new(0);
 
 const SIGNAL_MARKER: usize = 0x5160_5160;
 
@@ -382,6 +390,29 @@ impl Tenant {
                     if ctx.rax() == SYS_REPORT {
                         ctx.set_rax(0);
                         return ctx.rdi() as u64;
+                    }
+                    if ctx.rax() == SYS_CHECKPOINT {
+                        ctx.set_rax(0);
+                        let n = CHECKPOINTS.fetch_add(1, Ordering::Relaxed) + 1;
+                        if n % 500 == 0 {
+                            println!(
+                                "MEM-REWIND checkpoints={} rewinds={}",
+                                n,
+                                REWINDS.load(Ordering::Relaxed)
+                            );
+                        }
+                        continue;
+                    }
+                    if ctx.rax() == SYS_REWIND {
+                        let (reg, mem) = (ctx.rdi(), ctx.rsi());
+                        ctx.set_rax(0);
+                        REWINDS.fetch_add(1, Ordering::Relaxed);
+                        expect(
+                            "E11 rewind: the tenant's register count kept up with its memory count",
+                            false,
+                            format_args!("(register {}, memory {}: its registers were put back)", reg, mem),
+                        );
+                        continue;
                     }
                     println!("MEM: unexpected system call {}", ctx.rax());
                     poweroff(ExitCode::Failure);
@@ -1213,28 +1244,33 @@ fn conc_a() {
 static E8_RESULT: SpinLock<[u64; 11]> = SpinLock::new([0; 11]);
 
 // ---------------------------------------------------------------------------
-// kill: E11's second half. One carrier of a two-thread process is killed from
-// outside while the other thread keeps faulting in the same address space.
+// kill: E11's second half. One carrier of a two-thread process is preempted,
+// signalled, stopped and continued, and then killed from outside, while the
+// other thread keeps faulting in the same address space; the kill ends the
+// whole sandbox. The killed carrier's tenant runs the rewind check meanwhile.
 // ---------------------------------------------------------------------------
 
 static X_SPACE: SpinLock<Option<Arc<VmSpace>>> = SpinLock::new(None);
 
 /// vCPU 1: creates the space, so that the carrier that dies is the one that
 /// made the address space (the memory controller's owner must not be it: the
-/// endovisor makes the root carrier the owner of every space), then waits in
-/// user mode to be killed.
+/// endovisor makes the root carrier the owner of every space), then runs the
+/// rewind check in user mode until it is killed, while the runtime preempts,
+/// signals, stops and continues its carrier.
 fn kill_victim() {
     let mut t = new_tenant();
     *X_SPACE.lock() = Some(t.space.clone());
     PHASE.store(1, Ordering::Release);
     println!("MEM-KILL-ME vcpu=1");
-    t.run(CMD_SPIN, 0, 0, 60_000 * ostd::time::tsc_khz(), 0);
+    t.run(CMD_COUNT, RESULTS, 200_000, 60_000 * ostd::time::tsc_khz(), 0);
     println!("MEM-KILL vcpu 1 was not killed");
     FAILED.store(true, Ordering::Relaxed);
 }
 
 /// vCPU 0: a second thread of the same process, demand-faulting in a loop
-/// before, during and after its sibling's carrier dies.
+/// until its sibling's carrier dies, and the sandbox with it. It reports its
+/// progress twice a second; it reports nothing else, because the sandbox ends
+/// under it.
 fn kill_survivor() {
     wait_phase(1);
     let x = X_SPACE.lock().clone().unwrap();
@@ -1244,18 +1280,20 @@ fn kill_survivor() {
     let end = read_tsc() + dur * ostd::time::tsc_khz();
     let s0 = stats();
     let mut rounds = 0;
+    let mut next_report = read_tsc();
     while read_tsc() < end {
         t.run(CMD_TOUCH_READ, REGION_F, 64, 0, 0);
         unmap_pages(&t.space, REGION_F, 64);
         rounds += 1;
+        if read_tsc() >= next_report {
+            next_report = read_tsc() + 500 * ostd::time::tsc_khz();
+            println!("MEM-KILL survivor rounds={} faults={}", rounds, faults(&stats().since(&s0)));
+        }
     }
+    // Reached only if the kill never came, or did not end the sandbox.
     let d = stats().since(&s0);
-    println!(
-        "MEM-RESULT e11-kill rounds={} faults={} handled={} maps={}",
-        rounds, faults(&d), t.handled, d.maps
-    );
-    expect("E11 kill: the surviving thread kept faulting in the space after its sibling's carrier died",
-           rounds > 0 && faults(&d) == 4 * rounds,
+    expect("E11 kill: the kill of vCPU 1's carrier ended the sandbox before this thread finished",
+           false,
            format_args!("({} rounds, {} faults)", rounds, faults(&d)));
     finish(());
 }

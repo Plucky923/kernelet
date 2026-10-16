@@ -98,7 +98,7 @@ KLET_RUSTFLAGS := -C relocation-model=static -C code-model=kernel \
 KLET_BUILD_STD := -Zbuild-std=core,alloc,compiler_builtins \
                   -Zbuild-std-features=compiler-builtins-mem
 
-.PHONY: all linux config initramfs run clean distclean module stage-module unstage-module
+.PHONY: all linux config initramfs run clean distclean module stage-module
 .PHONY: patch kernel-proper-check image kernelet-module runtime
 .PHONY: stage-hello stage-probe stage-yield hello probe yield
 .PHONY: check-log check-probe-log check-yield-log
@@ -146,28 +146,35 @@ bench:
 
 # --- the Linux patch (the gate) -----------------------------------------
 
-# Idempotent: a successful reverse dry-run means the patch is already in.
-patch: $(LINUX_DIR)/Makefile
+# Idempotent: a successful reverse dry-run means the patch is already in. The
+# stamp makes it run once per change of the patch, not once per target.
+PATCH_STAMP := $(LINUX_DIR)/.kernelet-gate-patch
+
+patch: $(PATCH_STAMP)
+
+$(PATCH_STAMP): $(PATCH) $(LINUX_DIR)/Makefile
 	@cd $(LINUX_DIR) && \
 	 if patch -p1 -R --dry-run --silent --force < $(PATCH) >/dev/null 2>&1; then \
 	   echo "patch: already applied"; \
 	 else \
 	   patch -p1 --force --silent < $(PATCH) && echo "patch: applied"; \
 	 fi
+	@touch $@
 
 # --- kernel -------------------------------------------------------------
 
-# A clean checkout has no .build/linux-6.12: fetch the tarball, unpack it, throw
-# the tarball away, and patch. The df guard is here because the unpacked tree is
-# about 1.4 GB and a build of it another 2 GB.
+# A clean checkout has no .build/linux-6.12: fetch the tarball, unpack it and
+# throw the tarball away; `patch` then applies the gate. The df guard is here
+# because the unpacked and built tree takes about 1.8 GB.
 LINUX_TARBALL := linux-$(LINUX_VERSION).tar.xz
 LINUX_URL     := https://cdn.kernel.org/pub/linux/kernel/v6.x/$(LINUX_TARBALL)
 MIN_FREE_GB   ?= 6
 
 .PHONY: df-guard
 df-guard:
-	@free=$$(df -BG --output=avail / | tail -1 | tr -dc '0-9'); \
-	 echo "free on /: $${free} GiB (minimum $(MIN_FREE_GB))"; \
+	@mkdir -p $(BUILD); \
+	 free=$$(df -P -BG $(BUILD) | awk 'NR == 2 { print $$4 }' | tr -dc '0-9'); \
+	 echo "free where $(BUILD) is: $${free} GiB (minimum $(MIN_FREE_GB))"; \
 	 test "$$free" -ge "$(MIN_FREE_GB)" || \
 	   { echo "refusing to continue with less than $(MIN_FREE_GB) GiB free"; exit 1; }
 
@@ -179,13 +186,12 @@ $(LINUX_DIR)/Makefile:
 	cd $(BUILD) && tar xf $(LINUX_TARBALL)
 	rm -f $(BUILD)/$(LINUX_TARBALL)
 	@test -f $@ || { echo "unpack failed: no $@"; exit 1; }
-	$(MAKE) --no-print-directory patch
 
 .PHONY: source
-source: $(LINUX_DIR)/Makefile
+source: $(LINUX_DIR)/Makefile $(PATCH_STAMP)
 
 # tinyconfig, then the fragment, then let olddefconfig settle the rest.
-$(CONFIG): $(FRAGMENT) $(LINUX_DIR)/Makefile
+$(CONFIG): $(FRAGMENT) $(PATCH_STAMP)
 	$(KBUILD) tinyconfig
 	cd $(LINUX_DIR) && ARCH=$(ARCH) ./scripts/kconfig/merge_config.sh -m -O . .config $(FRAGMENT)
 	$(KBUILD) olddefconfig
@@ -195,7 +201,7 @@ config: $(CONFIG)
 # `modules` is not redundant next to `modules_prepare`: only it writes the
 # tree's Module.symvers, and without that modpost cannot resolve even
 # _printk for an out-of-tree module.
-linux: $(LINUX_DIR)/Makefile patch $(CONFIG)
+linux: $(PATCH_STAMP) $(CONFIG)
 	$(MAKE) --no-print-directory df-guard
 	$(KBUILD) -j$(JOBS) bzImage
 	$(KBUILD) -j$(JOBS) modules modules_prepare
@@ -212,19 +218,32 @@ stage-module: module
 	mkdir -p $(STAGE)/modules
 	cp $(abspath $(DIR))/*.ko $(STAGE)/modules/
 
-unstage-module:
-	@test -n "$(DIR)" || { echo "usage: make unstage-module DIR=<dir>"; exit 2; }
-	rm -f $(STAGE)/modules/$(notdir $(DIR)).ko
-
 # --- the kernelet image -------------------------------------------------
 
-# Every build is --offline, so that a boot never depends on the network: on a
-# fresh machine this downloads, once, the crates the workspace's Cargo.lock
-# names and the ones the standard library's own build needs.
+# Every build is --offline, so that a boot never depends on the network. The
+# crates the workspace's Cargo.lock names, and the ones the standard library's
+# own build needs, are downloaded once: by `make crates`, or by the first build,
+# through the stamp, if the local registry does not have them yet.
+CRATES_STAMP := $(BUILD)/crates.stamp
+FETCH_STD    := -Zbuild-std=core,alloc,compiler_builtins --target $(RUST_TARGET)
+
 .PHONY: crates
 crates:
 	cd $(CURDIR) && $(CARGO) fetch
-	cd $(CURDIR) && $(CARGO) fetch -Zbuild-std=core,alloc,compiler_builtins --target $(RUST_TARGET)
+	cd $(CURDIR) && $(CARGO) fetch $(FETCH_STD)
+	@mkdir -p $(BUILD) && touch $(CRATES_STAMP)
+
+$(CRATES_STAMP): Cargo.lock
+	@cd $(CURDIR) && \
+	 if $(CARGO) fetch --offline >/dev/null 2>&1 && \
+	    $(CARGO) fetch --offline $(FETCH_STD) >/dev/null 2>&1; then \
+	   echo "crates: every crate is in the local registry"; \
+	 else \
+	   echo "crates: downloading what the local registry lacks (once; needs the network)"; \
+	   $(CARGO) fetch && $(CARGO) fetch $(FETCH_STD) || \
+	   { echo "crates: the download failed; run make crates where there is a network"; exit 1; }; \
+	 fi
+	@mkdir -p $(BUILD) && touch $@
 
 # The kernel proper is never edited: it must stay byte-identical to the
 # template in the Asterinas tree.
@@ -253,11 +272,12 @@ KLET_STACK_PAGES := 64
 # code; made local, the image keeps them and the endovisor gets Linux's.
 IMAGE_LOCAL := memcpy memmove memset memcmp bcmp
 
-image: $(KERNEL_PROPER_DEP)
+image: $(CRATES_STAMP) $(KERNEL_PROPER_DEP)
 	cd $(CURDIR) && CARGO_TARGET_DIR=$(CARGO_DIR) RUSTFLAGS="$(KLET_RUSTFLAGS)" \
 	  OSTD_TASK_STACK_SIZE_IN_PAGES=$(KLET_STACK_PAGES) \
 	  $(CARGO) build --offline --release -p $(KLET_KERNEL) \
-	    --target $(RUST_TARGET) $(KLET_BUILD_STD)
+	    --target $(RUST_TARGET) $(KLET_BUILD_STD) || \
+	  { echo "image: the build failed; it is --offline, so if a crate is missing, run make crates (once, with a network)"; exit 1; }
 	gcc -c -o $(BUILD)/image_start.o endovisor/image_start.S
 	gcc -c -o $(BUILD)/image_end.o endovisor/image_end.S
 	ld -r --gc-sections \
@@ -271,7 +291,7 @@ image: $(KERNEL_PROPER_DEP)
 	@if nm -u $(IMAGE) | grep -q .; then \
 	   echo "image.o has undefined symbols:"; nm -u $(IMAGE); exit 1; fi
 	@echo "image: $$(stat -c %s $(IMAGE)) bytes, relocations:" \
-	  "$$(readelf -rW $(IMAGE) | awk '/^R_X86_64/{print $$1}' | sort -u | tr '\n' ' ')"
+	  "$$(readelf -rW $(IMAGE) | awk '$$3 ~ /^R_X86_64/ { print $$3 }' | sort -u | tr '\n' ' ')"
 	@readelf -rW $(IMAGE) | awk '{print $$3}' | grep -E '^R_' | sort | uniq -c
 
 $(PROBE_ELF): $(CURDIR)/probe/probe.S
@@ -305,14 +325,28 @@ initramfs: $(INITRAMFS)
 
 # /dev/console has to be a real node in the archive: the kernel opens it
 # from the unpacked initramfs to give init its stdio, before init has had a
-# chance to mount devtmpfs.
+# chance to mount devtmpfs. The archive is written by the kernel's own
+# usr/gen_init_cpio from a list of what is in .build/stage, where a device
+# node is one line, so no mknod, and no privilege, is needed: everything in
+# the archive is owned by root, whoever builds it.
+GEN_INIT_CPIO := $(LINUX_DIR)/usr/gen_init_cpio
+INITRAMFS_LIST := $(BUILD)/initramfs.list
+
+$(GEN_INIT_CPIO): $(PATCH_STAMP)
+	$(KBUILD) usr/gen_init_cpio
+
 .PHONY: $(INITRAMFS)
-$(INITRAMFS): initramfs/init.c
+$(INITRAMFS): initramfs/init.c $(GEN_INIT_CPIO)
 	gcc -static -O2 -Wall -Wextra -o $(INIT) initramfs/init.c
 	mkdir -p $(STAGE)/dev $(STAGE)/proc $(STAGE)/sys $(STAGE)/modules $(STAGE)/tests
+	rm -f $(STAGE)/dev/console
 	cp $(INIT) $(STAGE)/init
-	test -c $(STAGE)/dev/console || mknod -m 600 $(STAGE)/dev/console c 5 1
-	cd $(STAGE) && find . -print0 | cpio --null --create --format=newc --quiet | gzip -9 > $@
+	cd $(STAGE) && { \
+	  find . -mindepth 1 -type d -printf 'dir /%P %m 0 0\n'; \
+	  echo 'nod /dev/console 0600 0 0 c 5 1'; \
+	  find . -type f -printf 'file /%P $(STAGE)/%P %m 0 0\n'; \
+	} > $(INITRAMFS_LIST)
+	$(GEN_INIT_CPIO) $(INITRAMFS_LIST) | gzip -9 > $@
 	@ls -l $@
 
 # --- staging the prototype ----------------------------------------------
@@ -471,6 +505,8 @@ check-sched-policy:
 	    echo "  BAD     the log contains $$pat"; rc=1; \
 	  else echo "  ok      no $$pat"; fi; \
 	done; \
+	if grep -qF 'delete_module kernelet failed' $(SCHED_POLICY_LOG) || ! grep -qF 'kernelet: STATS' $(SCHED_POLICY_LOG); then \
+	  echo "  BAD     $(SCHED_POLICY_LOG): the module did not unload cleanly"; rc=1; fi; \
 	if [ $$rc -eq 0 ]; then echo "make sched-policy: PASS"; else echo "make sched-policy: FAIL"; fi; \
 	exit $$rc
 
@@ -486,6 +522,8 @@ check-sched-fpu:
 	for pat in $(CHECK_BAD); do \
 	  if grep -qF "$$pat" $(SERIAL); then echo "  BAD     the log contains $$pat"; rc=1; fi; \
 	done; \
+	if grep -qF 'delete_module kernelet failed' $(SERIAL) || ! grep -qF 'kernelet: STATS' $(SERIAL); then \
+	  echo "  BAD     $(SERIAL): the module did not unload cleanly"; rc=1; fi; \
 	if [ $$rc -eq 0 ]; then echo "make sched-fpu: PASS"; else echo "make sched-fpu: FAIL"; fi; \
 	exit $$rc
 
@@ -524,6 +562,8 @@ check-sched-coop:
 	  for pat in $(CHECK_BAD); do \
 	    if grep -qF "$$pat" $$f; then echo "  BAD     $$f contains $$pat"; rc=1; fi; \
 	  done; \
+	  if grep -qF 'delete_module kernelet failed' $$f || ! grep -qF 'kernelet: STATS' $$f; then \
+	    echo "  BAD     $$f: the module did not unload cleanly"; rc=1; fi; \
 	done; \
 	if [ $$rc -eq 0 ]; then echo "make sched-coop: PASS"; else echo "make sched-coop: FAIL"; fi; \
 	exit $$rc
@@ -560,6 +600,8 @@ check-sched-fair:
 	  if [ "$${n:-99}" -le 3 ]; then \
 	    echo "  ok      $$f: the host never saw more than $$n runnable task(s) of the sandbox"; \
 	  else echo "  BAD     $$f: the host saw $$n runnable tasks of the sandbox"; rc=1; fi; \
+	  if grep -qF 'delete_module kernelet failed' $$f || ! grep -qF 'kernelet: STATS' $$f; then \
+	    echo "  BAD     $$f: the module did not unload cleanly"; rc=1; fi; \
 	  for pat in $(CHECK_BAD); do \
 	    if grep -qF "$$pat" $$f; then echo "  BAD     $$f contains $$pat"; rc=1; fi; \
 	  done; \
@@ -574,6 +616,8 @@ check-sched-perf:
 	  for pat in $(CHECK_BAD); do \
 	    if grep -qF "$$pat" $$f; then echo "  BAD     $$f contains $$pat"; rc=1; fi; \
 	  done; \
+	  if grep -qF 'delete_module kernelet failed' $$f || ! grep -qF 'kernelet: STATS' $$f; then \
+	    echo "  BAD     $$f: the module did not unload cleanly"; rc=1; fi; \
 	done; \
 	if [ $$rc -eq 0 ]; then echo "make sched-perf: PASS"; else echo "make sched-perf: FAIL"; fi; \
 	exit $$rc
@@ -592,7 +636,7 @@ MEM_LOGDIR    := $(BUILD)/mem
 SWAP_IMG      := $(MEM_LOGDIR)/swap.img
 
 .PHONY: stage-mem mem-boot mem mem-func mem-r2 mem-conc mem-kill mem-pressure mem-perf
-.PHONY: check-mem-log check-mem-r2 check-mem-perf check-mem-stop
+.PHONY: check-mem-log check-mem-r2 check-mem-perf check-mem-kill
 
 stage-mem: kernelet-module runtime
 	mkdir -p $(STAGE)/modules $(STAGE)/tests
@@ -664,21 +708,47 @@ mem-conc:
 	  MEM_MODPARAMS="klet_test_hooks=1" MEM_LOG=conc
 	@$(MAKE) --no-print-directory check-mem-log MEM_LOG=conc
 
-# E11's second half: one carrier of a two-thread process killed from outside
-# while its sibling keeps faulting in the same space.
+# E11's second half, and the carriers as Linux tasks: vCPU 1's carrier of a
+# two-thread process is preempted (a competitor on its processor), sent
+# SIGTERM and SIGUSR1 (ignored: it must live), stopped and continued, and
+# killed, while vCPU 0's tenant thread faults in the same address space. The
+# kill must end the whole sandbox cleanly. All the while vCPU 1's tenant runs
+# the rewind check: its register count and its memory count must never part.
 mem-kill:
-	$(MAKE) mem-boot MEM_VCPUS=2 MEM_ARGS="mode=kill dur=6000" MEM_RUNMODE=kill MEM_LOG=kill
-	@$(MAKE) --no-print-directory check-mem-log MEM_LOG=kill
-	@$(MAKE) --no-print-directory check-mem-stop
+	$(MAKE) mem-boot MEM_VCPUS=2 MEM_ARGS="mode=kill dur=20000" MEM_RUNMODE=kill MEM_LOG=kill
+	@$(MAKE) --no-print-directory check-mem-kill
 
-# Before the kill, the runtime stops vCPU 1's carrier and lets it go on: Linux's
-# own stop handling must apply to a carrier as to any task.
-check-mem-stop:
-	@f=$(MEM_LOGDIR)/kill.log; \
+check-mem-kill:
+	@f=$(MEM_LOGDIR)/kill.log; rc=0; \
+	sed 's/\r$$//' $$f | grep -E 'MEM-CHECK|MEM-REWIND|RUN-MEM|lifeline closed|sandbox is dying|evicting' | tail -n 24; \
+	if grep -q 'MEM-CHECK FAIL' $$f; then echo "  BAD     a check failed"; rc=1; fi; \
+	n=$$(grep -ao 'MEM-REWIND checkpoints=[0-9]* rewinds=[0-9]*' $$f | tail -1); \
+	cp=$$(echo "$$n" | sed 's/.*checkpoints=\([0-9]*\).*/\1/'); \
+	rw=$$(echo "$$n" | sed 's/.*rewinds=//'); \
+	if [ "$${cp:-0}" -ge 1000 ] && [ "$${rw:-1}" = 0 ]; then \
+	  echo "  ok      the rewind check made $$cp checkpoints across the preemption, the signals and the stop, and none found the tenant's registers put back"; \
+	else echo "  BAD     the rewind check: $${n:-no report}"; rc=1; fi; \
+	for pat in 'RUN-MEM: preempted the carrier of vcpu 1' \
+	           'is alive (state ' 'the root carrier alive' \
+	           'MEM-KILL survivor rounds=' \
+	           'lifeline closed, the sandbox is dying' \
+	           'a carrier is gone, the sandbox is dying' \
+	           'RUN-MEM: no carrier left (module references: 0)' 'INIT: done'; do \
+	  if grep -qF "$$pat" $$f; then echo "  ok      $$pat"; else echo "  MISSING $$pat"; rc=1; fi; \
+	done; \
 	if grep -q 'vcpu 1 carrier state [RS], after SIGSTOP T, after SIGCONT [RS]' $$f; then \
 	  echo "  ok      SIGSTOP stopped the carrier of vcpu 1 (state T) and SIGCONT let it go on"; \
-	else echo "  BAD     the carrier of vcpu 1 did not stop and go on:"; \
-	  grep -a 'carrier state' $$f; exit 1; fi
+	else echo "  BAD     the carrier of vcpu 1 did not stop and go on"; rc=1; fi; \
+	if grep -q 'root carrier (pid [0-9]*) lifeline closed' $$f; then echo "  ok      the root carrier died"; \
+	else echo "  MISSING the root carrier's death"; rc=1; fi; \
+	if grep -qF 'MEM-DONE' $$f; then echo "  BAD     the sandbox outlived the kill of a carrier"; rc=1; fi; \
+	if grep -qF 'delete_module kernelet failed' $$f; then echo "  BAD     unclean module unload"; rc=1; \
+	else echo "  ok      clean module unload"; fi; \
+	for pat in $(CHECK_BAD); do \
+	  if grep -qF "$$pat" $$f; then echo "  BAD     the log contains $$pat"; grep -nF "$$pat" $$f | head -3; rc=1; \
+	  else echo "  ok      no $$pat"; fi; \
+	done; \
+	if [ $$rc -eq 0 ]; then echo "kill: PASS"; else echo "kill: FAIL"; fi; exit $$rc
 
 # E7: the area's entries survive reclaim. A 512 MiB sparse swap file on a
 # virtio disk; the hog in run-mem pushes the guest into swap.
@@ -763,7 +833,7 @@ yield:
 	@$(MAKE) --no-print-directory check-yield-log
 
 # Everything the log must contain, and everything it must not.
-CHECK_BAD := 'BUG:' 'Oops' 'WARNING:' 'Call Trace'
+CHECK_BAD := 'BUG:' 'Oops' 'WARNING:' 'Call Trace' 'switching to a task already running'
 
 # The control boot (tick off) is expected to starve the competitor, so it is
 # reported rather than asserted; the real boot (tick on) is asserted.
@@ -838,6 +908,7 @@ check-probe-log:
 	@rc=0; \
 	for pat in 'probe: demand paging: read back "PROBE-OK"' \
 	           'probe: illegal instruction at' \
+	           'probe: breakpoint before' \
 	           'probe: spinning inside the kernelet at depth 0' \
 	           'kernelet: evicting vcpu carrier' \
 	           'INIT: unloading kernelet' 'INIT: done'; do \
@@ -889,8 +960,9 @@ clean:
 	-$(KBUILD) M=$(CURDIR)/endovisor clean
 	rm -f $(IMAGE) $(HELLO_ELF) $(PROBE_ELF) $(YIELD_ELF) $(SCHED_ELF) $(CURDIR)/mem/mem $(RUNTIME)
 	rm -f $(BUILD)/run-probe $(BUILD)/run-yield $(BUILD)/run-sched $(BUILD)/run-mem
-	rm -f $(BUILD)/image_start.o $(BUILD)/image_end.o $(BUILD)/serial-*.log
-	rm -rf $(CARGO_DIR) $(MEM_LOGDIR)
+	rm -f $(BUILD)/image_start.o $(BUILD)/image_end.o $(INITRAMFS_LIST)
+	rm -f $(BUILD)/*.log $(BUILD)/*.out
+	rm -rf $(CARGO_DIR) $(MEM_LOGDIR) $(BENCH_OUT) $(BUILD)/loops
 
 # Also throws away the configured and built kernel.
 distclean: clean

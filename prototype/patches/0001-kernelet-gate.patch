@@ -1,8 +1,8 @@
 kernelet gate: two hooks in the generic entry layer, a task_struct pointer,
 a syscall-work bit, a helper for changing a user task's address space, one for
-allocating a tenant process's address space, and the exports an endovisor
-module needs (kernel_clone, set_memory_ro/rox/rw, and flush_tlb_mm_range for
-the synchronous flush of vm_flush).
+allocating a tenant process's address space, and the two exports an endovisor
+module needs that Linux does not already make: kernel_clone, and
+flush_tlb_mm_range for the synchronous flush of vm_flush.
 
 Signed-off-by: kernelet-in-Linux prototype <none@example.com>
 ---
@@ -176,7 +176,15 @@ Signed-off-by: kernelet-in-Linux prototype <none@example.com>
  
 --- a/kernel/fork.c
 +++ b/kernel/fork.c
-@@ -1337,6 +1337,86 @@
+@@ -96,6 +96,7 @@
+ #include <linux/thread_info.h>
+ #include <linux/stackleak.h>
+ #include <linux/kasan.h>
++#include <linux/kernelet.h>
+ #include <linux/scs.h>
+ #include <linux/io_uring.h>
+ #include <linux/bpf.h>
+@@ -1337,6 +1338,86 @@
  }
  EXPORT_SYMBOL_IF_KUNIT(mm_alloc);
  
@@ -263,7 +271,7 @@ Signed-off-by: kernelet-in-Linux prototype <none@example.com>
  static inline void __mmput(struct mm_struct *mm)
  {
  	VM_BUG_ON(atomic_read(&mm->mm_users));
-@@ -2892,6 +2972,10 @@
+@@ -2892,6 +2973,10 @@
  }
  #endif
  
@@ -274,36 +282,6 @@ Signed-off-by: kernelet-in-Linux prototype <none@example.com>
  #ifdef __ARCH_WANT_SYS_CLONE
  #ifdef CONFIG_CLONE_BACKWARDS
  SYSCALL_DEFINE5(clone, unsigned long, clone_flags, unsigned long, newsp,
---- a/arch/x86/mm/pat/set_memory.c
-+++ b/arch/x86/mm/pat/set_memory.c
-@@ -2114,6 +2114,9 @@
- {
- 	return change_page_attr_clear(&addr, numpages, __pgprot(_PAGE_RW | _PAGE_DIRTY), 0);
- }
-+#ifdef CONFIG_KERNELET
-+EXPORT_SYMBOL_GPL(set_memory_ro);
-+#endif
- 
- int set_memory_rox(unsigned long addr, int numpages)
- {
-@@ -2124,11 +2127,17 @@
- 
- 	return change_page_attr_clear(&addr, numpages, clr, 0);
- }
-+#ifdef CONFIG_KERNELET
-+EXPORT_SYMBOL_GPL(set_memory_rox);
-+#endif
- 
- int set_memory_rw(unsigned long addr, int numpages)
- {
- 	return change_page_attr_set(&addr, numpages, __pgprot(_PAGE_RW), 0);
- }
-+#ifdef CONFIG_KERNELET
-+EXPORT_SYMBOL_GPL(set_memory_rw);
-+#endif
- 
- int set_memory_np(unsigned long addr, int numpages)
- {
 --- a/arch/x86/mm/tlb.c
 +++ b/arch/x86/mm/tlb.c
 @@ -1033,6 +1033,9 @@
