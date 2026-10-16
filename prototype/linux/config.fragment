@@ -1,0 +1,157 @@
+# Minimal x86_64 kernel config for the kernelet-in-Linux prototype.
+#
+# Applied on top of `make ARCH=x86_64 tinyconfig` with
+# scripts/kconfig/merge_config.sh, then settled by `make olddefconfig`.
+#
+# Two constraints shape this file: the build host has no OpenSSL headers
+# (so no module signing) and no pahole (so no BTF debug info).
+
+# --- architecture and CPU -----------------------------------------------
+CONFIG_64BIT=y
+CONFIG_SMP=y
+CONFIG_NR_CPUS=8
+# 32-bit userspace is out of scope for the prototype.
+# CONFIG_IA32_EMULATION is not set
+# CONFIG_X86_X32_ABI is not set
+# UMIP emulation is not needed; leaving it off is fine.
+# CONFIG_X86_UMIP is not set
+# KASLR, and the relocatable image it needs.
+CONFIG_RELOCATABLE=y
+CONFIG_RANDOMIZE_BASE=y
+
+# --- paravirt / KVM guest (kvm-clock) -----------------------------------
+CONFIG_HYPERVISOR_GUEST=y
+CONFIG_PARAVIRT=y
+CONFIG_KVM_GUEST=y
+
+# --- firmware and buses: ACPI + PCI, needed for a clean QEMU poweroff ---
+CONFIG_PCI=y
+CONFIG_ACPI=y
+
+# --- console ------------------------------------------------------------
+CONFIG_PRINTK=y
+CONFIG_TTY=y
+CONFIG_SERIAL_8250=y
+CONFIG_SERIAL_8250_CONSOLE=y
+CONFIG_EARLY_PRINTK=y
+
+# --- initramfs ----------------------------------------------------------
+CONFIG_BLK_DEV_INITRD=y
+CONFIG_RD_GZIP=y
+
+# --- binary formats -----------------------------------------------------
+CONFIG_BINFMT_ELF=y
+CONFIG_BINFMT_SCRIPT=y
+
+# --- filesystems --------------------------------------------------------
+CONFIG_PROC_FS=y
+CONFIG_SYSFS=y
+CONFIG_DEVTMPFS=y
+CONFIG_DEVTMPFS_MOUNT=y
+# TMPFS depends on SHMEM, and tinyconfig turns SHMEM off (its prompt is
+# visible because tinyconfig sets EXPERT=y).
+CONFIG_SHMEM=y
+CONFIG_TMPFS=y
+
+# --- loadable modules (unsigned: no OpenSSL on the build host) ----------
+CONFIG_MODULES=y
+CONFIG_MODULE_UNLOAD=y
+# CONFIG_MODVERSIONS is not set
+# CONFIG_MODULE_SIG is not set
+# CONFIG_MODULE_SIG_ALL is not set
+# CONFIG_MODULE_COMPRESS is not set
+# CONFIG_TRIM_UNUSED_KSYMS is not set
+
+# --- symbols, for /proc/kallsyms and module stack traces -----------------
+CONFIG_KALLSYMS=y
+CONFIG_KALLSYMS_ALL=y
+
+# --- process, task and time-keeping support the prototype relies on -----
+CONFIG_MULTIUSER=y
+CONFIG_FUTEX=y
+CONFIG_POSIX_TIMERS=y
+CONFIG_HIGH_RES_TIMERS=y
+CONFIG_SECCOMP=y
+# membarrier(MEMBARRIER_CMD_GLOBAL) is synchronize_rcu() reachable from user
+# space, which is how the yield test shows that a kernelet that cannot be
+# preempted stalls RCU and not merely its CPU's other tasks.
+CONFIG_MEMBARRIER=y
+# SECCOMP_FILTER is `def_bool y` but depends on NET, so the network stack
+# has to be on for BPF-filtered seccomp to exist at all.
+CONFIG_NET=y
+CONFIG_SECCOMP_FILTER=y
+
+# --- preemption model: full preemption, selectable at boot ---------------
+# CONFIG_PREEMPT_NONE is not set
+# CONFIG_PREEMPT_VOLUNTARY is not set
+CONFIG_PREEMPT=y
+# PREEMPT_DYNAMIC turns cond_resched() and the interrupt-exit preemption into
+# static calls that `preempt=none|voluntary|full` on the kernel command line
+# switches at boot. One kernel binary is then enough for both the default runs
+# (full) and the watch-timer test, `make yield` (none). Without it,
+# CONFIG_PREEMPTION=y makes cond_resched() compile to nothing at all, which is
+# precisely the situation the watch timer exists for.
+CONFIG_PREEMPT_DYNAMIC=y
+
+# --- cgroups ------------------------------------------------------------
+CONFIG_CGROUPS=y
+CONFIG_MEMCG=y
+CONFIG_CPUSETS=y
+
+# --- debugging, without debug info (no pahole, so no BTF) ---------------
+CONFIG_DEBUG_KERNEL=y
+CONFIG_DEBUG_INFO_NONE=y
+# CONFIG_DEBUG_INFO_BTF is not set
+CONFIG_MAGIC_SYSRQ=y
+# An oops must not be fatal: the prototype expects to survive one and
+# keep printing.
+# CONFIG_PANIC_ON_OOPS is not set
+
+# Retpoline and the other speculation mitigations are left at their
+# defaults on purpose.
+
+# --- the kernelet gate (patches/0001-kernelet-gate.patch) ----------------
+CONFIG_KERNELET=y
+
+# --- the scheduler tests and measurements --------------------------------
+# Group scheduling, so that a sandbox's carriers and a competitor can sit in
+# two cgroups with equal cpu.weight and the fairness test means something.
+CONFIG_CGROUP_SCHED=y
+CONFIG_FAIR_GROUP_SCHED=y
+CONFIG_CFS_BANDWIDTH=y
+CONFIG_CGROUP_CPUACCT=y
+# Scheduler statistics, for /proc/<pid>/{status,sched} and cpu.stat.
+CONFIG_SCHED_INFO=y
+CONFIG_SCHEDSTATS=y
+# PREEMPT_NOTIFIERS has no prompt of its own; CONFIG_KERNELET selects it (see
+# the patch). It is how the endovisor counts, exactly rather than by sampling,
+# every involuntary switch-out of a carrier that was holding a guard.
+# RSEQ, and with it CONFIG_SCHED_MM_CID: without it a carrier that changes its
+# address space leaks a concurrency id per adoption and nothing shows it, so the
+# kernelet_switch_mm() helper's mm_cid brackets would be dead code here.
+CONFIG_RSEQ=y
+
+# --- tenant memory on Linux's page tables --------------------------------
+# Every memory test checks for "sleeping function called from invalid
+# context": a VmSpace service may sleep while the kernelet holds a preemption
+# guard, which is legal only because the service prologue lifts the mirrored
+# preemption count first (E4, in make mem-func).
+CONFIG_DEBUG_ATOMIC_SLEEP=y
+# For E7 (make mem-pressure), memory pressure that makes reclaim actually run: a swap device on a
+# virtio disk (so anonymous memory can be reclaimed and rmap is walked),
+# /proc/vmstat counters to see it, multi-generational LRU (whose page-table
+# walker visits every address space and must skip the area), compaction and
+# transparent huge pages (khugepaged), as a distribution kernel would have.
+CONFIG_VM_EVENT_COUNTERS=y
+CONFIG_BLOCK=y
+CONFIG_SWAP=y
+CONFIG_VIRTIO_MENU=y
+CONFIG_VIRTIO=y
+CONFIG_VIRTIO_PCI=y
+CONFIG_VIRTIO_BLK=y
+CONFIG_LRU_GEN=y
+CONFIG_LRU_GEN_ENABLED=y
+CONFIG_COMPACTION=y
+CONFIG_MIGRATION=y
+CONFIG_TRANSPARENT_HUGEPAGE=y
+CONFIG_TRANSPARENT_HUGEPAGE_ALWAYS=y

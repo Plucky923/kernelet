@@ -1,0 +1,14 @@
+# Copied unchanged from the Asterinas tree at commit ab9a4cfdc, path
+# ostd/libs/align_ext. Only this manifest is rewritten: the original inherits
+# its package keys and lints from the Asterinas workspace, which this
+# repository is not part of, so they are spelled out here.
+
+[package]
+name = "align_ext"
+version = "0.1.0"
+description = " An extension trait for Rust integer types to make integers aligned to a power of two"
+repository = "https://github.com/asterinas/asterinas"
+license = "MPL-2.0"
+edition = "2024"
+
+[dependencies]

@@ -1,0 +1,22 @@
+# The mem kernel: a kernel proper that tests and measures vOSTD's VmSpace, a
+# tenant address space that is a Linux address space, against the same vostd
+# crate as the 100-line kernel.
+
+[package]
+name = "mem"
+version = "0.1.0"
+edition = "2021"
+license = "MPL-2.0"
+publish = false
+
+[lib]
+name = "mem"
+path = "src/lib.rs"
+crate-type = ["staticlib"]
+
+[dependencies]
+ostd = { package = "vostd", path = "../vostd" }
+align_ext = { path = "../libs/align_ext" }
+
+[lints]
+workspace = true

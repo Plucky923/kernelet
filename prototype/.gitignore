@@ -1,0 +1,21 @@
+# Everything the build makes: the Linux tree, the Rust build, the initramfs
+# staging area, the logs.
+.build/
+target/
+
+# out-of-tree module build artifacts
+*.o
+*.ko
+*.mod
+*.mod.c
+.*.cmd
+Module.symvers
+modules.order
+endovisor/image.o_shipped
+
+# the tenant programs, assembled next to the kernels that include_bytes! them
+hello/hello
+probe/probe
+yield/yield
+sched/sched
+mem/mem

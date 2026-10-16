@@ -1,0 +1,22 @@
+# The yield kernel: a third kernel proper, whose only job is to compute for
+# several seconds inside the kernelet without ever reaching a voluntary
+# preemption point, so that the watch timer has something to preempt.
+
+[package]
+name = "yieldk"
+version = "0.1.0"
+edition = "2021"
+license = "MPL-2.0"
+publish = false
+
+[lib]
+name = "yieldk"
+path = "src/lib.rs"
+crate-type = ["staticlib"]
+
+[dependencies]
+ostd = { package = "vostd", path = "../vostd" }
+align_ext = { path = "../libs/align_ext" }
+
+[lints]
+workspace = true

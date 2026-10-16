@@ -1,0 +1,25 @@
+# The kernel proper: Asterinas's 100-line Hello World kernel, unchanged.
+#
+# `src/lib.rs` and `hello.S` are byte-for-byte copies of the Asterinas tree's
+# osdk/tests/examples_in_book/write_a_kernel_in_100_lines_templates/ at commit
+# ab9a4cfdc, kept in `upstream/`, and the Makefile `cmp`s them against those
+# before every build of this kernel.
+
+[package]
+name = "hello"
+version = "0.1.0"
+edition = "2021"
+license = "MPL-2.0"
+publish = false
+
+[lib]
+name = "hello"
+path = "src/lib.rs"
+crate-type = ["staticlib"]
+
+[dependencies]
+ostd = { package = "vostd", path = "../vostd" }
+align_ext = { path = "../libs/align_ext" }
+
+[lints]
+workspace = true

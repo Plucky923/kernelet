@@ -1,0 +1,27 @@
+# The probe kernel: a second kernel proper, written for this prototype, against
+# the same vostd crate as the 100-line kernel.
+#
+# It exists to exercise three things the 100-line kernel never touches: demand
+# paging (a tenant page fault reported by the area's fault handler and mapped
+# by the kernel proper), a non-page-fault exception delivered through the
+# gate's resume hook, and eviction of kernelet code that will not give up its
+# CPU.
+
+[package]
+name = "probe"
+version = "0.1.0"
+edition = "2021"
+license = "MPL-2.0"
+publish = false
+
+[lib]
+name = "probe"
+path = "src/lib.rs"
+crate-type = ["staticlib"]
+
+[dependencies]
+ostd = { package = "vostd", path = "../vostd" }
+align_ext = { path = "../libs/align_ext" }
+
+[lints]
+workspace = true

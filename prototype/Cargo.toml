@@ -1,0 +1,17 @@
+# The prototype's Rust workspace: vOSTD, the five kernels proper built against
+# it, and the two small crates copied from the Asterinas tree that they use.
+
+[workspace]
+resolver = "2"
+members = ["libs/align_ext", "libs/ostd-macros", "vostd", "hello", "probe", "yield", "sched", "mem"]
+
+# The one lint setting of the Asterinas workspace the kernels need: OSTD's
+# `#[ostd::main]` expands to code under `cfg(ktest)`, Asterinas's test
+# configuration, which no build here sets.
+[workspace.lints.rust]
+unexpected_cfgs = { level = "allow", check-cfg = ['cfg(ktest)'] }
+
+[profile.release]
+panic = "abort"
+debug = false
+overflow-checks = true

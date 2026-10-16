@@ -1,0 +1,22 @@
+# Copied unchanged from the Asterinas tree at commit ab9a4cfdc, path
+# ostd/libs/ostd-macros. Only this manifest is rewritten: the original inherits
+# its package keys, dependency versions and lints from the Asterinas workspace,
+# which this repository is not part of, so they are spelled out here with the
+# versions that workspace pins.
+
+[package]
+name = "ostd-macros"
+description = "OSTD's proc macros"
+version = "0.18.1"
+repository = "https://github.com/asterinas/asterinas"
+license = "MPL-2.0"
+edition = "2024"
+
+[lib]
+proc-macro = true
+
+[dependencies]
+proc-macro2 = { version = "1.0.95", features = ["span-locations"] }
+quote = "1.0.35"
+rand = { version = "0.9.2", default-features = false, features = ["thread_rng"] }
+syn = { version = "2.0.77", features = ["full", "parsing", "fold", "visit-mut"] }

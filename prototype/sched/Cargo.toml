@@ -1,0 +1,21 @@
+# The sched kernel: the fourth kernel proper, and the one with a scheduler of its
+# own. Written against real OSTD's scheduler-injection interface.
+
+[package]
+name = "schedk"
+version = "0.1.0"
+edition = "2021"
+license = "MPL-2.0"
+publish = false
+
+[lib]
+name = "schedk"
+path = "src/lib.rs"
+crate-type = ["staticlib"]
+
+[dependencies]
+ostd = { package = "vostd", path = "../vostd" }
+align_ext = { path = "../libs/align_ext" }
+
+[lints]
+workspace = true
