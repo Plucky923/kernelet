@@ -79,7 +79,7 @@ Three choices in this code each close a hole.
 
 **The file's inode.** The plain anonymous-inode helper hands every caller one shared inode. Linux keeps, per inode, the list of areas that map it, so every space's area would sit in one list, and an operation on one space's file could reach the others'. Each space gets an inode of its own.
 
-**The area's flags.** `VM_SHARED` is required for the host's sake: inserting a raw frame number into a private, copy-on-write area is a `BUG_ON` in Linux, which halts the machine rather than returning an error. `VM_DONTCOPY` keeps a `fork` of a carrier, which never happens but could, from copying entries that belong to the kernelet. The area covers exactly the range the kernel proper can map, so that a `vm_map` outside it can be refused, and `zap_vma_ptes()`, which silently does nothing for a range not wholly inside its area, is always inside.
+**The area's flags.** `VM_SHARED`, which the `MAP_SHARED` in the `vm_mmap` call sets, is required for the host's sake: inserting a raw frame number into a private, copy-on-write area is a `BUG_ON` in Linux, which halts the machine rather than returning an error. `VM_DONTCOPY` keeps a `fork` of a carrier, which never happens but could, from copying entries that belong to the kernelet. The area covers exactly the range the kernel proper can map, so that a `vm_map` outside it can be refused, and `zap_vma_ptes()`, which silently does nothing for a range not wholly inside its area, is always inside.
 
 ## The address-space switch
 
@@ -87,13 +87,13 @@ Two of the lines above call `kernelet_switch_mm()`, the first of the patch's two
 
 <div class="linux">
 
-**Linux: changing a task's address space.** Linux has the operation twice: for a kernel thread that borrows a user address space ([`kthread_use_mm()`](https://elixir.bootlin.com/linux/v6.12/source/kernel/kthread.c#L1439)), and for `execve` ([`exec_mmap()`](https://elixir.bootlin.com/linux/v6.12/source/fs/exec.c#L958)), which replaces a process's address space with a fresh one. Neither will do for a user task that wants to swap between address spaces it holds references to: the first warns if its caller is not a kernel thread and takes the references a kernel thread needs, which a user task must not, and the second is private to `exec` and destroys the old space. And a module cannot write its own, because everything the switch touches is private to the core kernel.
+**Linux: changing a task's address space.** Linux has the operation twice: for a kernel thread that borrows a user address space ([`kthread_use_mm()`](https://elixir.bootlin.com/linux/v6.12/source/kernel/kthread.c#L1439)), and for `execve` ([`exec_mmap()`](https://elixir.bootlin.com/linux/v6.12/source/fs/exec.c#L958)), which replaces a process's address space with a fresh one. Neither will do for a user task that wants to swap between address spaces it holds references to: the first warns if its caller is not a kernel thread and takes the references a kernel thread needs, which a user task must not, and the second is private to `exec` and drops the task's reference to the old space. And a module cannot write its own, because everything the switch touches is private to the core kernel.
 
 </div>
 
 The helper does what the two have in common: under the task's lock and with interrupts off, set the task's `mm` and `active_mm` to the new space, load the new page table with the architecture's `switch_mm_irqs_off()`, and keep Linux's per-space bookkeeping in step. It consumes the caller's reference on the new space and hands back the old one, for the caller to drop in a context that may sleep.
 
-*From `prototype/patches/0001-kernelet-gate.patch`: `kernelet_switch_mm`, `kernelet_mm_alloc`.*
+*Simplified from `prototype/patches/0001-kernelet-gate.patch`: `kernelet_switch_mm`, `kernelet_mm_alloc`.*
 
 ```c
 struct mm_struct *kernelet_switch_mm(struct mm_struct *mm)
@@ -127,7 +127,7 @@ struct mm_struct *kernelet_mm_alloc(struct task_struct *owner)
 }
 ```
 
-The two `sched_mm_cid_*` brackets are not optional: without them a carrier leaked one concurrency id per switch, invisibly, until it had leaked as many as the machine has processors and then hung. That is the kind of bookkeeping that makes the helper belong in Linux rather than in a module.
+The two `sched_mm_cid_*` brackets are not optional. Linux gives each address space a small pool of *concurrency ids*, one per processor currently running one of its tasks, which programs may use to index per-processor data; a task that changes address space must return its id to the old space and take one from the new. Without the brackets a carrier leaked one concurrency id per switch, invisibly, until it had leaked as many as the machine has processors and then hung. That is the kind of bookkeeping that makes the helper belong in Linux rather than in a module.
 
 *Simplified from `prototype/endovisor/space.c`: `klet_space_adopt`.*
 
@@ -146,7 +146,7 @@ int klet_space_adopt(struct klet_carrier *c, u64 id)       /* called by both gat
 }
 ```
 
-Every carrier that has adopted a space holds exactly one reference on it, which Linux drops when the carrier exits; the endovisor holds one more on every live space, from `vm_create` to `vm_destroy`. That second reference is what pins the page tables for the next chapter's lockless reads.
+Every carrier holds one reference on the space it is in, which Linux drops when the carrier leaves it or exits; the endovisor holds one more on every live space, from `vm_create` to `vm_destroy`. That second reference is what pins the page tables for the next chapter's lockless reads.
 
 ## The four edits
 
@@ -264,7 +264,7 @@ sequenceDiagram
     L->>U: retry the instruction, no second fault
 ```
 
-Two cases never reach the handler. A read or an instruction fetch that a *present* entry forbids raises `SIGSEGV` inside Linux directly, and the resume hook turns that signal into an exception as it does for any other (chapter 7). And a write to a present read-only entry would, without `pfn_mkwrite`, be made writable by Linux on its own authority, which is why the area supplies that operation too.
+One case never reaches the handler. A read or an instruction fetch that a *present* entry forbids raises `SIGSEGV` inside Linux directly, and the resume hook turns that signal into an exception as it does for any other (chapter 7). A write to a present read-only entry reaches the handler only because the area supplies `pfn_mkwrite`; without it, Linux would make the entry writable on its own authority.
 
 The rule that a kernel-mode access is answered with an error and never reported deserves a sentence. Linux itself sometimes reads a task's user memory from kernel mode, for instance on a 32-bit system-call entry. A handler that reported such a fault and waited for the return to user mode would wait forever, since the access is not in user mode; failing it cleanly lets Linux's own error handling turn it into `-EFAULT`, which that code is written to expect.
 

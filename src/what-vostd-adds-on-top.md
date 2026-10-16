@@ -137,7 +137,7 @@ This is sound only if Linux never clears an entry of the area on its own initiat
 
 On a machine, a cursor holds the page table's node locks for its whole life, and the kernel proper relies on that in two places: its page-fault handler queries, allocates and maps under one cursor, so two threads faulting on one page never both map it; and its page cache commits a page and maps it atomically under one cursor while eviction unmaps through another. Linux's locks are not available to vOSTD, so it keeps a lock of its own per space: sixteen 64-bit words in the space's shared record, one per 2 MiB region of the address space, with regions aliasing onto words by their index modulo sixteen.
 
-A cursor computes the set of words its range touches, takes them in ascending word order (a total order, so two cursors cannot deadlock), exclusively for a `cursor_mut` and shared for a `cursor`, and releases them when it is dropped. Uncontended, taking a word is one compare-and-swap in kernelet memory and no crossing.
+A cursor computes the set of words its range touches, takes them in ascending word order (a total order, so two cursors cannot deadlock), exclusively for a `cursor_mut` and shared for a `cursor`, and releases them when it is dropped. Uncontended, taking a word is one compare-and-swap in kernelet memory and no crossing. Each word holds a count of readers in its low bits (`READERS` is their mask) and three flags: `WRITER`, set by an exclusive holder; `WRITER_WAITING`, which holds new readers off while a writer waits; and `WAITERS`, which says that someone is asleep in `vm_wait` on this word.
 
 *Simplified from `prototype/vostd/src/mm/vm_space.rs`: `lock_word`, `unlock_word`.*
 
@@ -201,7 +201,7 @@ A tenant access to a withheld page faults as an absent page does, and the kernel
 
 The last reference to a `VmSpace` can be dropped at a bad moment. `activate` keeps one reference per virtual CPU to the space that is active there, and drops the previous space's reference when a new one is activated; the kernel proper activates from the handler it runs right after a task switch, with interrupts off. If that was the last reference, `Drop` runs there, and so it may do nothing that sleeps or crosses, while `vm_destroy` does both.
 
-The usual answer, a helper task that does the work later, is not available: on this host a task created before the kernel proper injects its scheduler would install OSTD's default one and make the injection fail, and one created afterwards is not a task the kernel proper's own scheduler knows how to run.
+The usual answer, a helper task that does the work later, is not available. A task created before the kernel proper calls `inject_scheduler` would make OSTD install its default scheduler, and the injection would then fail; a task created afterwards is scheduled by the kernel proper's own policy, which vOSTD cannot ask to run it at a chosen moment.
 
 So `Drop` pushes the space onto a per-kernelet **retire list**, lock-free and without allocating (the list node was allocated at `new`), and the list is drained at the next point on any virtual CPU where sleeping is allowed: the stubs of `vm_create` and `vcpu_idle`, and every sleeping service's stub when the caller holds no guard. The drain unmaps the whole space, which flushes and releases every frame, the withheld set's included, and then calls `vm_destroy`.
 
@@ -235,7 +235,7 @@ fn destroy(mut node: Node) {
 
 ## The rule about sleeping
 
-Every memory service except `vm_flush` and `vm_activate` may sleep in Linux: for the address-space lock, for a page-table page, for the zap's own pauses between tables, in `vm_wait`. And the kernel proper calls `map` holding a preemption guard, because every cursor takes one. On a machine that would be a contradiction: OSTD's atomic mode forbids sleeping. Here it is not, and the design states the rule in four parts.
+Every memory service except `vm_flush` and `vm_activate` may sleep in Linux: for the address-space lock, for a page-table page, for the zap's own pauses between tables, in `vm_wait`. And the kernel proper calls `map` holding a preemption guard, because every cursor takes one. On a machine that would be a contradiction: OSTD forbids sleeping inside a critical section. Here it is not, and the design states the rule in four parts.
 
 1. A service may sleep whenever its work needs it. Its prologue lifts the mirror of chapter 10, so Linux sees nothing wrong, and its epilogue restores it.
 2. A service that may sleep must not be called while the caller holds a kernelet **spin lock** or has virtual interrupts off. Under a plain preemption guard it may. The reason is lock-holder preemption: a spin lock held across a Linux sleep makes every other virtual CPU that wants it spin for the sleep's length. vOSTD asserts this before every sleeping service, with a count of spin locks held that is separate from the guard count.
@@ -263,7 +263,7 @@ pub(crate) fn assert_may_sleep(service: &str) {
 }
 ```
 
-Why rule 1 is sound was argued at the end of chapter 10's second problem: a kernelet's atomic mode promises only that no kernelet task switch happens on this virtual CPU until the guard drops, and a sleep in Linux is the same event as a Linux preemption, which the kernelet already survives at any instruction. `make mem-func` maps a page into a fresh 2 MiB region, which makes Linux allocate a page-table page, inside a preemption guard, on a Linux built with `CONFIG_DEBUG_ATOMIC_SLEEP`, the option that makes Linux complain about any sleep in atomic mode, and Linux reports nothing; `make mem-r2` does the same under a spin lock, and vOSTD stops the kernelet before the call crosses.
+Why rule 1 is sound was argued at the end of chapter 10's second problem: a kernelet's critical section promises only that no kernelet task switch happens on this virtual CPU until the guard drops, and a sleep in Linux is the same event as a Linux preemption, which the kernelet already survives at any instruction. `make mem-func` maps a page into a fresh 2 MiB region, which makes Linux allocate a page-table page, inside a preemption guard, on a Linux built with `CONFIG_DEBUG_ATOMIC_SLEEP`, the option that makes Linux complain about any sleep in atomic mode, and Linux reports nothing; `make mem-r2` does the same under a spin lock, and vOSTD stops the kernelet before the call crosses.
 
 <div class="recap">
 

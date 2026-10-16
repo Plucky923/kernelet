@@ -10,9 +10,9 @@ Linux will take a processor away from a carrier whenever its own policy says so:
 
 </div>
 
-Kernelet code contains no call to `cond_resched()`, because it cannot call Linux. On a kernel booted with `preempt=none`, a kernelet task that computes for eight seconds would hold its processor for eight seconds, against every other task that wants it. The test kernel in `prototype/yield/src/lib.rs` does exactly that, and `make yield` runs it twice on such a kernel, once with the mechanism below turned off and once with it on, with a competing host process pinned to the same processor. Without it, the competitor stalls for over four seconds at a stretch; with it, the longest stall is a fraction of a second, which is what the test asserts.
+Kernelet code contains no call to `cond_resched()`, because it cannot call Linux. On a kernel booted with `preempt=none`, a kernelet task that computes for a few seconds would hold its processor for those seconds, against every other task that wants it. The test kernel in `prototype/yield/src/lib.rs` does exactly that, and `make yield` runs it twice on such a kernel, once with the mechanism below turned off and once with it on, with a competing host process pinned to the same processor. Without it, the competitor stalls for the kernelet's whole computation, over four seconds at a stretch; with it, the longest stall is a fraction of a second, which is what the test asserts.
 
-The mechanism is the watch timer volunteering on the kernelet's behalf, and it has two forms. Usually the upcall of chapter 9 does it: the upcall raises the mirror described under Problem 2 while the handlers run, and on its way out, if Linux has set `need_resched` meanwhile, the decrement that lowers the mirror reads zero and vOSTD calls `vcpu_yield`, which reschedules in Linux. When the upcall cannot be taken, because the interrupted task's stack has too little room left for the handlers, the timer points the interrupted frame at a **yield stub** in the endovisor instead, by the same means:
+The mechanism is the watch timer volunteering on the kernelet's behalf, and it has two forms. Usually the upcall of chapter 9 does it: on its way out, if Linux has set `need_resched` meanwhile, vOSTD calls `vcpu_yield`, which reschedules in Linux (how vOSTD notices is the mirror of Problem 2, below). When the upcall cannot be taken, because the interrupted task's stack has too little room left for the handlers, the timer points the interrupted frame at a **yield stub** in the endovisor instead, by the same means:
 
 *Simplified from `prototype/endovisor/watch.c`: `klet_watch_fn`.*
 
@@ -67,7 +67,7 @@ static void klet_do_yield(struct klet_carrier *c)
 }
 ```
 
-On a Linux that does preempt kernel code, Linux reschedules by itself on the way out of the interrupt, and neither form has anything left to do; they exist for the configurations that do not. The test's checksum, computed over eight hundred million rounds through ten live registers, comes out identical whether the kernelet was interrupted eight hundred times or never, which is the register-preservation argument made by experiment.
+On a Linux that does preempt kernel code, Linux reschedules by itself on the way out of the interrupt, and neither form has anything left to do; they exist for the configurations that do not. The test's checksum, computed over eight hundred million rounds through ten live registers, comes out identical whether the kernelet was interrupted thousands of times or never, which is the register-preservation argument made by experiment.
 
 ## Problem 2: a lock holder loses its processor
 
@@ -115,7 +115,7 @@ pub(crate) fn dec_guard_count() {
 
 The **mirror**, as the book calls it, is one increment however deeply the kernelet's guards nest, and that is deliberate. Linux's count is a bit field with only eight bits for the preemption depth, and a kernel proper that nested more guards than that would spill into the fields that say "in an interrupt" and make Linux misjudge its own state.
 
-So vOSTD keeps a private flag, `mirrored`, in the record, and the flag is the authority: the increment happens when a critical section begins and the flag is clear; the decrement when one ends and the flag is set. Raising twice is a no-op, and so is lowering when nothing is raised. A pairing kept by construction would not have been enough, because OSTD's guard lifetimes cross a context switch: `switch_to_task` takes a guard that the *next* task releases, so the increment and its decrement may run on different tasks, and a count that must balance within one function cannot be checked.
+So vOSTD keeps a private flag, `mirrored`, in the record, and the flag is the authority: the increment happens when a critical section begins and the flag is clear; the decrement when one ends and the flag is set. Raising twice is a no-op, and so is lowering when nothing is raised. A pairing kept by construction would not have been enough, because OSTD's guard lifetimes cross a context switch. Task A takes a guard inside `switch_to_task`, and task B, now running, drops it; if the increment and the decrement were tied to the guard's own code, nothing local could tell whether this drop is the one that matches that raise. The flag answers that directly.
 
 The order of the two stores in each function is also deliberate. The flag is set *after* the increment and cleared *before* the decrement, so that the flag never claims more than the count holds; the endovisor reads the flag to tell a genuine failure of the mirror from the two-instruction window in which the kernelet is between the updates.
 
@@ -174,7 +174,7 @@ The mirror lets a kernelet defer Linux's preemption, and "must not defer it for 
 	regs->ip = (unsigned long)klet_yield_stub;
 ```
 
-The note of the first strike is dropped when the carrier leaves the processor, since a carrier that has given the processor back is deferring nothing, and the bound is on time held, not on time elapsed. The grace is about two milliseconds. What the kernelet borrows is charged: Linux accounts the extra run time to the sandbox's control group like any other, so the sandbox's long-run share does not grow by a microsecond; what a neighbor can lose is latency, at most the grace, per preemption. Forced yields are counted, and a sandbox that collects them is misbehaving in a way the operator can see.
+The note of the first strike is dropped when the carrier leaves the processor, since a carrier that has given the processor back is deferring nothing, and the bound is on time held, not on time elapsed. The grace is two ticks, about two milliseconds on this machine when the ticks arrive on time; a tick the host delivers late lengthens it. What the kernelet borrows is charged: Linux accounts the extra run time to the sandbox's control group like any other, so the sandbox's long-run share does not grow by a microsecond; what a neighbor can lose is latency, at most the grace, per preemption. Forced yields are counted, and a sandbox that collects them is misbehaving in a way the operator can see.
 
 ```mermaid
 flowchart LR

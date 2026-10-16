@@ -40,13 +40,13 @@ One Linux task, two stacks. Linux tolerates this better than one might fear:
 - An interrupt that arrives while the carrier is on a kernelet stack pushes its frame there and then moves to Linux's per-processor interrupt stack, as it would from any kernel stack.
 - `pt_regs` are found from the top of the Linux stack, which does not move.
 
-What Linux does *not* tolerate is kernelet code calling into Linux while on a kernelet stack, for any length of time. Linux's code assumes its own stack: its unwinder and backtraces, its checks that a buffer lies on the task's stack, and its idea of how much room is left. So the rule is: **kernelet code runs on a kernelet stack; Linux's code and the endovisor's run on the Linux stack.** Every crossing between the two switches stacks.
+What Linux does *not* tolerate is kernelet code calling into Linux while on a kernelet stack, for any length of time. Linux's code assumes its own stack: its unwinder and backtraces, its checks that a buffer lies on the task's stack, and its idea of how much room is left. So the rule is: **kernelet code runs on a kernelet stack; Linux's code and the endovisor's run on the Linux stack.** A **crossing**, in this book, is one service call: from kernelet code into the endovisor and back. Every crossing switches stacks twice.
 
 ## The switch
 
 The switch is a few lines of assembly, the oldest trick in the book of coroutines: save the registers the calling convention makes the callee responsible for, swap the stack pointer, restore the other side's registers, and return. Because `ret` pops from the *new* stack, the function returns into whatever code was suspended there.
 
-*Unchanged from `prototype/endovisor/switch.S`: `klet_switch`.*
+*Simplified from `prototype/endovisor/switch.S`: `klet_switch`.*
 
 ```asm
 /* void klet_switch(void **save_sp, void *new_sp) */
@@ -110,6 +110,7 @@ static void klet_enter(struct klet_carrier *c, u64 run_ret)
 /* On a kernelet stack: give control back to Linux. */
 static void klet_leave(struct klet_carrier *c, enum klet_state state)
 {
+	klet_mirror_out(c, state == KLET_DEAD); /* chapter 10: what the kernelet lent Linux's preemption count, taken back */
 	c->state = state;
 	klet_switch(&c->coro_sp, c->linux_sp);  /* returns when the kernelet is next entered */
 }
@@ -125,7 +126,11 @@ Where does `klet_enter` get called? From exactly three places: the carrier's sta
 
 </div>
 
-A kernelet stack is 256 KiB from `vmalloc`, with an unmapped page before and after it, since every `vmalloc` range is followed by one. What the guard page buys is less than it seems: a stack that runs off its end faults with a stack pointer that is already bad, the processor cannot deliver that fault, and Linux halts the machine on the double fault that results. The full design answers that with a check at every function entry of the image; this prototype has no such check, so a kernel proper with unbounded recursion would halt the host, and the test kernels are written not to recurse. The endovisor keeps a **pool** of them per sandbox: a freed stack goes back to the pool, not to Linux, and the pool is returned whole when the sandbox is destroyed. The reason is a Linux detail a tenant could otherwise turn against the machine: freeing `vmalloc` memory is batched, and the batch ends in a TLB flush on *every* processor, so a kernel that created and ended tasks in a loop would tax processors it is not allowed to run on.
+A kernelet stack is 256 KiB from `vmalloc`, with an unmapped page before and after it, since every `vmalloc` range is followed by one.
+
+What the guard page buys is less than it seems. A stack that runs off its end faults with a stack pointer that is already bad; delivering a fault pushes a frame onto the very stack that has run out, so the processor cannot deliver it, and Linux halts the machine on the double fault that results. The full design answers that with a check at every function entry of the image; this prototype has no such check, so a kernel proper with unbounded recursion would halt the host, and the test kernels are written not to recurse.
+
+The endovisor keeps a **pool** of stacks per sandbox: a freed stack goes back to the pool, not to Linux, and the pool is returned whole when the sandbox is destroyed. The reason is a Linux detail a tenant could otherwise turn against the machine: freeing `vmalloc` memory is batched, and the batch ends in a TLB flush on *every* processor, so a kernel that created and ended tasks in a loop would tax processors it is not allowed to run on.
 
 *Simplified from `prototype/endovisor/carrier.c`: `klet_kstack_alloc`, `klet_kstack_put`.*
 
@@ -135,7 +140,10 @@ u64 klet_kstack_alloc(struct klet_inst *inst)
 	list_for_each_entry(k, &inst->kstack_all, link)     /* a free one in the pool? */
 		if (!k->busy) { k->busy = true; return (u64)k->base; }
 
-	base = vmalloc(KLET_STACK_SIZE);                    /* else grow the pool */
+	if (inst->kstack_made >= KLET_MAX_KSTACKS)          /* the pool is bounded: 512 stacks, 128 MiB */
+		return 0;                                       /* vOSTD turns 0 into an out-of-memory error */
+	inst->kstack_made++;
+	base = __vmalloc(KLET_STACK_SIZE, GFP_KERNEL_ACCOUNT);   /* else grow the pool; charged to the sandbox (chapter 5) */
 	k = kzalloc(sizeof(*k), GFP_KERNEL);
 	k->base = base; k->busy = true;
 	list_add_tail(&k->link, &inst->kstack_all);
@@ -149,13 +157,13 @@ void klet_kstack_put(struct klet_inst *inst, u64 base)
 }
 ```
 
-The kernelet reaches the pool through two services, `kstack_alloc` and `kstack_free`. The carrier's own first stack, the one `klet_coro_prepare` sets up, comes from the same pool; so does the stack of every task the kernel proper creates (chapter 8).
+The real function holds the instance's lock around the search and the reservation, so that two virtual CPUs cannot both take the last stack. The kernelet reaches the pool through two services, `kstack_alloc` and `kstack_free`. The carrier's own first stack, the one `klet_coro_prepare` sets up, comes from the same pool; so does the stack of every task the kernel proper creates (chapter 8).
 
 ## Services run on the Linux stack
 
 A service call is kernelet code calling the endovisor, and by the rule above it must switch stacks. It cannot use `klet_enter` and `klet_leave`, which hand control over; it needs to call a function and come back. The endovisor has a second, smaller switch for that:
 
-*Unchanged from `prototype/endovisor/switch.S`: `klet_run_on_linux_stack`.*
+*Simplified from `prototype/endovisor/switch.S`: `klet_run_on_linux_stack`.*
 
 ```asm
 /* void klet_run_on_linux_stack(void *linux_sp, struct klet_svc_args *args) */
@@ -171,7 +179,7 @@ klet_run_on_linux_stack:
 	RET
 ```
 
-`linux_sp` is where `klet_enter`'s `klet_switch` parked the Linux stack, that is, the lowest byte of it in use; everything below is free, and the service runs there. Every service in the table except two goes through this: a stub packs the arguments into a small structure, calls `klet_run_on_linux_stack`, and unpacks the result.
+`linux_sp` is where `klet_enter`'s `klet_switch` parked the Linux stack, that is, the lowest byte of it in use; everything below is free, and the service runs there. Every service in the table except one, `user_run`, goes through this: a stub packs the arguments into a small structure, calls `klet_run_on_linux_stack`, and unpacks the result.
 
 *Simplified from `prototype/endovisor/carrier.c`: `klet_svc_enter`, `klet_svc_log_write`, `klet_svc_body`.*
 

@@ -127,7 +127,7 @@ static void klet_do_vcpu_idle(struct klet_carrier *c, u64 deadline_ns)
 
 The order of the first three lines is the one every Linux sleep uses so that no wake-up is lost: the sleeper marks itself, *then* checks; the waker sets the bit, *then* checks the mark. One of the two always sees the other. The sleep is *killable*, so that `SIGKILL` ends it (chapter 11).
 
-**Kicking.** When the kernelet's scheduler puts a task on another virtual CPU's run queue, that virtual CPU should notice soon, as a machine would be told by an inter-processor interrupt. vOSTD calls `vcpu_kick(i)`, which sets a KICK bit in the target's record and does whichever of three things gets it seen: wakes the carrier if it is asleep in `vcpu_idle`, flags it if it is in user mode, or, if it is running kernelet code on another processor right now, sends that processor an interrupt that makes the kick be delivered within microseconds instead of at the next tick (chapter 9).
+**Kicking.** When the kernelet's scheduler puts a task on another virtual CPU's run queue, that virtual CPU should notice soon, as a machine would be told by an inter-processor interrupt. vOSTD calls `vcpu_kick(i)`, which sets a KICK bit in the target's record and does whichever of three things gets it seen: wakes the carrier if it is asleep in `vcpu_idle`, flags it if it is in user mode, or, if it is running kernelet code on another processor right now, sends that processor an interrupt that makes the kick be delivered at once instead of at the next tick (chapter 9).
 
 <div class="rust">
 
@@ -163,7 +163,7 @@ fn reschedule<F>(mut f: F) {                     // the heart of every schedulin
 }
 ```
 
-`Retry` means the run queue is empty: the virtual CPU spins a little, in case a sibling is about to enqueue something, and then calls `vcpu_idle` (a deadline of zero means "until the next tick"). When the sleep ends, TICK is pending, the closure runs again, and either finds a task or sleeps again.
+`Retry` means the run queue is empty: the virtual CPU spins a little, in case a sibling is about to enqueue something, and then calls `vcpu_idle` (a deadline of zero means "until the next tick", the watch timer's of chapter 9). When the sleep ends, TICK is pending, the closure runs again, and either finds a task or sleeps again.
 
 ## One carrier, many threads
 

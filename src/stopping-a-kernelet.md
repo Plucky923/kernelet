@@ -49,13 +49,13 @@ Where each carrier is at the moment of the mark decides what stops it:
 | the carrier is | what stops it |
 |---|---|
 | in user mode | Linux's signal handling: the carrier enters the exit loop, the resume hook sees the mark and dies |
-| asleep in a service (`vcpu_idle`, `vm_wait`) | the sleep is *killable*, so `SIGKILL` wakes it; the service sees the mark and leaves for good |
-| running a service | the service completes; the epilogue sees the mark |
+| asleep in a service (`vcpu_idle`, `vm_wait`) | the sleep is *killable*, so `SIGKILL` wakes it; `vm_wait` and `vcpu_yield` test the mark themselves and leave for good, `vcpu_idle` returns into kernelet code |
+| running a service | the service completes and returns into kernelet code at depth 0, where the next case applies |
 | **running kernelet code** | nothing in Linux can reach it: **eviction**, below |
 
 ## Stopping from outside
 
-The operator kills the root carrier, or the out-of-memory killer does, or `run-probe` does it in the test: `kill(pid, SIGKILL)` on the root carrier's process id. The root carrier is in its resume hook, sleeping in `wait_event_interruptible`; the signal wakes it, it dies, and Linux closes its descriptors, among them its lifeline. The lifeline's release is the endovisor's notice:
+The operator kills the root carrier, or the out-of-memory killer does, or the test's runtime does it (`make probe`, at the end of this chapter): `kill(pid, SIGKILL)` on the root carrier's process id. The root carrier is in its resume hook, sleeping in `wait_event_interruptible`; the signal wakes it, it dies, and Linux closes its descriptors, among them its lifeline. The lifeline's release is the endovisor's notice:
 
 *Simplified from `prototype/endovisor/carrier.c`: `klet_carrier_lifeline_closed`, `klet_kill_instance`.*
 
@@ -79,7 +79,7 @@ void klet_kill_instance(struct klet_inst *inst)
 }
 ```
 
-A carrier killed from outside while in user mode passes through the resume hook once more, since the signal counts as pending work, but the hook finds no mark and steps aside; Linux kills the task, and `klet_detach` never runs for it. The lifeline's release frees what the detach would have: this is why the death notice, not the detach, is the place where a carrier's records are finally released.
+A carrier of a virtual CPU that the operator kills directly while it is in user mode, before any mark is set, passes through the resume hook once more, since the signal counts as pending work, but the hook finds no mark and steps aside; Linux kills the task, and `klet_detach` never runs for it. The lifeline's release frees what the detach would have: this is why the death notice, not the detach, is the place where a carrier's records are finally released.
 
 ## Eviction
 
@@ -147,7 +147,7 @@ flowchart LR
 
 Why this is safe to do at an arbitrary instruction: at depth 0, in kernelet text, a carrier holds nothing of Linux's. It cannot hold a Linux lock, because kernelet code cannot call Linux; the only thing it may hold is the one increment of Linux's preemption count from chapter 10, and `klet_leave` with the state `DEAD` runs `klet_mirror_out` with `forever` set, which measures and removes it. The kernelet's own half-finished state, its locks and its data, does not matter: the kernelet is dying, and no kernelet code runs afterwards. Kernelet code cannot mask hardware interrupts, since vOSTD has no interface for that, so there is no state in which the timer cannot land.
 
-A carrier that is not on a processor at that instant is sent nothing; it is caught by the sweep when it next runs, since the sweep is on every processor. A carrier inside a service call is left alone by the depth test, and finishes the service; the epilogue sees the mark.
+A carrier that is not on a processor at that instant is sent nothing; it is caught by the sweep when it next runs, since the sweep is on every processor. A carrier inside a service call is left alone by the depth test, and finishes the service; when it returns into kernelet code at depth 0, the next sweep catches it, unless the service tests the mark itself and leaves, as `vm_wait` and `vcpu_yield` do.
 
 ## The test
 
@@ -157,6 +157,6 @@ The same test exercises the two other mechanisms of chapter 7 that the hundred-l
 
 <div class="recap">
 
-**Recap.** A kernelet ends by the `stop` service or by the root carrier's death; either marks the instance and sends `SIGKILL` to every carrier. A carrier in user mode or asleep in a killable service dies by Linux's own exit path, after the gate's hook or the service's epilogue sees the mark and detaches it. A carrier running kernelet code is evicted: a timer on its processor finds the interrupted instruction in the image's text at depth 0 and points it at an exit stub, which leaves through the stack switch for good. The last lifeline's release is the sandbox's end.
+**Recap.** A kernelet ends by the `stop` service or by the root carrier's death; either marks the instance and sends `SIGKILL` to every carrier. A carrier in user mode dies by Linux's own exit path, after the gate's hook sees the mark and detaches it; one asleep in a killable service is woken, and either leaves for good itself or returns into kernelet code to be evicted. A carrier running kernelet code is evicted: a timer on its processor finds the interrupted instruction in the image's text at depth 0 and points it at an exit stub, which leaves through the stack switch for good. The last lifeline's release is the sandbox's end.
 
 </div>

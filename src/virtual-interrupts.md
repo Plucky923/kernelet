@@ -19,7 +19,7 @@ The question is *when* the handler runs, and the answer depends on what the virt
 
 <div class="linux">
 
-**Linux: high-resolution timers and preemption notifiers.** An [`hrtimer`](https://elixir.bootlin.com/linux/v6.12/source/kernel/time/hrtimer.c) is a timer whose callback runs in interrupt context, normally on the processor that armed it; a *pinned* timer is guaranteed to stay there, and a *hard* one runs in the interrupt itself even on a real-time kernel. The timer interrupt publishes the registers of whatever it interrupted, and a callback reads them with `get_irq_regs()`, which is how Linux's profiler samples programs; if the callback changes the saved instruction pointer, the interrupt returns somewhere else. Not every interrupt publishes its registers that way: the timer does, and the plain cross-processor call of the last section does not. A **preemption notifier** ([`preempt_notifier_register()`](https://elixir.bootlin.com/linux/v6.12/source/kernel/sched/core.c#L4866)) is a pair of callbacks Linux runs for one task every time it switches that task out of a processor and in to one; KVM uses it to know where its virtual CPUs are.
+**Linux: high-resolution timers and preemption notifiers.** An [`hrtimer`](https://elixir.bootlin.com/linux/v6.12/source/kernel/time/hrtimer.c) is a timer whose callback runs in interrupt context, normally on the processor that armed it; a *pinned* timer is guaranteed to stay there, and a *hard* one runs in the interrupt itself even on a real-time kernel. The timer interrupt publishes the registers of whatever it interrupted, and a callback reads them with `get_irq_regs()`, which is how Linux's profiler samples programs; if the callback changes the saved instruction pointer, the interrupt returns somewhere else. Not every interrupt publishes its registers that way: the timer does, and the plain cross-processor call that the kick uses, at the end of this chapter, does not. A **preemption notifier** ([`preempt_notifier_register()`](https://elixir.bootlin.com/linux/v6.12/source/kernel/sched/core.c#L4866)) is a pair of callbacks Linux runs for one task every time it switches that task out of a processor and in to one; KVM uses it to know where its virtual CPUs are.
 
 </div>
 
@@ -42,24 +42,26 @@ void klet_watch_arm(struct klet_carrier *c)
 }
 ```
 
-Every time it fires, the callback raises TICK and then decides how to deliver it:
+Every time a period expires, the callback raises TICK and then decides how to deliver whatever is pending:
 
 *Simplified from `prototype/endovisor/watch.c`: `klet_watch_fn`.*
 
 ```c
 static enum hrtimer_restart klet_watch_fn(struct hrtimer *timer)
 {
-	struct pt_regs *regs = get_irq_regs();      /* what the interrupt interrupted */
+	struct pt_regs *regs = get_irq_regs();      /* what the interrupt interrupted; NULL if nothing was */
 	struct klet_carrier *c;
+	bool tick = !this_cpu_read(klet_watch_requested);   /* a period expired, or a kick asked for this firing (below) */
 
 	if (!current->kernelet)                     /* not a carrier any more: stop */
 		return HRTIMER_NORESTART;
 	c = klet_current_carrier();
 
-	klet_virq_raise(c, KLET_VIRQ_TICK);         /* 1. the tick */
+	if (tick)
+		klet_virq_raise(c, KLET_VIRQ_TICK);     /* 1. the tick */
 
-	if (user_mode(regs) || !klet_in_image_text(regs->ip) || !klet_in_kernelet(c)) {
-		/* in user mode (klet_virq_raise flagged the carrier), in a service, or in Linux: leave it pending */
+	if (!regs || user_mode(regs) || !klet_in_image_text(regs->ip) || !klet_in_kernelet(c)) {
+		/* no registers, user mode (klet_virq_raise flagged the carrier), a service, or Linux: leave it pending */
 	} else if (!klet_critical(c)) {
 		klet_virq_redirect(c, regs);            /* 2. in kernelet code, not in a critical section: deliver now */
 	} else {
@@ -67,7 +69,7 @@ static enum hrtimer_restart klet_watch_fn(struct hrtimer *timer)
 	}
 	/* 3. the bound on critical sections: chapter 10 */
 
-	hrtimer_forward_now(timer, ns_to_ktime(KLET_WATCH_INTERVAL_NS));
+	hrtimer_forward_now(timer, ns_to_ktime(KLET_WATCH_INTERVAL_NS));   /* a requested firing goes back to its period's own expiry instead */
 	return HRTIMER_RESTART;
 }
 ```
@@ -85,8 +87,9 @@ bool klet_virq_redirect(struct klet_carrier *c, struct pt_regs *regs)
 		return false;
 	if (klet_irq_off(c))                         /* interrupts masked: wait */
 		return false;
-	if (regs->sp - c->vrec.stack_limit < KLET_UPCALL_HEADROOM)   /* not enough stack for the handler */
-		return false;
+	limit = READ_ONCE(c->vrec.stack_limit);
+	if (!limit || regs->sp < limit || regs->sp - limit < KLET_UPCALL_HEADROOM)
+		return false;                            /* no limit published, or not enough stack for the handler */
 
 	WRITE_ONCE(c->vrec.virq_ip, regs->ip);       /* where we interrupted the kernelet */
 	WRITE_ONCE(c->vrec.irq_off, 1);              /* mask, as hardware clears IF when it takes an interrupt */
@@ -169,9 +172,9 @@ flowchart LR
 Two separate fields in the record stand for the two ways a kernel holds things off, and they are kept separate because OSTD keeps them separate.
 
 - `irq_off` is the virtual interrupt flag, inverted. vOSTD sets it where OSTD's interrupts-off guard would clear the processor's flag, and clears it when the guard drops; the endovisor sets it when it redirects into the upcall, and the upcall clears it at the end. While it is set, nothing is delivered.
-- The **guard count**, the low bits of `preempt_info`, is how many preemption guards and spin locks are held. What a guard forbids is a task switch, which is why `klet_virq_body` calls `might_preempt` only when the count is zero. A guard does not stop the handlers from running when it drops, or when a kick arrives from user mode; but the watch timer never interrupts a task that holds one, so the bit waits for the last guard to drop, which is the unmask path below.
+- The **guard count**, the low bits of `preempt_info`, is how many preemption guards and spin locks are held. A guard forbids only a task switch, which is why `klet_virq_body` calls `might_preempt` only when the count is zero. Handlers may still run under a guard: when the carrier comes back from user mode with a bit pending, `execute` runs them whatever the count. What a guard does prevent is the upcall, because the watch timer never redirects a task that holds one; a bit raised then waits for the last guard to drop, which is the unmask path below.
 
-Both are updated by the virtual CPU that owns the record, with single instructions where it matters, because the endovisor reads them from an interrupt on the same processor.
+Both are updated by the virtual CPU that owns the record, with single instructions where it matters, because the endovisor reads them from an interrupt on the same processor and the upcall writes them. If a guard's increment compiled to a load, an add and a store, and an upcall ran between the load and the store and changed the word itself, the store would overwrite the upcall's change; a single `inc` cannot be split by an interrupt.
 
 A bit that was left pending while interrupts were masked must still be delivered. The guard that unmasks does it:
 
@@ -211,7 +214,7 @@ When one virtual CPU kicks another that is running kernelet code on a different 
 ```c
 void klet_kick_remote(struct klet_carrier *c)
 {
-	if (c->state != KLET_RUNNING || c->depth != 0 || !task_on_cpu(c->task))
+	if (c->state != KLET_RUNNING || c->depth != 0 || !klet_task_on_cpu(c->task))
 		return;                                 /* not in kernelet code on a processor: the bit will be found */
 	smp_call_function_single(task_cpu(c->task), klet_kick_ipi, c, 0);
 }
@@ -224,7 +227,7 @@ static void klet_kick_ipi(void *arg)            /* runs in interrupt context on 
 }
 ```
 
-A requested firing is not a tick: the callback raises no TICK for it, takes no strike (chapter 10), and puts the timer back on the expiry of the period it cut short, so a kick neither advances the kernelet's clock nor delays its next tick. A kick whose bit is already set does nothing at all, so a thousand kicks cost one delivery.
+A requested firing is not a tick, unless the period it cut short has already run out: the callback raises no TICK for it, takes no strike (chapter 10), and puts the timer back on the expiry of the period it cut short, so a kick neither advances the kernelet's clock nor delays its next tick. A kick whose bit is already set does nothing at all, so a thousand kicks cost one delivery.
 
 <div class="recap">
 

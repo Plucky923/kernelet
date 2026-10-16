@@ -6,22 +6,25 @@ Read the kernel in four pieces. After each, the chapter says what the piece asks
 
 ## The program it runs
 
-The kernel runs one user program, eighteen lines of assembly:
+The kernel runs one user program, a few lines of assembly, given here in full apart from its license line:
 
 *Unchanged: `prototype/hello/hello.S`.*
 
 ```asm
+.global _start                      # entry point
+.section .text                      # code section
 _start:
-    mov     $1, %rax                # system call number of write
-    mov     $1, %rdi                # file descriptor 1
-    mov     $message, %rsi          # address of the message
+    mov     $1, %rax                # syscall number of write
+    mov     $1, %rdi                # stdout
+    mov     $message, %rsi          # address of message
     mov     $message_end, %rdx
-    sub     %rsi, %rdx              # its length
+    sub     %rsi, %rdx              # calculate message len
     syscall
-    mov     $60, %rax               # system call number of exit
-    mov     $0, %rdi                # exit code
+    mov     $60, %rax               # syscall number of exit, move it to rax
+    mov     $0, %rdi                # exit code, move it to rdi
     syscall
 
+.section .rodata                    # read only data section
 message:
     .ascii  "Hello, world\n"
 message_end:
@@ -56,6 +59,8 @@ The program's bytes are compiled into the kernel with `include_bytes!`. `main` b
 
 ## Piece 2: building the address space
 
+*Simplified from `prototype/hello/src/lib.rs`: `create_vm_space`.*
+
 ```rust
 fn create_vm_space(program: &[u8]) -> VmSpace {
     let nbytes = program.len().align_up(PAGE_SIZE);
@@ -84,7 +89,7 @@ fn create_vm_space(program: &[u8]) -> VmSpace {
 
 <div class="rust">
 
-**Rust: `Result`, `unwrap` and `drop`.** A function that can fail returns a `Result`, which is either `Ok(value)` or `Err(error)`. Calling `.unwrap()` on it takes the value and panics (stops the kernel with a message) if it was an error. The teaching kernel unwraps everything; a real kernel would handle the errors. Every value has a *life*, which ends at the end of the block that holds it, and a type may say what happens then by implementing `Drop`: a function the compiler runs at that moment, a destructor. `drop(x)` ends the life of `x` now rather than later.
+**Rust: `Result`, `Option`, `match`, `?` and `drop`.** A function that can fail returns a `Result`, which is either `Ok(value)` or `Err(error)`. Calling `.unwrap()` on it takes the value and panics (stops the kernel with a message) if it was an error. The teaching kernel unwraps everything; a real kernel would handle the errors. An `Option<T>` is either `Some(value)` or `None`, a value that may be absent. `match x { A => …, B(v) => … }` is a `switch` over such alternatives that can also pull out the value a case carries; `if let Some(v) = x { … }` runs its block only when `x` is `Some`, and `let Some(v) = x else { … }` leaves through the `else` block otherwise. A trailing `?` on a `Result` or `Option` returns at once from the enclosing function if the value was `Err` or `None`, and otherwise unwraps it. `loop { … break v; }` is a loop whose `break` hands back a value, so a loop can be the right-hand side of a `let`. Every value has a *life*, which ends at the end of the block that holds it, and a type may say what happens then by implementing `Drop`: a function the compiler runs at that moment, a destructor. `drop(x)` ends the life of `x` now rather than later.
 
 </div>
 
@@ -99,6 +104,8 @@ Three framework types appear here.
 **What it asks of the machine:** physical frames to allocate; a page table per address space, which the kernel edits one page at a time through a cursor; and a way to switch off task preemption.
 
 ## Piece 3: the task and the loop
+
+*Simplified from `prototype/hello/src/lib.rs`: `create_user_task`, `create_user_context`.*
 
 ```rust
 fn create_user_task(vm_space: Arc<VmSpace>) -> Arc<Task> {
@@ -155,6 +162,8 @@ sequenceDiagram
 **What it asks of the machine:** tasks with their own stacks; a way to enter user mode that returns on a system call or an exception, with the program's registers in hand.
 
 ## Piece 4: the system calls
+
+*Simplified from `prototype/hello/src/lib.rs`: `handle_syscall`.*
 
 ```rust
 fn handle_syscall(user_context: &mut UserContext, vm_space: &VmSpace) {

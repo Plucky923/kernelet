@@ -10,7 +10,7 @@ Linux has a kind of task that runs only kernel code, the *kernel thread*, and it
 
 <div class="linux">
 
-**Linux: how tasks are made.** Every task is created by one function, [`kernel_clone()`](https://elixir.bootlin.com/linux/v6.12/source/kernel/fork.c#L2745), which underlies `fork`, `clone` and kernel-thread creation. It copies the parent's task structure and then, depending on flags, shares or copies the address space, open files and so on. Called with a function pointer in its arguments and *without* the kernel-thread flag, it makes a task that starts in that function in kernel mode and, when the function returns, continues to user mode with whatever is in its saved registers. That is how Linux itself starts `init`. The function is not exported to modules; the patch exports it.
+**Linux: how tasks are made.** Almost every task is created by one function, [`kernel_clone()`](https://elixir.bootlin.com/linux/v6.12/source/kernel/fork.c#L2745), which underlies `fork`, `clone` and kernel-thread creation. It copies the parent's task structure and then, depending on flags, shares or copies the address space, open files and so on. Called with a function pointer in its arguments and *without* the kernel-thread flag, it makes a task that starts in that function in kernel mode and, when the function returns, continues to user mode with a copy of its parent's registers in which the instruction pointer, the stack pointer and `ax` are zero. That is how Linux itself starts `init`. The function is not exported to modules; the patch exports it.
 
 The other way to give a task a fresh address space is [`execve`](https://elixir.bootlin.com/linux/v6.12/source/fs/exec.c#L2097): Linux offers the file to each registered **binary-format handler** ([`struct linux_binfmt`](https://elixir.bootlin.com/linux/v6.12/source/include/linux/binfmts.h#L82)) in turn, and the one that recognizes the file replaces the process's address space and sets its starting registers. A module can register a handler of its own.
 
@@ -36,13 +36,13 @@ Everything the runtime set up on that child before the `execve`, such as its con
 
 <div class="linux">
 
-**Linux: control groups.** A control group is a set of tasks that Linux accounts and limits together: their share of the processors, their memory, and more. A child starts in its parent's group. Containers are built on them, and so is a sandbox: because every carrier is in the sandbox's group, the processor time the kernelet burns is charged to the tenant by machinery Linux already has, and so is any memory the endovisor allocates on a carrier with the flag that asks for it (`__GFP_ACCOUNT`). The prototype charges page tables, kernelet stacks and the heap that way; its one grant is allocated when the module loads, before any sandbox exists, and is not charged to anyone.
+**Linux: control groups.** A control group is a set of tasks that Linux accounts and limits together: their share of the processors, their memory, and more. A child starts in its parent's group. Containers are built on them, and so is a sandbox: because every carrier is in the sandbox's group, the processor time the kernelet burns is charged to the tenant by machinery Linux already has, and so is any memory allocated on a carrier with the flag that asks for it (`__GFP_ACCOUNT`). Linux charges the tenant's page tables that way by itself, to the carrier whose fault or mapping causes them; the endovisor charges the pages of the kernelet's stacks and its heap with the same flag (`GFP_KERNEL_ACCOUNT`); the one grant is allocated when the module loads, before any sandbox exists, and is not charged to anyone.
 
 </div>
 
 <div class="linux">
 
-**Linux: `TIF_NOTIFY_RESUME`.** Linux enters the exit loop of chapter 4, and so runs the resume hook, only if the task has a *work flag* set. A pending signal sets one. Kernel code that wants the loop to run sets the flag [`TIF_NOTIFY_RESUME`](https://elixir.bootlin.com/linux/v6.12/source/include/linux/resume_user_mode.h#L16) on the task: a plain flag-set on the current task, or `set_notify_resume()` on another, which also nudges the processor that task is on. The book says the endovisor *flags the carrier* when it means this.
+**Linux: `TIF_NOTIFY_RESUME`.** Linux enters the exit loop of chapter 4, and so runs the resume hook, only if the task has a *work flag* set: a pending signal, a request to reschedule, or the flag below. So the hook runs for every kind of exit work, not only the kernelet's, and must be written to find nothing of its own to do. Kernel code that wants the loop to run sets the flag [`TIF_NOTIFY_RESUME`](https://elixir.bootlin.com/linux/v6.12/source/include/linux/resume_user_mode.h#L16) on the task: a plain flag-set on the current task, or `set_notify_resume()` on another, which also nudges the processor that task is on. The book says the endovisor *flags the carrier* when it means this.
 
 </div>
 
@@ -107,11 +107,21 @@ static int klet_spawn_vcpu(struct klet_inst *inst, int vcpu)
 		.fn = klet_carrier_main,                 /* the child starts here, in kernel mode */
 		.fn_arg = (void *)(long)vcpu,
 	};
-	return kernel_clone(&args) >= 0 ? 0 : -EAGAIN;
+	pid_t pid;
+
+	for (tries = 0; tries < 8; tries++) {
+		klet_drain_signals(klet_current_carrier());   /* kernel_clone refuses while a signal is pending (chapter 7) */
+		pid = kernel_clone(&args);
+		if (pid != -ERESTARTNOINTR)
+			break;
+	}
+	return pid >= 0 ? 0 : -EAGAIN;
 }
 ```
 
-`wait_event_interruptible` is Linux's ordinary way to sleep until a condition holds: the task is woken whenever someone signals the wait queue it names, and checks the condition again; the *killable* variant the clones use wakes for a fatal signal only, so that a `SIGSTOP` left pending for the carrier (chapter 7) does not end the wait. Each clone is a separate process, not a thread: no `CLONE_VM`, no `CLONE_FILES`, no `CLONE_THREAD`. It gets a *copy* of the root's empty address space, a copy of its descriptor table, and, because Linux copies the task structure, the root's gate pointer, syscall-work bit, control group, credentials and seccomp filter. The endovisor sets none of those up per carrier; `fork` does.
+`wait_event_interruptible` is Linux's ordinary way to sleep until a condition holds: a waker *wakes* the queue the sleeper named, and the sleeper checks its condition again. An *interruptible* sleep also ends whenever a signal is pending for the task. The clones use the *killable* variant, which ends only for `SIGKILL`, because a `SIGSTOP` sent to a carrier stays pending until the carrier next heads for user mode (chapter 7) and must not end the wait early.
+
+Each clone is a separate process, not a thread: no `CLONE_VM`, no `CLONE_FILES`, no `CLONE_THREAD`. It gets a *copy* of the root's empty address space, a copy of its descriptor table, and, because Linux copies the task structure, the root's gate pointer, syscall-work bit, control group, credentials and seccomp filter. The control group, the credentials and the seccomp filter it keeps as they came: the endovisor sets none of them up per carrier; `fork` does. The gate pointer and the lifeline it replaces at once: the clone's first act, below, is to attach a record of its own in place of the inherited pointer, and to close the inherited copy of the root's lifeline and open one of its own.
 
 ```mermaid
 flowchart TB
@@ -120,7 +130,7 @@ flowchart TB
     root -- "kernel_clone(...)" --> v1["carrier of virtual CPU 1<br/>waits for vcpu_boot"]
     subgraph inherited["inherited by every clone, because Linux copies it"]
         direction LR
-        i1[gate pointer] --- i2[empty address space] --- i3[control group] --- i4[seccomp filter] --- i5[lifeline, see below]
+        i1["gate pointer<br/>(replaced by its own)"] --- i2[empty address space] --- i3[control group] --- i4[seccomp filter] --- i5["lifeline, see below<br/>(replaced by its own)"]
     end
 ```
 

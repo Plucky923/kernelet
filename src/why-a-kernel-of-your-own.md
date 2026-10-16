@@ -83,6 +83,7 @@ These are used in one sense throughout the book.
 | **grant** | the physical memory a kernelet has been given |
 | **virtual CPU** | one of the fixed number of processors a sandbox is given when it is created; the kernelet runs its tasks on them as a kernel runs on real processors (chapter 8) |
 | **carrier** | the Linux task that stands behind one virtual CPU (chapter 5) |
+| **kernelet runtime** | the host program that creates and configures sandboxes, as a container runtime does (chapter 5) |
 | **gate** | the small change to Linux that hands a tenant's system calls to its kernelet (chapter 4) |
 
 The last three are the Linux-specific parts of the design, and the chapters named define them in full.

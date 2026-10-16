@@ -149,9 +149,41 @@ def main():
                 if bodies and not found:
                     problems.append(f"{rel}:{lineno}: `{s}` is not in {' or '.join(files)}")
 
+    # An "Unchanged" caption promises that the fenced block after it is a verbatim
+    # run of lines from the one file it names (trailing whitespace aside).
+    n_verbatim = 0
+    for full, text in texts.items():
+        rel = os.path.relpath(full, ROOT)
+        tl = text.split("\n")
+        for i, line in enumerate(tl):
+            if not re.match(r"^\s*\*Unchanged( from|:) ", line):
+                continue
+            files = [s for s in CODE_SPAN_RE.findall(line) if s.startswith("prototype/")]
+            if len(files) != 1:
+                problems.append(f"{rel}:{i+1}: an Unchanged caption must name exactly one file")
+                continue
+            j = i + 1
+            while j < len(tl) and not tl[j].startswith("```"):
+                j += 1
+            k = j + 1
+            while k < len(tl) and not tl[k].startswith("```"):
+                k += 1
+            if j >= len(tl) or k >= len(tl):
+                problems.append(f"{rel}:{i+1}: no fenced block after the Unchanged caption")
+                continue
+            block = [l.rstrip() for l in tl[j+1:k]]
+            fpath = os.path.join(ROOT, files[0])
+            if not os.path.isfile(fpath):
+                continue
+            with open(fpath, encoding="utf-8", errors="replace") as f:
+                fl = [l.rstrip() for l in f.read().split("\n")]
+            n_verbatim += 1
+            if not any(fl[s:s+len(block)] == block for s in range(len(fl) - len(block) + 1)):
+                problems.append(f"{rel}:{i+1}: the block after this Unchanged caption is not a verbatim run of {files[0]}")
+
     for p in problems:
         print(p)
-    print(f"check: {len(pages)} pages, {n_links} links, {n_refs} code references checked, {n_figs} figures")
+    print(f"check: {len(pages)} pages, {n_links} links, {n_refs} code references checked, {n_verbatim} verbatim blocks, {n_figs} figures")
     if problems:
         print(f"check: FAILED with {len(problems)} problem(s)")
         return 1

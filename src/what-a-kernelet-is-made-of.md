@@ -89,7 +89,7 @@ pub struct EntryTable {
 
 </div>
 
-Two rules shape every service. Arguments are integers or pointers into the kernelet's own memory: a space number, a virtual address, a physical address, a buffer to log. The one exception is the heap, whose blocks are the host's, below. And the host keeps no pointer into the kernelet after a call returns. Both keep a buggy vOSTD from steering the endovisor into writing wherever the kernelet says.
+Two rules shape every service. Arguments are integers or pointers into the kernelet's own memory: a space number, a virtual address, a physical address, a buffer to log. The one exception is `mem_free`, whose pointer is into host memory that `mem_alloc` returned, below. And the host keeps no pointer into the kernelet after a call returns. Both keep a buggy vOSTD from steering the endovisor into writing wherever the kernelet says.
 
 The image's one exported symbol is the entry table:
 

@@ -2,7 +2,7 @@
 
 //! Ported from real OSTD's `task/processor.rs` at `ab9a4cfdc`.
 //!
-//! Two changes:
+//! Three changes:
 //!
 //! 1. `crate::sync::finish_grace_period()` is gone, because vOSTD has no
 //!    general RCU (its one grace period, for tenant memory, is in
@@ -13,6 +13,10 @@
 //!    which means the context switch itself is protected from the host
 //!    descheduling the carrier halfway through — for free, and for the same
 //!    reason OSTD wanted interrupts off there.
+//! 3. `after_switching_to` also tells the endovisor which kernelet stack an
+//!    upcall may now be pushed onto, and closes the window in which
+//!    [`super::scheduler`] lets nothing preempt this vCPU into scheduling
+//!    again.
 
 use alloc::sync::Arc;
 use core::{ptr::NonNull, sync::atomic::Ordering};
@@ -137,6 +141,10 @@ pub(super) unsafe fn after_switching_to() {
     if let Some(handler) = POST_SCHEDULE_HANDLER.get() {
         handler();
     }
+
+    // The scheduling decision that brought this task here has been carried
+    // out; preemption may decide again.
+    super::scheduler::end_resched_window();
 
     // See `switch_to_task`, where a guard was forgotten.
     crate::arch::irq::enable_local();

@@ -158,10 +158,34 @@ pub enum UpdateFlags {
     Exit,
 }
 
+crate::cpu_local_cell! {
+    /// Whether this virtual CPU is between a scheduling decision and the switch
+    /// that carries it out.
+    static IN_RESCHED: bool = false;
+}
+
+/// Ends the window [`reschedule`] opened: called by the switched-to task in
+/// [`processor::after_switching_to`], and by `reschedule` itself when it
+/// decides to do nothing.
+pub(super) fn end_resched_window() {
+    IN_RESCHED.store(false);
+}
+
 /// Preempts the current task.
+///
+/// Not while this virtual CPU is inside [`reschedule`] or the idle loop's pick.
+/// Real OSTD never preempts kernel code from an interrupt; vOSTD does (an
+/// upcall, or a guard drop that delivers a pending virtual interrupt), and one
+/// that lands after the run queue has decided which task runs next but before
+/// the switch has masked interrupts would ask the run queue again. The run
+/// queue, which has already made the decided task its current one and put the
+/// task still running back in its queue, may then pick the running task, and
+/// `switch_to_task` would wait for ever for that task to stop running. The
+/// preemption is not lost: `need_preempt` stays set, and the next guard drop
+/// or upcall after the switch acts on it.
 #[track_caller]
 pub(crate) fn might_preempt() {
-    if !cpu_local::should_preempt() {
+    if !cpu_local::should_preempt() || IN_RESCHED.load() {
         return;
     }
     reschedule(|local_rq| {
@@ -292,12 +316,16 @@ pub(super) fn yield_now() {
 pub(crate) fn vcpu_idle_loop() -> ! {
     loop {
         let mut next = None;
+        IN_RESCHED.store(true);
         scheduler_singleton().mut_local_rq_with(&mut |rq| {
             next = rq.try_pick_next().cloned();
         });
         match next {
             Some(task) => processor::switch_to_task(task),
-            None => crate::vcpu::idle(0),
+            None => {
+                end_resched_window();
+                crate::vcpu::idle(0)
+            }
         }
     }
 }
@@ -312,6 +340,10 @@ where
     // before the decision is made, to avoid a race.
     cpu_local::clear_need_preempt();
 
+    // From the decision to the switch, nothing may preempt this vCPU's code
+    // into deciding again (see `might_preempt`).
+    IN_RESCHED.store(true);
+
     let mut spins: u32 = 0;
     let next_task = loop {
         let mut action = ReschedAction::DoNothing;
@@ -321,6 +353,7 @@ where
 
         match action {
             ReschedAction::DoNothing => {
+                end_resched_window();
                 return;
             }
             ReschedAction::Retry => {

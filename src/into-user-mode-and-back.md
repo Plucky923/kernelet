@@ -27,9 +27,9 @@ fn execute<T: UserModeHooks>(&mut self, hooks: &T) -> ReturnReason {
 }
 ```
 
-So `user_run` returns `0` for a system call, `1` for an exception and `2` for "an event happened; the kernel may want to know, then call me again". The third case is for chapter 9. The context it is given is a `RawUserContext`: the eighteen general registers, in a fixed order, followed by three fields for exceptions.
+So `user_run` returns `0` for a system call, `1` for an exception and `2` for "an event happened; the kernel may want to know, then call me again". The third case is for chapter 9. The context it is given is a `RawUserContext`: the eighteen registers of chapter 2, in a fixed order, followed by three fields for exceptions.
 
-On the endovisor's side, `user_run` is one of the two services that do not use the stub of the last chapter. It records the context, switches to the Linux stack, and does not come back until a hook brings the carrier into the kernelet again:
+On the endovisor's side, `user_run` is the one service that does not use the stub of the last chapter. It records the context, switches to the Linux stack, and does not come back until a hook brings the carrier into the kernelet again:
 
 *Simplified from `prototype/endovisor/carrier.c`: `klet_svc_user_run`.*
 
@@ -75,12 +75,6 @@ static void klet_ctx_to_regs(struct klet_carrier *c, struct pt_regs *regs)
 
 Three details keep this safe. The flags are sanitized: the interrupt-enable bit is forced on and the privilege-level bits are cleared, so a tenant cannot talk its kernel into giving it a program that runs with interrupts off. The code and stack segment selectors are fixed to Linux's user segments. And `orig_ax`, Linux's record of which system call is in progress, is set to -1, which switches off Linux's system-call restart logic; restarting is the kernel proper's business.
 
-<div class="linux">
-
-**Linux: `TIF_NOTIFY_RESUME`.** Linux enters the exit loop, and so runs the resume hook, only if the task has a *work flag* set. A pending signal sets one. A module that wants the loop to run sets the flag [`TIF_NOTIFY_RESUME`](https://elixir.bootlin.com/linux/v6.12/source/include/linux/resume_user_mode.h#L16) on the task, with a plain flag-set on the current task or `set_notify_resume()` on another, which also nudges the processor that task is on. The book says the endovisor *flags the carrier* when it means this.
-
-</div>
-
 The first trip has a wrinkle. When `klet_carrier_main` returns, Linux's fork-return path zeroes the `ax` it is about to restore, so registers applied there would not survive. That is why `klet_carrier_main` ends by flagging the carrier: the resume hook then runs last and applies the full register file.
 
 ## Coming back by a system call
@@ -97,7 +91,7 @@ static bool klet_gate_syscall(struct pt_regs *regs)
 	if (c->kind == KLET_ROOT || c->state != KLET_USER || !c->ctx)
 		return false;                           /* not a carrier in user mode: not ours */
 	if (regs->cs != __USER_CS || in_compat_syscall()) {
-		/* a 32-bit entry instruction: report what a machine would raise, a #GP */
+		/* a 32-bit entry instruction: report roughly what a machine would raise, a #GP */
 		c->exc_trap = X86_TRAP_GP; c->exc_pending = true;
 		set_thread_flag(TIF_NOTIFY_RESUME);
 		return true;
@@ -147,7 +141,9 @@ sequenceDiagram
     L->>U: restore pt_regs, return to user mode
 ```
 
-Note what the sequence does *not* say: that the task which comes back is the one that left. Between the two switches the kernelet's own scheduler may have run another task, and then it is that task's `execute` that leaves, with another thread's registers. Nothing in Linux's exit path minds, because everything Linux will restore from the stack is in `pt_regs`, and the hook overwrites all of it. One thing is not there: the base of the segment register that programs use for thread-local storage, which Linux keeps per task and restores from its own record. The prototype's context carries no such base, so its tenant threads share their carrier's; a full vOSTD would carry one per thread and have the endovisor set it on each trip.
+Note what the sequence does *not* say: that the task which comes back is the one that left. Between the two switches the kernelet's own scheduler may have run another task, and then it is that task's `execute` that leaves, with another thread's registers. Nothing in Linux's exit path minds, because everything Linux will restore from the stack is in `pt_regs`, and the hook overwrites all of it.
+
+One register is not in `pt_regs`. A program keeps a pointer to its thread's private variables in a segment register (`%fs` on x86-64), and Linux saves that register's base per task, in its own record, not on the stack. The prototype's context carries no such base, so every tenant thread on a carrier shares the carrier's; a full vOSTD would carry one per thread and have the endovisor set it on each trip.
 
 ## Coming back by an exception
 
@@ -187,7 +183,11 @@ static bool klet_drain_signals(struct klet_carrier *c)
 }
 ```
 
-A fault signal is recognized by its number and its `si_code` together: `SIGSEGV`, `SIGBUS`, `SIGILL`, `SIGFPE` or `SIGTRAP` with a code that Linux's trap handlers use, which is positive and below the value the kernel reserves for signals it sends on its own account; a general-protection fault is the one trap that arrives as `SIGSEGV` with that kernel code. Anything else, whether sent by a process, which on the host side can only be the operator, or by Linux for a reason of its own, is discarded. `SIGKILL` and `SIGSTOP` are left alone: the first is how the operator and the endovisor end a carrier, and Linux acts on it in the same loop; the second stops a carrier as it stops any task, on its way to user mode, and a stopped carrier is a stopped virtual CPU until `SIGCONT`. The root carrier is the exception for `SIGSTOP`: it never returns to user mode, so a stop could never act on it, and one left pending would make every clone it attempts fail, so it drops the signal with the rest.
+A fault signal is recognized by its number and its `si_code` together. The number is one of `SIGSEGV`, `SIGBUS`, `SIGILL`, `SIGFPE` and `SIGTRAP`, and the code is one a trap handler uses: positive, and below `SI_KERNEL`, the code Linux puts on signals it sends on its own account. One more pair is accepted, because Linux reports a general-protection fault as `SIGSEGV` with `si_code` `SI_KERNEL`. Anything else is discarded: a signal sent by a process, which on the host side can only be the operator, since a tenant's `kill` is a system call and the gate takes those; or a signal Linux sends for a reason of its own, such as a resource limit.
+
+`SIGKILL` and `SIGSTOP` are left in the queue. The first is how the operator and the endovisor end a carrier, and Linux acts on it in the same loop. The second takes effect at the carrier's next return to user mode, where Linux stops it as it stops any task; a stopped carrier is a stopped virtual CPU until `SIGCONT`, and a virtual CPU that does not return to user mode, because it is idle or runs only kernel tasks, keeps running with the stop pending.
+
+The root carrier is the exception for `SIGSTOP`, and drops it with the rest. It never returns to user mode, so a stop could never act on it; and `kernel_clone` refuses to run while its caller has a signal pending, so a `SIGSTOP` left in the root's queue would make every clone it attempts fail.
 
 The resume hook brings the exception into the kernelet:
 
