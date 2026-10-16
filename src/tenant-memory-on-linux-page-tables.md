@@ -79,7 +79,7 @@ Three choices in this code each close a hole.
 
 **The file's inode.** The plain anonymous-inode helper hands every caller one shared inode. Linux keeps, per inode, the list of areas that map it, so every space's area would sit in one list, and an operation on one space's file could reach the others'. Each space gets an inode of its own.
 
-**The area's flags.** `VM_SHARED`, which the `MAP_SHARED` in the `vm_mmap` call sets, is required for the host's sake: inserting a raw frame number into a private, copy-on-write area is a `BUG_ON` in Linux, which kills the calling task with the address-space lock held, and halts the machine if the host is configured to panic on an oops, rather than returning an error. `VM_DONTCOPY` keeps a `fork` of a carrier while it is in a tenant's space, which never happens but could, from copying entries that belong to the kernelet. The area covers exactly the range the kernel proper can map, so that a `vm_map` outside it can be refused, and `zap_vma_ptes()`, which silently does nothing for a range not wholly inside its area, is always inside.
+**The area's flags.** `VM_SHARED`, which the `MAP_SHARED` in the `vm_mmap` call sets, is required for the host's sake: inserting a raw frame number into a private, copy-on-write area is a `BUG_ON` in Linux, an assertion whose failure (an *oops*) kills the calling task with the address-space lock held, and halts the machine if the host is configured to panic on an oops, rather than returning an error. `VM_DONTCOPY` keeps a `fork` of a carrier while it is in a tenant's space, which never happens but could, from copying entries that belong to the kernelet. The area covers exactly the range the kernel proper can map, so that a `vm_map` outside it can be refused, and `zap_vma_ptes()`, which silently does nothing for a range not wholly inside its area, is always inside.
 
 ## The address-space switch
 
@@ -217,7 +217,7 @@ static int klet_pte_protect(pte_t *pte, unsigned long addr, void *data)
 
 **`vm_flush(space, va, len)`** is [`flush_tlb_mm_range()`](https://elixir.bootlin.com/linux/v6.12/source/arch/x86/mm/tlb.c#L995) over the range, or over the whole space, on every processor where the address space is loaded, which `switch_mm_irqs_off()` keeps track of. It is not exported in a stock kernel, which is why the patch exports it. It never sleeps, and so may be called while the kernel proper still holds a cursor.
 
-Two more services complete the set: `vm_activate(space)` only records the space in the virtual CPU's record, where the hooks of chapter 7 find it, and never sleeps, because the kernel proper calls `activate` with interrupts off; and `vm_destroy(space)` clears the whole area, waits for calls in flight, and drops the endovisor's reference on the address space.
+Two more services complete the set: `vm_activate(space)` only records the space in the virtual CPU's record, where the hooks of chapter 7 find it, and never sleeps, because a full kernel proper, such as Asterinas's, calls `activate` from the handler it runs right after a task switch, with interrupts off, and vOSTD must allow for that; and `vm_destroy(space)` clears the whole area, waits for calls in flight, and drops the endovisor's reference on the address space.
 
 ## Faults
 

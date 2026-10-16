@@ -10,7 +10,14 @@ few members of the same interface that no kernel here calls but a kernel
 written against OSTD would reasonably reach for, kept for completeness:
 `Task::need_yield`, `CpuId::bsp`, `SpinLock::try_lock`, `WaitQueue::wake_one`,
 `VmSpace::reader_writer`, and `UserContext::general_regs` and
-`general_regs_mut`. Nothing else.
+`general_regs_mut`. Four more blocks carry `#[allow(dead_code)]` because they
+describe a format whole although only part of it is read: the
+`PagingConstsTrait` in `src/mm/mod.rs` (the shape OSTD gives the trait; only
+`BASE_PAGE_SIZE` is read), the `pte` bits in `src/mm/page_table.rs` (every x86-64
+entry bit; the walk reads a few), the constants of `PageFaultErrorCode` in
+`src/arch/cpu/context.rs` (every bit of the hardware's error code), and the
+methods the flags macro in `src/mm/page_prop.rs` gives every flag type (not
+every type uses every method). Nothing else.
 
 Where real OSTD talks to hardware, vOSTD talks to the endovisor through the
 image ABI (`src/abi.rs`): a table of services the kernelet may call, a table
@@ -70,7 +77,7 @@ endovisor's pool hands out.
 | `src/timer/mod.rs`, `src/timer/jiffies.rs` | tick callbacks, run by the TICK virtual interrupt; `Jiffies` computed from the clock | 9 |
 | `src/mm/mod.rs` | address types, `paddr_to_vaddr`: every access to tenant memory goes through the host's direct map | 3 |
 | `src/mm/frame.rs` | frames of the grant, reference-counted: `Frame::into_raw`, `from_raw`, `FrameRef` | 3, 13 |
-| `src/mm/heap.rs` | the Rust heap, on the `mem_alloc` and `mem_free` services | 3 |
+| `src/mm/heap.rs` | the Rust heap, on the `mem_alloc` and `mem_free` services, and the one-off measurement of an allocation and its free | 3 |
 | `src/mm/backend.rs` | `Backend`: one Linux address space, and the `vm_*` services that change it | 12 |
 | `src/mm/vm_space.rs` | `VmSpace`, `Cursor`, `CursorMut`; the range lock, the withheld set, the retire list | 12, 13 |
 | `src/mm/page_table.rs` | the lockless walk of a Linux page table through the direct map | 13 |

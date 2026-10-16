@@ -11,7 +11,7 @@ A **virtual machine** gives each tenant a whole computer of its own, simulated. 
 A **container** gives each tenant a slice of one kernel. The kernel is shared; what separates tenants is bookkeeping inside it, which hides one tenant's processes and files from another's. The price is nearly zero, and so is the separation's depth: every tenant can call every system call of the shared kernel, and the kernel is tens of millions of lines of C. A bug anywhere in that surface is a hole between tenants.
 
 ```mermaid
-flowchart TB
+flowchart LR
     subgraph KL["Kernelets"]
         direction TB
         a3[tenant A's programs] --> akl[tenant A's kernelet]
@@ -96,6 +96,6 @@ The prototype is small: one kernelet at a time, a fixed 4 MiB of memory, no devi
 
 <div class="recap">
 
-**Recap.** A kernelet is a tenant's own kernel, loaded into the host kernel as safe Rust code over a framework, vOSTD, that offers the same interface as the real framework but confines every operation to the tenant. The host sees a few function calls from it, and nothing else. Linux is the host in this book; the endovisor is the Linux module that serves kernelets.
+**Recap.** A kernelet is a tenant's own kernel, loaded into the host kernel as safe Rust code over a framework, vOSTD, that offers the same interface as the real framework but confines every operation to the tenant. The host sees a few function calls from it and a few shared records, and nothing else. Linux is the host in this book; the endovisor is the Linux module that serves kernelets.
 
 </div>

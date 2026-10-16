@@ -8,7 +8,7 @@ A kernelet ends in one of three ways: its kernel asks to, by powering off; its k
 2. Every carrier is **stopped**, at a point where it holds nothing of Linux's.
 3. When no carrier is left, the module's reference count reaches zero and the sandbox has **exited**.
 
-Once a carrier has left the image for good, no code from it runs on that carrier again, and the endovisor never runs kernelet code on the host's behalf. Nothing is unwound and no destructor runs; a kernelet's state is abandoned, not tidied, because tidying would mean running the tenant's kernel on the host's behalf at the moment it is least trusted.
+Once a carrier has left the image for good, no code from it runs on that carrier again, and the endovisor never runs kernelet code on the host's behalf. Nothing is unwound and no destructor runs; a kernelet's state is abandoned, not tidied, because tidying would mean running the tenant's kernel on the host's behalf at the moment it is least trusted. What the endovisor gave the kernelet it takes back as a whole, without looking inside: the address spaces, every heap block the kernelet still held, which the endovisor tracks in a table of its own, and the pool of kernelet stacks.
 
 ## Stopping from inside
 
@@ -49,7 +49,7 @@ Where each carrier is at the moment of the mark decides what stops it:
 | the carrier is | what stops it |
 |---|---|
 | in user mode | Linux's signal handling: the carrier enters the exit loop, the resume hook sees the mark and dies |
-| asleep in a service (`vcpu_idle`, `vm_wait`) | the sleep is *killable*, so `SIGKILL` wakes it; on the way back, the service body finds the signal pending and **dooms** the carrier, and the stub leaves for good instead of returning into kernelet code |
+| asleep in a service (`vcpu_idle`, or `vm_wait` of chapter 13) | the sleep is *killable*, so `SIGKILL` wakes it; on the way back, the service body finds the signal pending and **dooms** the carrier, and the stub leaves for good instead of returning into kernelet code |
 | running a service | the same: the service completes, and the stub leaves for good |
 | **running kernelet code** | nothing in Linux's exit path can reach it: **eviction**, below |
 
@@ -57,7 +57,7 @@ Where each carrier is at the moment of the mark decides what stops it:
 
 The operator kills a carrier, or the out-of-memory killer does, or the test's runtime does it (`make probe`, at the end of this chapter): `kill(pid, SIGKILL)` on the root carrier's process id, or on a virtual CPU's. The root carrier is in its resume hook, sleeping in `wait_event_interruptible`; the signal wakes it, it dies, and Linux closes its descriptors, among them its lifeline. A virtual CPU's carrier dies the same way if the signal finds it in user mode; where Linux's exit path cannot reach it, the endovisor looks for the signal itself, as the end of this section shows. Either lifeline's release is the endovisor's notice:
 
-*Simplified from `prototype/endovisor/carrier.c`: `klet_carrier_lifeline_closed`, `klet_kill_instance`.*
+*Simplified from `prototype/endovisor/carrier.c`: `klet_carrier_lifeline_closed`, `klet_kill_instance`, `klet_sandbox_gone`.*
 
 ```c
 void klet_carrier_lifeline_closed(struct klet_carrier *c)
@@ -72,7 +72,12 @@ void klet_carrier_lifeline_closed(struct klet_carrier *c)
 		current->kernelet = NULL;
 		klet_sched_detach(c);
 	}
-	klet_carrier_put(c);                         /* the carrier's own reference; the lifeline file holds the other */
+	if (last)
+		klet_sandbox_gone(inst);                 /* the address spaces, the heap blocks still held, the stack pool */
+	if (!c->pnotifier_on && c->task->kernelet != &c->gate)
+		klet_carrier_put(c);                     /* the carrier's own reference; the lifeline file holds the other */
+	else
+		pr_warn("kernelet: carrier record released away from its task; kept\n");
 }
 
 void klet_kill_instance(struct klet_inst *inst)
@@ -86,7 +91,7 @@ void klet_kill_instance(struct klet_inst *inst)
 
 Any carrier's death while the sandbox is running ends it: a sandbox that had lost a virtual CPU would otherwise run on, with the others spinning on whatever locks the lost one held. The root's death ends it even after the kernelet has stopped itself, for a reason the next section makes clear: a virtual CPU that the stop left spinning in kernel mode never returns to the gate to die, and only the eviction that `klet_kill_instance` arms gets it out.
 
-A carrier of a virtual CPU that the operator kills directly while it is in user mode, before any mark is set, passes through the resume hook once more, since the signal counts as pending work, but the hook finds no mark and steps aside; Linux kills the task, and `klet_detach` never runs for it. The lifeline's release frees what the detach would have: this is why the death notice, not the detach, is the place where a carrier's records are finally released, and, since the sandbox was running, where the rest of the sandbox is told to die. The record itself holds two references, the carrier's own, dropped here, and the lifeline file's, dropped when the file is released, and goes when both are gone; the endovisor counts records made and freed at unload, and every test checks that none is left.
+A carrier of a virtual CPU that the operator kills directly while it is in user mode, before any mark is set, passes through the resume hook once more, since the signal counts as pending work, but the hook, finding no mark and (usually) no virtual interrupt pending, steps aside; Linux kills the task, and `klet_detach` never runs for it. (With a tick pending, the hook enters the kernelet, a service dooms the carrier, and it dies by the route of the next paragraph instead.) The lifeline's release frees what the detach would have: this is why the death notice, not the detach, is the place where a carrier's records are finally released, and, since the sandbox was running, where the rest of the sandbox is told to die. The record itself holds two references, the carrier's own, dropped here, and the lifeline file's, dropped when the file is released, and goes when both are gone. The carrier's own is dropped only if its task no longer points at the record: a lifeline released by some other task, through a copy of the descriptor, would leave the dying task's gate pointer and preemption notifier aimed at freed memory, so such a record is kept instead, with a warning; the endovisor counts records made and freed at unload, and every test checks that none is left.
 
 Killed anywhere else, the carrier is out of Linux's reach, since Linux acts on `SIGKILL` only on the way to user mode, and the endovisor has to notice the signal itself. Every service body, on its way back to the kernelet stack, tests for a pending fatal signal. If it finds one, it marks the sandbox dying, which kills the others, and marks the carrier **doomed**, and the stub then leaves the kernelet for good, through `klet_leave`, instead of returning into it. That covers a carrier asleep in `vcpu_idle` or `vm_wait`, whose sleeps are killable and so end at once, and one in the middle of any other service. A carrier running kernelet code and calling no service is caught by the watch timer of chapter 9: its callback, finding a fatal signal pending on a carrier of a live sandbox, points the interrupted instruction at the exit stub, exactly as the eviction sweep below does, and the carrier's death then ends the sandbox through its lifeline. With the watch timer turned off, such a carrier stays out of reach until it next calls a service.
 
@@ -147,7 +152,7 @@ void klet_evict_leave(void)
 ```
 
 ```mermaid
-flowchart LR
+flowchart TB
     a["carrier in kernelet code<br/>loop {} at depth 0"] -- "timer interrupt" --> b["klet_sweep:<br/>dying? kernel mode? ip in the image? depth 0?"]
     b -- "all four" --> c["saved ip := klet_exit_stub"]
     c -- "interrupt returns" --> d["klet_exit_stub: realign,<br/>klet_evict_leave: klet_leave(DEAD)"]
@@ -168,6 +173,6 @@ One of the memory tests, `make mem-kill`, kills a virtual CPU's carrier instead 
 
 <div class="recap">
 
-**Recap.** A kernelet ends by the `stop` service or by the death of any of its carriers; either marks the instance and sends `SIGKILL` to every carrier. A carrier in user mode dies by Linux's own exit path, after the gate's hook sees the mark and detaches it; one asleep in a killable service is woken and leaves for good on its way back, as does one that was running a service. A carrier running kernelet code is evicted: a timer on its processor finds the interrupted instruction in the image's text at depth 0 and points it at an exit stub, which leaves through the stack switch for good. The last lifeline's release is the sandbox's end.
+**Recap.** A kernelet ends by the `stop` service or by the death of any of its carriers; either marks the instance and sends `SIGKILL` to every carrier. A carrier in user mode dies by Linux's own exit path, after the gate's hook sees the mark and detaches it; one asleep in a killable service is woken and leaves for good on its way back, as does one that was running a service. A carrier running kernelet code is evicted: a timer on its processor finds the interrupted instruction in the image's text at depth 0 and points it at an exit stub, which leaves through the stack switch for good. The last lifeline's release is the sandbox's end, and returns everything the kernelet held.
 
 </div>

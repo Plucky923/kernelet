@@ -18,7 +18,7 @@ The resolution is to give kernelet code stacks of its own. A **kernelet stack** 
 flowchart LR
     subgraph L[" "]
         direction TB
-        l0["<b>the carrier's Linux stack, 16 KiB</b>"] ~~~ l1["pt_regs: the user registers"] --> l2["entry code frames"] --> l3["the gate hook's frame"] --> l4["klet_enter, parked in klet_switch"]
+        l0["<b>the carrier's Linux stack, 16 KiB</b>"] ~~~ l1["pt_regs: the user registers"] --> l2["entry code frames"] --> l3["the gate hook's frame<br/>(klet_carrier_main's, the first time)"] --> l4["klet_enter, parked in klet_switch"]
     end
     subgraph B[" "]
         direction TB
@@ -128,7 +128,7 @@ Where does `klet_enter` get called? From exactly three places: the carrier's sta
 
 A kernelet stack is 256 KiB from `vmalloc`, with an unmapped page before and after it, since every `vmalloc` range is followed by one.
 
-What the guard page buys is less than it seems. A stack that runs off its end faults with a stack pointer that is already bad; delivering a fault pushes a frame onto the very stack that has run out, so the processor cannot deliver it, and Linux halts the machine on the double fault that results. The full design answers that with a check at every function entry of the image; this prototype has no such check, so a kernel proper with unbounded recursion would halt the host, and the test kernels are written not to recurse.
+What the guard page buys is less than it seems. A stack that runs off its end faults with a stack pointer that is already bad; delivering a fault pushes a frame onto the very stack that has run out, so the processor cannot deliver it, and Linux halts the machine on the double fault that results. A check at every function entry of the image would catch it before the end; this prototype has no such check, so a kernel proper with unbounded recursion would halt the host, and the test kernels are written not to recurse.
 
 The endovisor keeps a **pool** of stacks per sandbox: a freed stack goes back to the pool, not to Linux, and the pool is returned whole when the sandbox is destroyed. The reason is a Linux detail a tenant could otherwise turn against the machine: freeing `vmalloc` memory is batched, and the batch ends in a TLB flush on *every* processor, so a kernel that created and ended tasks in a loop would tax processors it is not allowed to run on.
 
@@ -202,13 +202,13 @@ void klet_svc_body(struct klet_svc_args *args)                /* runs on the Lin
 {
 	struct klet_carrier *c = klet_current_carrier();
 
-	c->depth++;                      /* "inside the host": chapters 10 and 11 read this */
+	c->depth++;                      /* "inside the host": chapters 9 to 11 read this */
 	switch (args->op) {
 	case KLET_SVC_LOG_WRITE:
 		printk(KERN_INFO "kernelet: %.*s\n", (int)args->a1, (const char *)args->a0);
 		break;
 	case KLET_SVC_MEM_ALLOC:
-		args->ret = (u64)klet_do_mem_alloc(args->a0, args->a1);
+		args->ret = (u64)klet_do_mem_alloc(c->inst, args->a0, args->a1);
 		break;
 	/* ... every other service ... */
 	}

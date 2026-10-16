@@ -8,17 +8,22 @@ The design has **two levels**. Linux schedules a sandbox's **virtual CPUs**, a h
 
 ```mermaid
 flowchart TB
-    subgraph K["level 2: inside the sandbox, the kernelet's scheduler"]
-        direction LR
+    subgraph K[" "]
+        k0["<b>level 2: inside the sandbox, the kernelet's scheduler</b>"] ~~~ rq0
+        k0 ~~~ rq1
         rq0["run queue of vCPU 0<br/>task A · task B · task C"] --> pick0["picks one"]
         rq1["run queue of vCPU 1<br/>task D · task E"] --> pick1["picks one"]
     end
-    subgraph L["level 1: Linux's scheduler"]
-        direction LR
+    subgraph L[" "]
+        l0["<b>level 1: Linux's scheduler</b>"] ~~~ c0
+        l0 ~~~ c1
+        l0 ~~~ o
         c0["carrier of vCPU 0<br/>(a Linux task)"]
         c1["carrier of vCPU 1<br/>(a Linux task)"]
         o["every other Linux task"]
     end
+    pick0 ~~~ l0
+    pick1 ~~~ l0
     pick0 -. runs on .-> c0
     pick1 -. runs on .-> c1
 ```
@@ -82,7 +87,7 @@ The record is embedded in the endovisor's per-carrier structure, directly after 
 
 </div>
 
-At module load the endovisor computes the `%gs`-relative offset of the current-task pointer, checks it by reading the pointer back and comparing it with `current`, and publishes it in the boot arguments together with the offset of the gate pointer inside `task_struct` and the offset of the record from the gate. vOSTD then finds its record with two dependent loads and no call:
+When it creates the root carrier, the endovisor computes the `%gs`-relative offset of the current-task pointer, checks it by reading the pointer back and comparing it with `current`, and publishes it in the boot arguments together with the offset of the gate pointer inside `task_struct` and the offset of the record from the gate. vOSTD then finds its record with two dependent loads and no call:
 
 *Simplified from `prototype/vostd/src/vcpu.rs`: `vrec`.*
 
@@ -112,7 +117,7 @@ A machine's processors are started at boot, halted when idle, and interrupted wh
 ```c
 static void klet_do_vcpu_idle(struct klet_carrier *c, u64 deadline_ns)
 {
-	set_current_state(TASK_KILLABLE | TASK_FREEZABLE | TASK_NOLOAD);   /* 1. announce the sleep; an idle vCPU is not load */
+	set_current_state(TASK_KILLABLE | TASK_FREEZABLE | TASK_NOLOAD);   /* 1. announce the sleep: killable, may be frozen for suspend, not counted in the load average */
 	WRITE_ONCE(c->idle, true);                            /* 2. mark the vCPU idle */
 	smp_mb();
 	if (!atomic_read(&c->vrec.pending) && !inst->dying)   /* 3. only then look */
@@ -129,7 +134,7 @@ The order of the first three lines is the one every Linux sleep uses so that no 
 
 <div class="rust">
 
-**Rust: closures.** `|x, y| expr` is a closure: a function without a name, written where it is used, which may use the variables around it. A function that takes `f: F` where `F: FnMut(...)` accepts one, and calls it as `f(args)`. `reschedule` below takes the scheduling decision as a closure, so that `yield_now`, `park_current` and the others share its loop and differ only in the decision.
+**Rust: closures.** `|x, y| expr` is a closure: a function without a name, written where it is used, which may use the variables around it. A function that takes `f: F` where `F: FnMut(...)` accepts one, and calls it as `f(args)`; `f: impl FnMut(...)` in an argument's type says the same more briefly. `reschedule` below takes the scheduling decision as a closure, so that `yield_now`, `park_current` and the others share its loop and differ only in the decision.
 
 </div>
 
@@ -147,7 +152,7 @@ fn set_need_preempt(cpu_id: CpuId) {
 
 fn reschedule<F>(mut f: F)                       // the heart of every scheduling decision
 where F: FnMut(&mut LocalRunQueue) -> ReschedAction {
-    cpu_local::clear_need_preempt();
+    open_resched_window();                       // clears need-preempt; chapter 9 says what else it does
     let next_task = loop {
         match f(local_run_queue) {
             ReschedAction::DoNothing => return,

@@ -55,7 +55,8 @@ Each directory has a `README.md` saying what is in it.
   `PATH` (or named with `make QEMU=/path/to/qemu-system-x86_64 ...`). The
   options the boots use (`-enable-kvm -cpu host`, `-kernel`/`-initrd`,
   `-serial file:`, a raw virtio drive) are old; QEMU 6.2 (Ubuntu 22.04's) and
-  10.0 have both been tested. A QEMU that does not start fails the boot with a
+  10.x (a 10.1 pre-release, which reports itself as 10.0.92) have both been
+  tested. A QEMU that does not start fails the boot with a
   message saying so. The guests use two CPUs and 512 MiB.
 - **Rust** through `rustup`: `rust-toolchain.toml` names the nightly
   (`nightly-2026-07-21`, with `rust-src` and the `x86_64-unknown-none`
@@ -81,9 +82,13 @@ Each directory has a `README.md` saying what is in it.
   the kernel is built, no target checks the free space, and a boot needs a
   few megabytes.
 - **Variables** a user may set: `QEMU` (above), `JOBS` (parallel jobs for the
-  Linux and module builds, default 8), `TIMEOUT` (seconds a boot may take
-  before QEMU is killed, default 120, raised by the tests that need longer)
-  and `MIN_FREE_GB` (default 6).
+  Linux and module builds, default 8), `TIMEOUT` and `MIN_FREE_GB` (default
+  6). `TIMEOUT` is how many seconds one boot may take before QEMU is killed
+  and the boot fails. Each test sets its own (120 s for `hello`, `probe`,
+  `sched-policy` and `sched-fpu`, 180 s for the other boots, 300 s for
+  `mem-perf`'s); a `TIMEOUT` given on the command line, as in
+  `make test TIMEOUT=600`, wins over all of them, for every boot of every
+  target, so a slow host can raise it.
 
 ### From a fresh clone
 
@@ -101,9 +106,9 @@ cdn.kernel.org, unpacks it into `.build/linux-6.12`, deletes the tarball,
 applies the gate patch, configures and builds the kernel (a `tinyconfig`
 kernel, so this is quick), builds the Rust image, and then runs the tests:
 315 s measured from an empty `.build/` on an eight-core machine, 134 s of them
-in the first test. After that, `make test` takes about three minutes (185 s
-measured), and `make bench` about the same (about 200 s: eight boots of the
-sched kernel and five of the mem kernel). Every build is `--offline`, so
+in the first test. After that, `make test` takes about three and a half minutes
+(211 to 215 s measured), and `make bench` a little less (190 s: eight boots
+of the sched kernel and five of the mem kernel). Every build is `--offline`, so
 nothing after the crates and the one download needs the network; an offline
 build that finds a crate missing says to run `make crates`.
 
@@ -123,8 +128,8 @@ the verdict, `PASS` or `FAIL`.
 |---|---|---|
 | `make test` | the eleven tests below, in order | – |
 | `make bench` | `sched-fair`, `sched-perf`, `mem-perf`, reported | 14 |
-| `make hello` | the 100-line kernel, byte-identical to `hello/upstream/`: "Hello, world", a clean stop, a clean module unload; also the one-off measurement of what a service costs ("service stub: N cycles") | 2, 3, 6, 7 |
-| `make probe` | demand paging, three non-page-fault exceptions (`ud2`, trap 6; `int3`, trap 3; `hlt`, trap 13, a general-protection fault), and eviction of a kernelet spinning in kernel mode when the sandbox is killed | 7, 11, 12 |
+| `make hello` | the 100-line kernel, byte-identical to `hello/upstream/`: "Hello, world", a clean stop, a clean module unload; also the one-off measurements of what a service costs ("service stub: N cycles") and of what a heap allocation and its free cost ("heap: ... N cycles the pair") | 2, 3, 6, 7 |
+| `make probe` | demand paging, exceptions other than page faults (`ud2` twice in a row, trap 6; `int3`, trap 3; `hlt`, trap 13, a general-protection fault), each fault signal ignored again after it was drained, and eviction of a kernelet spinning in kernel mode when the sandbox is killed | 7, 11, 12 |
 | `make yield` | two boots under `preempt=none`, the watch timer off (the competitor starves) and on (it does not, and the checksums agree) | 9, 10 |
 | `make sched-policy` | the kernelet's own scheduler: its trace checked against a reference model | 8 |
 | `make sched-coop` | three boots: the mirror on (no involuntary deschedule in a critical section), off (the control), and an overstayer forced to yield at the first tick at least a millisecond after the first strike, about 2 ms on this machine (the check allows 4000 us, because a late tick lengthens it) | 10 |
@@ -132,7 +137,7 @@ the verdict, `PASS` or `FAIL`.
 | `make mem-func` | E2, E3, E4, E10: no Linux fault on mapped pages, fault-around, protection changes, a map under a guard, the withheld set | 12, 13 |
 | `make mem-r2` | E5: the sleeping contract, broken on purpose, ends the kernelet | 13 |
 | `make mem-conc` | E8, E11 on two vCPUs: lockless copies, the contended range lock, a process exiting under a copy, the retire list | 13 |
-| `make mem-kill` | E11 and the carriers as Linux tasks: one carrier of a two-thread process is preempted by a competitor, sent SIGTERM and SIGUSR1 (it lives), stopped and continued, and killed while its sibling faults in the same address space; the kill ends the whole sandbox cleanly. Its tenant runs the rewind check meanwhile: a register count and a memory count that must never part. Then two short boots, the carrier of vCPU 1 killed while it is idle in `vcpu_idle` and while it runs a kernel task that calls no service: each kill must end the sandbox within two seconds | 7, 11, 12 |
+| `make mem-kill` | E11 and the carriers as Linux tasks: one carrier of a two-thread process is preempted by a competitor, sent SIGTERM and SIGUSR1 and then 2000 rounds of SIGQUIT, SIGABRT, SIGTSTP, SIGTTIN and SIGTTOU (it lives and runs, and none of them reaches its queue), stopped and continued, and killed while its sibling faults in the same address space; the kill ends the whole sandbox cleanly. Its tenant runs the rewind check meanwhile: a register count and a memory count that must never part. Then two short boots, the carrier of vCPU 1 killed while it is idle in `vcpu_idle` and while it runs a kernel task that calls no service: each kill must end the sandbox within two seconds | 7, 11, 12 |
 | `make mem-pressure` | E7: the area's entries survive reclaim and swap | 12 |
 | `make sched-fair` | measurement: a sibling group's share of the processors with 1, 50, and 50 tasks and an overstayer | 10, 14 |
 | `make sched-perf` | measurement: a kernelet task switch, a wake-up on the same and on the other vCPU, and a round trip between two tenant processes, beside native Linux, five boots; fails if a kernelet measurement has no samples | 14 |
@@ -183,33 +188,57 @@ runtime's. Each test keeps a copy of its boot's log before it checks it:
 
 A check fails on any `BUG:`, `Oops`, `WARNING:`, `Call Trace` or `switching
 to a task already running` (vOSTD's report of a scheduler handing it a task
-that is still running elsewhere) in the log, on a missing line it expects,
-and on an unclean module unload: init's `delete_module kernelet failed`, or a
-log without the endovisor's `kernelet: STATS` line or init's `INIT: done`.
-The endovisor prints its counters when it unloads (`STATS`, `MEMSTATS`, the
-watch timer's ticks and upcalls), the last thing the endovisor prints; init's
-`INIT: done` and Linux's power-off follow.
+that is still running elsewhere) in the log, on a missing line it expects, on
+a sandbox whose end did not give back what it held, and on an unclean module
+unload: init's `delete_module kernelet failed`, a log without the endovisor's
+`kernelet: STATS` line or init's `INIT: done`, or anything the endovisor
+allocated for the sandbox still live at unload.
+
+When the sandbox's last carrier dies, the endovisor prints `kernelet: the
+sandbox is gone:` with how many heap blocks the kernelet still held and how
+many kernelet stacks it returned to `vmalloc`. When the module unloads, it
+prints its counters, in this order: `eviction:` (only if a sweep ran),
+`forced yield of vcpu ...` (the first few, only if there were any), `watch
+timer:` (ticks, upcalls, voluntary yields), `kicks:` (kick IPIs and the
+watch timer's requested firings), `STATS`, `MEMSTATS`, `kills:` (where a
+fatal signal to a carrier was found), `heap:` (blocks allocated, freed by the
+kernelet, freed at teardown, live), `kernelet stacks:` (made, returned, live)
+and `carrier records:` (made, freed, live); `kernelet: endovisor unloaded`
+ends them, and init's `INIT: done` and Linux's power-off follow. Every check
+requires 0 live in each of the last three.
 
 ## Signals, stops and memory
 
-- **Signals.** A signal whose default action is to end a task without a core
-  dump (`SIGHUP`, `SIGINT`, `SIGTERM`, `SIGUSR1`, `SIGUSR2`, `SIGALRM`,
-  `SIGPIPE`, `SIGIO`, `SIGPROF`, `SIGVTALRM`, `SIGSTKFLT`, `SIGPWR` and the
-  real-time signals) is ignored by every carrier: the endovisor sets them to
-  `SIG_IGN` when the root carrier execs the `.klet` file, and the vCPU
-  carriers inherit it. Otherwise Linux would kill the carrier the moment
-  such a signal was sent, before the endovisor ever saw it. Every other
-  signal is drained by the endovisor on the carrier's way to user mode. A
-  fault signal Linux raised for the tenant's own instruction becomes the CPU
-  exception the kernel proper sees: `SIGSEGV`, `SIGBUS`, `SIGILL`, `SIGFPE`
-  and `SIGTRAP` with a fault's `si_code`, and `SIGSEGV`, `SIGBUS`, `SIGTRAP`
-  and `SIGFPE` with `SI_KERNEL`, which is how Linux reports #GP, #TS, #NP,
-  #SS, #BP and the legacy #MF. The rest are dropped, except two. `SIGKILL` is
-  Linux's, and kills the carrier. `SIGSTOP` stops a vCPU carrier the way it
-  stops any task, and **a stopped carrier is a stopped virtual CPU**: the
-  kernelet's tasks on it do not run, a sibling vCPU waiting for one of them
-  waits, until `SIGCONT`. The root carrier never returns to user mode and
-  cannot stop; it drops `SIGSTOP`.
+- **Signals.** Every signal that can be ignored is ignored by every carrier:
+  when the root carrier execs the `.klet` file, the endovisor sets all of
+  them but `SIGKILL` and `SIGSTOP` to `SIG_IGN` and clears the signal mask,
+  and the vCPU carriers inherit both. An ignored signal is discarded when it
+  is sent, so an operator's `SIGTERM`, a `SIGQUIT` or `SIGABRT`, a `SIGTSTP`,
+  `SIGTTIN` or `SIGTTOU`, never becomes pending on a carrier. Draining them
+  on the way to user mode would not be enough: the exit loop delivers
+  signals right after the resume hook in the same pass, if the flags it read
+  before the hook said one was pending, so one that arrived between the
+  drain and that delivery would be Linux's to act on, a core dump and the
+  end of the carrier and its sandbox, or a stop; and a signal whose default
+  is to terminate without a core dump is fatal the moment it is sent, before
+  any drain. What does reach a carrier's queue is what Linux forces on it,
+  which first sets the signal back to `SIG_DFL`: a fault of the tenant's own
+  instruction, and seccomp's `SIGSYS`. The resume hook drains it before
+  Linux can deliver it, since it was queued before the exit loop began, and
+  then ignores it again, so that the next fault is forced, and drained, the
+  same way. A fault signal becomes the CPU exception the kernel proper sees:
+  `SIGSEGV`, `SIGBUS`, `SIGILL`, `SIGFPE` and `SIGTRAP` with a fault's
+  `si_code`, and `SIGSEGV`, `SIGBUS`, `SIGTRAP` and `SIGFPE` with
+  `SI_KERNEL`, which is how Linux reports #GP, #TS, #NP, #SS, #BP and the
+  legacy #MF; anything else drained is dropped. `SIGKILL` is Linux's, and
+  kills the carrier. `SIGSTOP` stops a vCPU carrier the way it stops any
+  task, and **a stopped carrier is a stopped virtual CPU**: the kernelet's
+  tasks on it do not run, a sibling vCPU waiting for one of them waits,
+  until `SIGCONT` (which continues a stopped task although it is ignored).
+  The root carrier never returns to user mode and cannot stop; it drains
+  `SIGSTOP` and drops it. A carrier being traced (`ptrace`) is the
+  exception: Linux queues even ignored signals for a tracer, so a debugger
+  attached to a carrier sees them.
 - **Losing a carrier ends the sandbox.** When any carrier dies while the
   sandbox is live, killed by an operator or by the OOM killer, the endovisor
   kills the rest and evicts whatever is still running kernelet code: a
@@ -229,9 +258,24 @@ watch timer's ticks and upcalls), the last thing the endovisor prints; init's
 - **An idle virtual CPU is not load.** A carrier asleep in `vcpu_idle`, or
   waiting to be booted, sleeps with `TASK_NOLOAD`, so it does not count in
   the host's load average.
+- **The root's death notice is never late.** A vCPU carrier is cloned from
+  the root and inherits a copy of the root's lifeline, which it closes first
+  thing. If the root dies between the clone and that close, the copy is the
+  lifeline's last reference, and a plain close would defer the release, the
+  root's death notice, until the clone first returned to user mode, after it
+  had booted the kernelet. The clone therefore takes the reference over and
+  drops it synchronously (`__fput_sync`), so the notice runs right there, and
+  the clone, finding the root gone, never starts.
+- **The sandbox's end gives everything back.** When its last carrier dies,
+  the endovisor destroys its address spaces, frees every heap block the
+  kernelet still held (every block `mem_alloc` hands out is recorded, so
+  that a stopped or evicted kernelet's tasks, address spaces and run queues
+  do not leak), and returns the whole kernelet-stack pool to `vmalloc`, the
+  stacks still in use included. The grant and the module's own records stay
+  until the module unloads.
 - **Memory.** What the kernelet allocates through the host is charged to the
   memory cgroup of the carrier that asked, which is the sandbox's: its heap
-  (`mem_alloc`, `GFP_KERNEL_ACCOUNT`), its kernelet stacks (`__vmalloc` with
+  (`mem_alloc`, `GFP_KERNEL_ACCOUNT`, and the table that records its blocks), its kernelet stacks (`__vmalloc` with
   `GFP_KERNEL_ACCOUNT`, at most `KLET_MAX_KSTACKS` = 512 of 256 KiB per
   sandbox; beyond that `kstack_alloc` returns 0 and vOSTD reports
   `Error::NoMemory`), and the page-table pages of its address spaces, which

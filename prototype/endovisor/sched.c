@@ -297,8 +297,18 @@ void klet_kick_remote(struct klet_carrier *c)
 	if (!klet_task_on_cpu(t))
 		return;
 
+	/*
+	 * A service runs preemptible, so the processor this one is on may change
+	 * under the test; raw_smp_processor_id() says so, and a stale answer is
+	 * harmless either way. If the caller has moved onto the target's
+	 * processor, smp_call_function_single() runs the handler right here, and
+	 * it finds the caller, not the target, in `current` and does nothing;
+	 * if it has moved off it, the target may go one tick without a kick, as
+	 * when it moves itself. The KICK bit is set already, and the next watch
+	 * tick or guard drop delivers it.
+	 */
 	cpu = task_cpu(t);
-	if (cpu == smp_processor_id())
+	if (cpu == raw_smp_processor_id())
 		return;
 
 	/*

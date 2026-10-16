@@ -66,9 +66,10 @@ static int klet_load_binary(struct linux_binprm *bprm)
 
 	root = klet_carrier_new(inst, KLET_ROOT, -1);
 	klet_carrier_attach(root);                  /* install the gate and the lifeline */
-	kernel_sigaction(SIGCHLD, SIG_IGN);         /* children are reaped without a wait */
-	for (i = 0; i < ARRAY_SIZE(terminate); i++)  /* SIGTERM, SIGINT, SIGUSR1 and their kind: ignored, see chapter 7 */
-		kernel_sigaction(terminate[i], SIG_IGN);
+	sigprocmask(SIG_SETMASK, &none, NULL);      /* no signal blocked ... */
+	for (sig = 1; sig <= _NSIG; sig++)          /* ... and every one that can be ignored is: chapter 7 says why */
+		if (!sig_kernel_only(sig))              /* (SIGKILL and SIGSTOP cannot be) */
+			kernel_sigaction(sig, SIG_IGN);
 
 	set_thread_flag(TIF_NOTIFY_RESUME);         /* make the resume hook run on the way out */
 	return 0;
@@ -149,7 +150,9 @@ static int klet_carrier_main(void *arg)
 
 	clear_syscall_work(KERNELET);               /* not a carrier until attached: the inherited pointer must not be used */
 	current->kernelet = NULL;
-	close_fd(inst->root_lifeline_fd);           /* the inherited copy of the root's lifeline */
+	f = fget(inst->root_lifeline_fd);           /* the inherited copy of the root's lifeline: close it, and drop */
+	close_fd(inst->root_lifeline_fd);           /* the reference now rather than at the next return to user mode, */
+	__fput_sync(f);                             /* in case the root died meanwhile and this copy was the last */
 	c = klet_carrier_new(inst, KLET_VCPU, vcpu);
 	klet_carrier_attach(c);                     /* this task's own gate record and lifeline */
 	mmget(current->mm);                         /* keep a reference to the empty address space ... */
@@ -158,7 +161,7 @@ static int klet_carrier_main(void *arg)
 
 	if (vcpu != 0) {                            /* virtual CPU 0 boots; the others wait to be started */
 		wait_event_state(c->idle_wq, c->boot_requested || inst->dying,   /* only SIGKILL cuts the wait short; */
-				 TASK_KILLABLE | TASK_NOLOAD);                                 /* a waiting carrier is not load */
+				 TASK_KILLABLE | TASK_NOLOAD);                                 /* NOLOAD: not counted in the load average */
 		if (!c->boot_requested) {                /* woken because the sandbox is dying */
 			klet_carrier_die(c);
 			return 0;
@@ -207,7 +210,7 @@ static int klet_lifeline_release(struct inode *inode, struct file *file)
 }
 ```
 
-A clone starts with a copy of its parent's descriptor table, which is why `klet_carrier_main` closes the inherited copy of the root's lifeline first: otherwise the root's death notice would wait until the last carrier died. A tenant cannot close a lifeline, because closing a descriptor is a Linux system call, and the gate takes those.
+A clone starts with a copy of its parent's descriptor table, which is why `klet_carrier_main` closes the inherited copy of the root's lifeline first: otherwise the root's death notice would wait until the last carrier died. The close forces the file's release at once, because Linux normally defers a release to the closer's next return to user mode, and a root that died between the clone and the close, leaving this copy as the last reference, would otherwise be noticed only when the new carrier first got there; a clone that finds the root gone does not become a carrier. A tenant cannot close a lifeline, because closing a descriptor is a Linux system call, and the gate takes those.
 
 When a lifeline closes, the endovisor takes the carrier off its lists. If the sandbox was still running, whichever carrier's lifeline it was, the sandbox is over: the endovisor marks the kernelet dying and ends every other carrier, which is chapter 11. The root's lifeline ends it even after the kernelet has stopped itself, for a reason chapter 11 gives.
 

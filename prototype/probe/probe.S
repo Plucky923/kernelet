@@ -24,6 +24,12 @@ _start:
 	#    The kernel proper advances rip by these two bytes.
 	ud2
 
+	# 2a. The same fault again, at once. The endovisor ignores SIGILL, as
+	#     every signal; Linux un-ignores it to force the first one, and the
+	#     drain ignores it again, so this one is forced, and handed over as
+	#     trap 6, in exactly the same way.
+	ud2
+
 	# 2b. A breakpoint: Linux turns #BP into SIGTRAP with SI_KERNEL, which
 	#     the resume hook must also hand over, as trap 3. int3 is a trap, so
 	#     rip is already past it and the kernel proper changes nothing.

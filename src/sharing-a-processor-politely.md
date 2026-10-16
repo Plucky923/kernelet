@@ -6,7 +6,7 @@ Linux will take a processor away from a carrier whenever its own policy says so:
 
 <div class="linux">
 
-**Linux: preemption models.** A Linux kernel is built with one of several preemption models, three of which can also be chosen at boot on recent kernels. Under the *full* model a task running kernel code can be rescheduled at almost any instruction, on return from an interrupt. Under *voluntary* and *none*, common on servers, a task in kernel mode keeps its processor until it sleeps, returns to user mode, or reaches one of the many places where Linux's own code calls [`cond_resched()`](https://elixir.bootlin.com/linux/v6.12/source/include/linux/sched.h#L2069), the voluntary preemption point. Linux decides *that* a task should give way by setting a flag on it, `need_resched`; the models differ in *when* the flag is acted on.
+**Linux: preemption models.** A Linux kernel is built with one of several preemption models, three of which can also be chosen at boot on recent kernels. Under the *full* model a task running kernel code can be rescheduled at almost any instruction, on return from an interrupt. Under *voluntary* and *none*, common on servers, a task in kernel mode keeps its processor until it sleeps, returns to user mode, or reaches one of the many places where Linux's own code calls [`cond_resched()`](https://elixir.bootlin.com/linux/v6.12/source/include/linux/sched.h#L2063), the voluntary preemption point. Linux decides *that* a task should give way by setting a flag on it, `need_resched`; the models differ in *when* the flag is acted on.
 
 </div>
 
@@ -55,9 +55,12 @@ unsigned long klet_yield_body(void)
 {
 	struct klet_carrier *c = klet_current_carrier();
 	struct klet_svc_args args = { .op = KLET_SVC_VCPU_YIELD };
+	unsigned long ip = c->yield_ip;
 
 	klet_run_on_linux_stack(c->linux_sp, &args);   /* klet_svc_body -> klet_do_yield, on the Linux stack */
-	return args.ret ? 0 : c->yield_ip;
+	if (args.ret || c->doomed)                      /* the kernelet stopped, or this carrier was killed (chapter 11) */
+		return 0;
+	return ip;
 }
 
 static void klet_do_yield(struct klet_carrier *c)
@@ -177,15 +180,15 @@ The mirror lets a kernelet defer Linux's preemption, and "must not defer it for 
 The note of the first strike is dropped when the carrier leaves the processor, since a carrier that has given the processor back is deferring nothing, and the bound is on time held, not on time elapsed. The grace is two ticks when the ticks arrive on time; a tick the host delivers late lengthens it. What the kernelet borrows is charged: Linux accounts the extra run time to the sandbox's control group like any other, so the sandbox's long-run share does not grow by a microsecond; what a neighbor can lose is latency, at most the grace, per preemption. Forced yields are counted, and a sandbox that collects them is misbehaving in a way the operator can see.
 
 ```mermaid
-flowchart LR
+flowchart TB
     subgraph rule["the rule"]
-        direction LR
+        direction TB
         a["kernelet takes a lock:<br/>guards 1, Linux's count +1"] --> b["Linux marks the carrier<br/>need_resched, and waits"]
         b --> c["kernelet drops the lock:<br/>count reaches 0 and Linux wants the processor"]
         c --> d["vcpu_yield: schedule()"]
     end
     subgraph bound["the bound"]
-        direction LR
+        direction TB
         e["tick: critical and need_resched<br/>(strike one)"] --> f["tick, 1 ms later:<br/>still so (strike two)"]
         f --> g["forced yield:<br/>lift the mirror, schedule(), restore"]
     end

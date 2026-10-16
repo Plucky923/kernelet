@@ -34,7 +34,7 @@ pub(crate) fn walk(root: Paddr, va: Vaddr) -> Option<Leaf> {
 }
 ```
 
-That is the walk a processor does, in software, four dependent loads. It takes no lock, and two facts about Linux make that safe. The area's page-table pages are freed only in `exit_mmap()`, which cannot run while the endovisor holds its reference on the address space (the last chapter's second reference), so a page the walk reads is never freed under it. And Linux writes an entry with a single 64-bit store and clears it with an atomic exchange, so a load never sees half an entry. Permissions are taken from the leaf only, never combined down the levels, because on a host with page-table isolation the kernel's copy of the top-level entries carries a no-execute bit that means nothing for the tenant.
+That is the walk a processor does, in software, four dependent loads. It takes no lock, and two facts about Linux make that safe. The area's page-table pages are freed only in `exit_mmap()`, which cannot run while the endovisor holds its reference on the address space (the last chapter's second reference), so a page the walk reads is never freed under it. And Linux writes an entry with a single 64-bit store and clears it with an atomic exchange, so a load never sees half an entry. Permissions are taken from the leaf only, never combined down the levels, because on a host with page-table isolation, the mitigation that gives the kernel a copy of the top-level table of its own, the kernel's copy of the top-level entries carries a no-execute bit that means nothing for the tenant.
 
 ## Copying to and from the tenant
 
@@ -93,7 +93,7 @@ On a machine, OSTD's page table holds a counted reference on every mapped frame,
 
 <div class="rust">
 
-**Rust: destructors, and forgetting.** A frame handle's `Drop` (chapter 2's box) decrements the frame's count, and frees the frame when the count reaches zero. `core::mem::forget(x)` ends the life of `x` *without* running its destructor, so the count stays as it was: that is how a reference is handed to something Rust cannot see, such as a page-table entry. `from_raw` is the reverse: it makes a handle out of an address without incrementing, taking the reference back.
+**Rust: destructors, and forgetting.** A frame handle's `Drop` (chapter 2's box) decrements the frame's count, and frees the frame when the count reaches zero. `core::mem::forget(x)` ends the life of `x` *without* running its destructor, so the count stays as it was: that is how a reference is handed to something Rust cannot see, such as a page-table entry. `from_raw` is the reverse: it makes a handle out of an address without incrementing, taking the reference back; `Box::from_raw(p)` does the same for a heap object. `core::mem::take(&mut x)` moves the value out of `x` and leaves an empty one in its place. `let _ = e` evaluates `e` and discards the result at once, destructor included, while a named `_guard` keeps its value alive to the end of the block.
 
 </div>
 
@@ -137,7 +137,7 @@ This is sound only if Linux never clears an entry of the area on its own initiat
 
 On a machine, a cursor holds the page table's node locks for its whole life, and the kernel proper relies on that in two places: its page-fault handler queries, allocates and maps under one cursor, so two threads faulting on one page never both map it; and its page cache commits a page and maps it atomically under one cursor while eviction unmaps through another. Linux's locks are not available to vOSTD, so it keeps a lock of its own per space: sixteen 64-bit words in the space's shared record, one per 2 MiB region of the address space, with regions aliasing onto words by their index modulo sixteen.
 
-A cursor computes the set of words its range touches, takes them in ascending word order (a total order, so two cursors cannot deadlock), exclusively for a `cursor_mut` and shared for a `cursor`, and releases them when it is dropped. Uncontended, taking a word is one compare-and-swap in kernelet memory and no crossing. Each word holds a count of readers in its low bits (`READERS` is their mask) and three flags: `WRITER`, set by an exclusive holder; `WRITER_WAITING`, which holds new readers off while a writer waits; and `WAITERS`, which says that someone is asleep in `vm_wait` on this word.
+A cursor computes the set of words its range touches, takes them in ascending word order (a total order, so two cursors cannot deadlock), exclusively for a `cursor_mut` and shared for a `cursor`, and releases them when it is dropped. Uncontended, taking a word is one compare-and-swap on the shared record and no crossing. Each word holds a count of readers in its low bits (`READERS` is their mask) and three flags: `WRITER`, set by an exclusive holder; `WRITER_WAITING`, which holds new readers off while a writer waits; and `WAITERS`, which says that someone is asleep in `vm_wait` on this word.
 
 *Simplified from `prototype/vostd/src/mm/vm_space.rs`: `lock_word`, `unlock_word`.*
 
@@ -199,9 +199,9 @@ A tenant access to a withheld page faults as an absent page does, and the kernel
 
 ## A space that is dropped at the wrong moment
 
-The last reference to a `VmSpace` can be dropped at a bad moment. `activate` keeps one reference per virtual CPU to the space that is active there, and drops the previous space's reference when a new one is activated; the kernel proper activates from the handler it runs right after a task switch, with interrupts off. If that was the last reference, `Drop` runs there, and so it may do nothing that sleeps or crosses, while `vm_destroy` does both.
+The last reference to a `VmSpace` can be dropped at a bad moment. `activate` keeps one reference per virtual CPU to the space that is active there, and drops the previous space's reference when a new one is activated; a full kernel proper, such as Asterinas's, activates from the handler it runs right after a task switch, with interrupts off, and vOSTD must allow for that (the test kernels of this book activate from `main`, but vOSTD is not written for them alone). If that was the last reference, `Drop` runs there, and so it may do nothing that sleeps or crosses, while `vm_destroy` does both.
 
-The usual answer, a helper task that does the work later, is not available. A task created before the kernel proper calls `inject_scheduler` would make OSTD install its default scheduler, and the injection would then fail; a task created afterwards is scheduled by the kernel proper's own policy, which vOSTD cannot ask to run it at a chosen moment.
+A helper task that did the work later is not available. A task created before the kernel proper calls `inject_scheduler` would make OSTD install its default scheduler, and the injection would then fail; a task created afterwards is scheduled by the kernel proper's own policy, which vOSTD cannot ask to run it at a chosen moment.
 
 So `Drop` pushes the space onto a per-kernelet **retire list**, lock-free and without allocating (the list node was allocated at `new`), and the list is drained at the next point on any virtual CPU where sleeping is allowed: the stubs of `vm_create` and `vcpu_idle`, and every sleeping service's stub when the caller holds no guard. The drain unmaps the whole space, which flushes and releases every frame, the withheld set's included, and then calls `vm_destroy`.
 

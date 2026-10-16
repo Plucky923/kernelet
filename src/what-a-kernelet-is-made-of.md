@@ -13,17 +13,17 @@ A kernelet is three layers of code compiled into one file.
 The build compiles the kernel proper and vOSTD together into one static library, links it with `ld -r` into a single relocatable object, `image.o`, and checks two things about that object: that it has **no undefined symbols**, and that its *relocations*, the places in the code that the loader must patch with final addresses, are of kinds Linux's module loader accepts. Then it links `image.o` into the endovisor's kernel module, `kernelet.ko`, together with the endovisor's own C files.
 
 ```mermaid
-flowchart LR
+flowchart TB
     hello["hello/src/lib.rs<br/>(kernel proper, safe Rust)"] --> cargo
     vostd["vostd/<br/>(the framework, Rust)"] --> cargo
     cargo["cargo build<br/>one static library"] --> ld["ld -r<br/>image.o"]
-    ld --> check{"nm -u image.o<br/>empty?"}
+    ld --> check{"nm -u image.o empty?<br/>relocations of accepted kinds?"}
     check -- yes --> kbuild["kbuild<br/>kernelet.ko"]
     endo["endovisor/*.c<br/>(the endovisor, C)"] --> kbuild
     kbuild --> insmod["insmod kernelet.ko"]
 ```
 
-"No undefined symbols" is the whole security story of the build, so it deserves a sentence. A symbol is undefined in an object when the code calls a function the object does not contain; the linker fills it in later. An image with none cannot call anything outside itself. It *calls* Linux in exactly one way: through a table of function pointers the endovisor hands it when it starts. That is the service table, and the kernelet cannot call what is not in it, because it cannot name anything else. (It also reads two words of Linux's and writes one, at offsets the endovisor publishes, for reasons chapters 8 and 10 give; those are the whole of its other contact with the host.)
+"No undefined symbols" is the whole security story of the build, so it deserves a sentence. A symbol is undefined in an object when the code calls a function the object does not contain; the linker fills it in later. An image with none cannot call anything outside itself. It *calls* Linux in exactly one way: through a table of function pointers the endovisor hands it when it starts. That is the service table, and the kernelet cannot call what is not in it, because it cannot name anything else. (It also reads two words of Linux's and writes one, at offsets the endovisor publishes, for reasons chapters 8 and 10 give; those are the whole of its contact with Linux's own variables. It shares small records with the endovisor, one per virtual CPU and one per address space (chapters 8 and 13), and it reads the tenant's page tables through Linux's direct map (chapter 13); every one of those is memory the endovisor chose to show it.)
 
 In this prototype the image is linked statically into the module, so there is one kernelet per module load. A full endovisor would load images at run time, sharing one copy of the code among many kernelets; the prototype's shortcut changes nothing below this chapter.
 
@@ -89,7 +89,7 @@ pub struct EntryTable {
 
 </div>
 
-Two rules shape every service. Arguments are integers or pointers into the kernelet's own memory: a space number, a virtual address, a physical address, a buffer to log. The one exception is `mem_free`, whose pointer is into host memory that `mem_alloc` returned, below. And the host keeps no pointer into the kernelet after a call returns. Both keep a buggy vOSTD from steering the endovisor into writing wherever the kernelet says.
+Two rules shape every service. Arguments are integers or pointers into the kernelet's own memory: a space number, a virtual address, a physical address, a buffer to log. The one exception is `mem_free`, whose pointer is into host memory that `mem_alloc` returned, below, and the endovisor checks it against a table of the blocks it handed out, kept where the kernelet cannot reach, and refuses any other. And the host keeps no pointer into the kernelet after a call returns. Both keep a buggy vOSTD from steering the endovisor into writing wherever the kernelet says.
 
 The image's one exported symbol is the entry table:
 
@@ -173,7 +173,7 @@ Three of the services need no more than a sentence each, and the hundred-line ke
 
 <div class="rust">
 
-**Rust: traits.** A trait is an interface: a list of functions a type must provide. `impl GlobalAlloc for HostHeap` says that the type `HostHeap` provides the two functions the `GlobalAlloc` trait names, and the attribute `#[global_allocator]` tells Rust to use it for every heap allocation. A function written `fn f<T: SomeTrait>(x: &T)` accepts any type that provides the trait's functions. Implementing a trait is `unsafe` when the trait's contract is one the compiler cannot check, as an allocator's is.
+**Rust: traits.** A trait is an interface: a list of functions a type must provide. `impl GlobalAlloc for HostHeap` says that the type `HostHeap` provides the two functions the `GlobalAlloc` trait names, and the attribute `#[global_allocator]` tells Rust to use it for every heap allocation. A function written `fn f<T: SomeTrait>(x: &T)` accepts any type that provides the trait's functions. Implementing a trait is `unsafe` when the trait's contract is one the compiler cannot check, as an allocator's is. A label such as `'outer:` before a loop names it, so that `continue 'outer` or `break 'outer` inside a nested loop applies to the outer one; the apostrophe is the one lifetimes use, but a label always precedes a loop.
 
 </div>
 
@@ -215,7 +215,7 @@ pub(crate) unsafe extern "C" fn kernelet_entry(boot: *const BootArgs, svc: *cons
     time::init(args.tsc_khz);
     mm::frame::allocator::init(args.grant_paddr as usize, args.grant_len as usize);
     mm::heap::init();
-    boot::init(cmdline);
+    boot::init(cmdline);                   // the command line, copied out of the boot arguments
     __ostd_main()                          // generated by #[ostd::main]: calls main(), then yields
 }
 ```

@@ -1,10 +1,13 @@
 # bench: the scripts that read the measurements
 
-The kernels print their measurements in the serial log as lines of samples
-summarised inside the kernelet (`SCHED-PERF`, `NATIVE-PERF`, `MEM-PERF`: a
-median, a 99th percentile and the extremes, in cycles of the time-stamp
-counter). These scripts aggregate them over several boots and print the
-tables; the Makefile's check targets run them.
+The measurements arrive in the serial log as one line per measurement, the
+samples already summarised, in cycles of the time-stamp counter: `SCHED-PERF`
+and `MEM-PERF` lines are printed inside the kernelet by the sched and mem
+kernels (median, 99th percentile and minimum, and for `MEM-PERF` the maximum
+too); `NATIVE-PERF` lines are printed in user space by `run-sched.c`, for the
+same measurements on native Linux (median, 99th percentile and minimum). These
+scripts aggregate them over several boots and print the tables; the
+Makefile's check targets run them.
 
 | file | what it does | run by |
 |---|---|---|

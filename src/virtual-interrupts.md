@@ -51,7 +51,12 @@ static enum hrtimer_restart klet_watch_fn(struct hrtimer *timer)
 {
 	struct pt_regs *regs = get_irq_regs();      /* what the interrupt interrupted; NULL if nothing was */
 	struct klet_carrier *c;
-	bool tick = !this_cpu_read(klet_watch_requested);   /* a period expired, or a kick asked for this firing (below) */
+	bool tick = true;
+
+	if (this_cpu_read(klet_watch_requested)) {  /* a kick asked for this firing (below): it is a tick */
+		this_cpu_write(klet_watch_requested, false);              /* only if the period it cut short has run out meanwhile */
+		tick = !ktime_before(hrtimer_cb_get_time(timer), this_cpu_read(klet_watch_period_end));
+	}
 
 	if (!current->kernelet)                     /* not a carrier any more: stop */
 		return HRTIMER_NORESTART;
@@ -133,7 +138,7 @@ extern "C" fn klet_virq_body() -> u64 {
     run_handlers(rec);                                   // TICK: the timer callbacks; KICK: a look at the run queue
 
     let host_wants_cpu = if owns_mirror { host_preempt_dec_and_test() } else { false };
-    unsafe { write_volatile(rec.irq_off.get(), 0) };     // unmask: the iret
+    unsafe { write_volatile(rec.irq_off.get(), 0) };     // unmask: what a machine's interrupt return would do
     if host_wants_cpu { host_yield(); }                  // chapter 10: Linux was waiting for this processor
     if get_guard_count() == 0 {                          // kernel-mode preemption: switch if the scheduler wants to
         crate::task::scheduler::might_preempt();
@@ -172,7 +177,7 @@ flowchart TB
 Two separate fields in the record stand for the two ways a kernel holds things off, and they are kept separate because OSTD keeps them separate.
 
 - `irq_off` is the virtual interrupt flag, inverted. vOSTD sets it where OSTD's interrupts-off guard would clear the processor's flag, and clears it when the guard drops; the endovisor sets it when it redirects into the upcall, and the upcall clears it at the end. While it is set, nothing is delivered.
-- The **guard count**, the low bits of `preempt_info`, is how many preemption guards and spin locks are held. A guard forbids only a task switch, which is why `klet_virq_body` calls `might_preempt` only when the count is zero: the upcall itself is never delivered under a guard, but a handler may have taken one and not yet dropped it. Handlers may still run under a guard: when the carrier comes back from user mode with a bit pending, `execute` runs them whatever the count. What a guard does prevent is the upcall, because the watch timer never redirects a task that holds one; a bit raised then waits for the last guard to drop, which is the unmask path below.
+- The **guard count**, the low bits of `preempt_info`, is how many preemption guards and spin locks are held. What a guard *means* is that no task switch happens on this virtual CPU while it is held; how that is *enforced* is that the watch timer never redirects a task that holds one, so the upcall, the one place a switch could happen underneath kernelet code, is never entered under a guard. A bit raised while a guard is held waits for the last guard to drop, which is the unmask path below. Handlers may still run under a guard: when the carrier comes back from user mode with a bit pending, `execute` runs them whatever the count. And `klet_virq_body` tests the count once more before `might_preempt`, because a handler may have taken a guard of its own and not yet dropped it.
 
 Both are updated by the virtual CPU that owns the record, with single instructions where it matters, because the endovisor reads them from an interrupt on the same processor and the upcall writes them. If a guard's increment compiled to a load, an add and a store, and an upcall ran between the load and the store and changed the word itself, the store would overwrite the upcall's change; a single `inc` cannot be split by an interrupt.
 

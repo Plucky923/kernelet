@@ -52,8 +52,9 @@ SYM_FUNC_END(klet_coro_trampoline)
  * void klet_run_on_linux_stack(void *linux_sp, struct klet_svc_args *args)
  *
  * Runs klet_svc_body(args) on the carrier's Linux stack and comes back. Every
- * service but user_run and stop (which leave the kernelet stack by themselves)
- * goes through here, so that no host code ever runs on a kernelet stack.
+ * service in the table but user_run (which leaves the kernelet stack by itself,
+ * through klet_switch) goes through here, stop included, so that no host code
+ * ever runs on a kernelet stack.
  *
  * `linux_sp` is where klet_enter's klet_switch parked the Linux stack, i.e. the
  * lowest byte of it that is in use; everything below is free. The call is

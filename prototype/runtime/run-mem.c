@@ -12,8 +12,10 @@
  *    spinning in user mode all that time; afterwards it reads every page back.
  *  - "kill" (E11): once the kernelet has said it is ready, has Linux preempt
  *    the carrier of virtual CPU 1 (a competitor pinned to its processor),
- *    sends it SIGTERM and SIGUSR1 (and the root carrier a SIGTERM), which must
- *    leave both alive, stops it with SIGSTOP and lets it go on with SIGCONT,
+ *    sends it SIGTERM and SIGUSR1 (and the root carrier a SIGTERM), and then
+ *    a burst of the core-dump and stop signals, SIGQUIT, SIGABRT, SIGTSTP,
+ *    SIGTTIN and SIGTTOU, all of which must leave both alive and running,
+ *    stops it with SIGSTOP and lets it go on with SIGCONT,
  *    and then kills it with SIGKILL, while vCPU 0's tenant thread keeps
  *    faulting in the same address space. The kill must end the whole
  *    sandbox. Meanwhile vCPU 1's tenant runs the rewind check.
@@ -282,15 +284,53 @@ static void preempt_with_competitor(long pid, int ms)
 	outf("RUN-MEM: preempted the carrier of vcpu 1 for %d ms with a competitor on cpu 1\n", ms);
 }
 
+/* The SigIgn, SigBlk or SigPnd line of /proc/<pid>/status, as hex text. */
+static void task_sigline(long pid, const char *key, char *out, size_t len)
+{
+	char path[64], line[256];
+	size_t klen = strlen(key);
+	FILE *f;
+
+	snprintf(out, len, "?");
+	snprintf(path, sizeof(path), "/proc/%ld/status", pid);
+	f = fopen(path, "re");
+	if (!f)
+		return;
+	while (fgets(line, sizeof(line), f))
+		if (strncmp(line, key, klen) == 0 && line[klen] == ':') {
+			char *v = line + klen + 1;
+
+			v += strspn(v, " \t");
+			v[strcspn(v, "\n")] = 0;
+			snprintf(out, len, "%s", v);
+			break;
+		}
+	fclose(f);
+}
+
 /*
- * Signals whose default action would end a task: the endovisor ignores them for
- * every carrier, so an operator's SIGTERM or a stray SIGUSR1 must leave both the
- * vCPU carrier and the root carrier alive.
+ * The endovisor ignores every signal a carrier can be sent but SIGKILL and
+ * SIGSTOP, so an operator's SIGTERM, a stray SIGUSR1, a SIGQUIT or SIGABRT
+ * (whose default is a core dump), or a SIGTSTP, SIGTTIN or SIGTTOU (whose
+ * default is a stop) must leave both the vCPU carrier and the root carrier
+ * alive and running. The core-dump and stop signals are sent in a burst while
+ * the carrier's tenant runs in user mode, so that some of them land in the
+ * exit loop after the resume hook has drained the queue, which is where Linux,
+ * not the endovisor, would act on one that was not ignored.
  */
 static void signal_and_check(long pid, long root)
 {
+	static const int burst[] = { SIGQUIT, SIGABRT, SIGTSTP, SIGTTIN, SIGTTOU };
 	struct timespec t = { .tv_sec = 0, .tv_nsec = 200 * 1000 * 1000 };
+	char ign[32], blk[32], ign_root[32];
+	unsigned int i, j;
 	char s;
+
+	task_sigline(pid, "SigIgn", ign, sizeof(ign));
+	task_sigline(pid, "SigBlk", blk, sizeof(blk));
+	task_sigline(root, "SigIgn", ign_root, sizeof(ign_root));
+	outf("RUN-MEM: signal dispositions: vcpu 1 carrier SigIgn %s SigBlk %s, root carrier SigIgn %s\n",
+	     ign, blk, ign_root);
 
 	kill((pid_t)pid, SIGTERM);
 	kill((pid_t)pid, SIGUSR1);
@@ -298,6 +338,17 @@ static void signal_and_check(long pid, long root)
 	nanosleep(&t, NULL);
 	s = task_state(pid);
 	outf("RUN-MEM: after SIGTERM and SIGUSR1 the carrier of vcpu 1 is %s (state %c), the root carrier %s\n",
+	     kill((pid_t)pid, 0) == 0 && s != 'Z' && s != '?' ? "alive" : "gone", s,
+	     kill((pid_t)root, 0) == 0 && task_state(root) != 'Z' ? "alive" : "gone");
+
+	for (j = 0; j < 2000; j++)
+		for (i = 0; i < sizeof(burst) / sizeof(burst[0]); i++)
+			kill((pid_t)pid, burst[i]);
+	kill((pid_t)root, SIGQUIT);
+	kill((pid_t)root, SIGTSTP);
+	nanosleep(&t, NULL);
+	s = task_state(pid);
+	outf("RUN-MEM: after 2000 rounds of SIGQUIT, SIGABRT, SIGTSTP, SIGTTIN and SIGTTOU the carrier of vcpu 1 is %s (state %c), the root carrier %s\n",
 	     kill((pid_t)pid, 0) == 0 && s != 'Z' && s != '?' ? "alive" : "gone", s,
 	     kill((pid_t)root, 0) == 0 && task_state(root) != 'Z' ? "alive" : "gone");
 }

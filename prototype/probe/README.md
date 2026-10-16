@@ -7,12 +7,16 @@ prototype against the same API, that drives:
    to an unmapped page, the area's fault handler reports the fault to the
    kernelet as a page-fault exception, the kernel maps a fresh frame there,
    and the store is retried;
-2. **three non-page-fault exceptions**: `ud2` (trap 6), which Linux turns
-   into `SIGILL` and the resume hook into a `CpuException::InvalidOpcode`;
+2. **three exceptions other than page faults**: `ud2` (trap 6), twice in a
+   row, which Linux turns into `SIGILL` and the resume hook into a
+   `CpuException::InvalidOpcode` (the second shows that a fault signal the
+   drain has ignored again is still forced through);
    `int3` (trap 3), which Linux turns into `SIGTRAP` with `SI_KERNEL` and the
    resume hook into a `CpuException::BreakPoint`; and `hlt` (trap 13),
    privileged, which Linux turns into `SIGSEGV` with `SI_KERNEL` and the resume
-   hook into a `CpuException::GeneralProtectionFault`;
+   hook into a `CpuException::GeneralProtectionFault`. After them the runtime
+   reads the vCPU carrier's `SigIgn` from `/proc`: every signal but `SIGKILL`
+   and `SIGSTOP` must be ignored again;
 3. **eviction**: a system call whose handler spins in kernel mode for ever,
    so that the only way the host gets that processor back is to evict the
    kernelet when the runtime kills the sandbox.
@@ -30,5 +34,5 @@ as the test, one boot, and the checks in `check-probe-log`.
 | file | what it is |
 |---|---|
 | `src/lib.rs` | the kernel proper |
-| `probe.S` | the tenant program: a store to an unmapped page, `ud2`, `int3`, `hlt`, and the endless system call |
+| `probe.S` | the tenant program: a store to an unmapped page, `ud2` twice, `int3`, `hlt`, and the endless system call |
 | `Cargo.toml` | the crate |

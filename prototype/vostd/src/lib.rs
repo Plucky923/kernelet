@@ -103,6 +103,7 @@ pub(crate) unsafe extern "C" fn kernelet_entry(
     if !cmdline.is_empty() {
         crate::early_println!("vOSTD: command line \"{}\"", cmdline);
     }
+    mm::heap::report();
 
     __ostd_main()
 }

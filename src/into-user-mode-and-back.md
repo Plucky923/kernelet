@@ -91,7 +91,7 @@ static bool klet_gate_syscall(struct pt_regs *regs)
 	if (c->kind == KLET_ROOT || c->state != KLET_USER || !c->ctx)
 		return false;                           /* not a carrier in user mode: not ours */
 	if (regs->cs != __USER_CS || in_compat_syscall()) {
-		/* a 32-bit entry instruction: report roughly what a machine would raise, a #GP */
+		/* a 32-bit entry instruction: report roughly what a machine would raise, a #GP (general-protection fault) */
 		c->exc_trap = X86_TRAP_GP; c->exc_pending = true;
 		set_thread_flag(TIF_NOTIFY_RESUME);
 		return true;
@@ -171,6 +171,8 @@ static bool klet_drain_signals(struct klet_carrier *c)
 
 	spin_lock_irq(&current->sighand->siglock);
 	while ((signr = dequeue_signal(&mask, &info, &type)) != 0) {
+		if (!sig_kernel_only(signr))            /* Linux forced it, un-ignoring it on the way: ignore it again */
+			kernel_sigaction(signr, SIG_IGN);
 		if (klet_is_fault_signal(signr, info.si_code) && !exception) {   /* raised by a trap handler for this task's own fault */
 			c->exc_trap = current->thread.trap_nr;
 			c->exc_error = current->thread.error_code;
@@ -178,20 +180,20 @@ static bool klet_drain_signals(struct klet_carrier *c)
 			c->exc_pending = true;
 			exception = true;
 		}
-		/* any other signal came from the host side and is dropped */
+		/* anything else Linux forced (seccomp's SIGSYS, a resource limit) is dropped */
 	}
 	spin_unlock_irq(&current->sighand->siglock);
 	return exception;
 }
 ```
 
-A fault signal is recognized by its number and its `si_code` together. The number is one of `SIGSEGV`, `SIGBUS`, `SIGILL`, `SIGFPE` and `SIGTRAP`, and the code is one a trap handler uses: positive, and below `SI_KERNEL`, the code Linux puts on signals it sends on its own account. Four more pairs are accepted, because some of x86's trap handlers have no finer code to give and send `SI_KERNEL` themselves ([`arch/x86/kernel/traps.c`](https://elixir.bootlin.com/linux/v6.12/source/arch/x86/kernel/traps.c)): `SIGSEGV` for a general-protection fault, an invalid task-state segment, an overflow trap (`int 4`), a bounds-check fault from 32-bit code, and the fault a processor raises on a disabled extended-state feature; `SIGBUS` for a segment-not-present and a stack fault; `SIGTRAP` for a breakpoint (`int3`); and `SIGFPE` for the coprocessor segment overrun that no current processor raises. In the extended-state case the trap number Linux left in the thread structure is stale, and the kernel proper sees whatever the last exception was. No process can forge that code, since `kill` sends `SI_USER`. Anything else is discarded: a signal sent by a process, which on the host side can only be the operator, since a tenant's `kill` is a system call and the gate takes those; or a signal Linux sends for a reason of its own, such as a resource limit.
+A fault signal is recognized by its number and its `si_code` together. The number is one of `SIGSEGV`, `SIGBUS`, `SIGILL`, `SIGFPE` and `SIGTRAP`, and the code is one a trap handler uses: positive, and below `SI_KERNEL`, the code Linux puts on signals it sends on its own account. Four more signals are accepted with `SI_KERNEL`, because some of x86's trap handlers have no finer code to give and send `SI_KERNEL` themselves ([`arch/x86/kernel/traps.c`](https://elixir.bootlin.com/linux/v6.12/source/arch/x86/kernel/traps.c)): `SIGSEGV` for a general-protection fault, an invalid task-state segment, an overflow trap (`int 4`), a bounds-check fault from 32-bit code, and the fault a processor raises on a disabled extended-state feature; `SIGBUS` for a segment-not-present and a stack fault; `SIGTRAP` for a breakpoint (`int3`); and `SIGFPE` for the coprocessor segment overrun that no current processor raises. In the extended-state case the trap number Linux left in the thread structure is stale, and the kernel proper sees whatever the last exception was. No process can forge that code, since `kill` sends `SI_USER`. Anything else is discarded: a signal sent by a process, which on the host side can only be the operator, since a tenant's `kill` is a system call and the gate takes those; or a signal Linux sends for a reason of its own, such as a resource limit.
 
 `SIGKILL` and `SIGSTOP` are left in the queue. The first is how the operator and the endovisor end a carrier, and Linux acts on it in the same loop. The second takes effect at the carrier's next return to user mode, where Linux stops it as it stops any task; a stopped carrier is a stopped virtual CPU until `SIGCONT`, and a virtual CPU that does not return to user mode, because it is idle or runs only kernel tasks, keeps running with the stop pending.
 
 The root carrier is the exception for `SIGSTOP`, and drops it with the rest. It never returns to user mode, so a stop could never act on it; and `kernel_clone` refuses to run while its caller has a signal pending, so a `SIGSTOP` left in the root's queue would make every clone it attempts fail.
 
-One class of signal never reaches the queue, and has to be dealt with earlier. A signal whose default action is to end the task without a core dump, `SIGTERM`, `SIGINT`, `SIGHUP`, the two user signals, `SIGPIPE` and their kind, is fatal at the moment it is *sent*: the sender sees that nothing will catch it and turns it into a `SIGKILL` on the spot ([`complete_signal()`](https://elixir.bootlin.com/linux/v6.12/source/kernel/signal.c#L994)), so the drain would never see it. The binary-format handler of chapter 5 therefore sets every signal of that class, the real-time signals included, to be ignored, and the clones inherit the setting, since `fork` copies the parent's signal dispositions; an operator's `SIGTERM` to a carrier is discarded like any other signal from the host side. The signals whose default action is a core dump, `SIGQUIT`, `SIGABRT`, `SIGSYS`, `SIGXCPU` and the fault signals themselves, are queued and go through the drain.
+Most signals never reach the queue at all, and that is arranged earlier. The binary-format handler of chapter 5 sets every signal but `SIGKILL` and `SIGSTOP`, which cannot be, to be *ignored*, and clears the signal mask; the clones inherit both, since `fork` copies the parent's dispositions. An ignored signal is discarded the moment it is sent, so an operator's `SIGTERM`, `SIGQUIT` or `SIGTSTP` to a carrier does nothing. The drain alone would not do, for two reasons. A signal whose default action is to end the task without a core dump, `SIGTERM`, `SIGINT`, `SIGPIPE` and their kind, is fatal at the moment it is sent: the sender sees that nothing will catch it and turns it into a `SIGKILL` on the spot ([`complete_signal()`](https://elixir.bootlin.com/linux/v6.12/source/kernel/signal.c#L994)), before any drain. And the drain runs at the top of one pass of the exit loop, while Linux delivers signals later in the same pass if one was pending when the pass began, so a `SIGQUIT` that arrived between the two would dump core and end the carrier. The fault signals are ignored too, and still arrive: Linux sends a fault with `force_sig_info_to_task()`, which first sets an ignored signal back to its default action, so the signal is queued and the drain sees it. The drain then ignores it again, so that the next fault is forced the same way and a `SIGSEGV` a process sends in between is discarded.
 
 The resume hook brings the exception into the kernelet:
 
@@ -254,20 +256,21 @@ Page faults on tenant memory take a shorter path through the endovisor's own fau
 
 ## Hello, world
 
-With chapters 3 to 7 built, `make hello` boots Linux in QEMU, loads the module, runs the runtime, and this appears in the serial log (one line of Linux's own about an out-of-tree module, and six lines of counters at unload, are left out):
+With chapters 3 to 7 built, `make hello` boots Linux in QEMU, loads the module, runs the runtime, and this appears in the serial log (one line of Linux's own about an out-of-tree module, and eight lines of counters at unload, are left out):
 
 ```
 INIT: loading kernelet.ko
-kernelet: kernelet image text [0xffffffffc001b832, 0xffffffffc0028da5), 54643 bytes; virq_entry at +0x1f7b
-kernelet: endovisor loaded: grant 4096 KiB at 0xc00000, linear map 0xffff9cc840000000, watch on, mirror on, fpu area 1088 B, tsc 3791992 kHz
+kernelet: kernelet image text [0xffffffffc0118e4f, 0xffffffffc0127fe5), 61846 bytes; virq_entry at +0x710c
+kernelet: endovisor loaded: grant 4096 KiB at 0xc00000, linear map 0xffff8b9f40000000, watch on, mirror on, fpu area 1088 B, tsc 3791992 kHz
 INIT: running /tests/10-hello
 RUN-HELLO: creating a sandbox from /hello.klet
 kernelet: host offsets: gs:current 0x1fac0, gs:preempt_count 0x1fac8, task->kernelet +1968, gate->vrec +8
 kernelet: root carrier exec (pid 34), address space emptied, 1 virtual CPU(s), cmdline ""
 kernelet: vcpu 0 carrier starting (pid 35)
-kernelet: service stub: 42 cycles through the stack switch, 24 for the service body alone (least of 7 rounds of 2000, rdtsc, interrupts off)
-kernelet: vOSTD up: grant 0xc00000..0x1000000, linear map 0xffff9cc840000000, 1 vCPU(s), tsc 3791992 kHz, fpu area 1088 B
-kernelet: space 1 created: root 0x79b000, area [0x10000, 0x7ffffffff000), its own inode, mm owner a task
+kernelet: service stub: 37 cycles through the stack switch, 24 for the service body alone (least of 7 rounds of 2000, rdtsc, interrupts off)
+kernelet: vOSTD up: grant 0xc00000..0x1000000, linear map 0xffff8b9f40000000, 1 vCPU(s), tsc 3791992 kHz, fpu area 1088 B
+kernelet: vOSTD: heap: a 64-byte allocation and its free, 377 cycles the pair (least of 7 rounds of 1000, rdtsc)
+kernelet: space 1 created: root 0x8b2000, area [0x10000, 0x7ffffffff000), its own inode, mm owner a task
 kernelet: Hello, world
 kernelet:
 kernelet: stopped, exit code 0
@@ -275,6 +278,7 @@ kernelet: vcpu 0 carrier (pid 35) dying
 kernelet: root carrier (pid 34) dying
 kernelet: vcpu 0 carrier (pid 35) lifeline closed
 kernelet: root carrier (pid 34) lifeline closed, the last one
+kernelet: the sandbox is gone: 7 heap block(s) the kernelet still held freed (752 bytes), 2 kernelet stack(s) returned to vmalloc (1 still in use)
 RUN-HELLO: root carrier (pid 34) killed by signal 9
 RUN-HELLO: no carrier left (module references: 0)
 RUN-HELLO: done
@@ -284,7 +288,7 @@ kernelet: endovisor unloaded
 INIT: done
 ```
 
-Line by line: the endovisor publishes the offsets by which vOSTD will find its way around Linux (chapter 8); the root carrier is made by the handler (chapter 5); it clones the carrier of virtual CPU 0, which enters the image (chapter 3) and, before anything else, times a service call that does nothing (chapter 14); the kernel proper creates its address space (chapter 12); the program's `write` arrives by the syscall hook and the kernel proper prints the message through `log_write`, followed by the message's own newline as an empty line; its `exit` becomes the `stop` service (chapter 11); both carriers die and their lifelines close; the module's reference count reaches zero and it unloads. The build checks that the log contains the greeting, the exit code, a clean unload, and no Linux error report.
+Line by line: the endovisor publishes the offsets by which vOSTD will find its way around Linux (chapter 8); the root carrier is made by the handler (chapter 5); it clones the carrier of virtual CPU 0, which enters the image (chapter 3) and, before anything else, times a service call that does nothing and then a heap allocation and its free (chapter 14); the kernel proper creates its address space (chapter 12); the program's `write` arrives by the syscall hook and the kernel proper prints the message through `log_write`, followed by the message's own newline as an empty line; its `exit` becomes the `stop` service (chapter 11); both carriers die and their lifelines close, and the last release returns what the kernelet held (chapter 11); the module's reference count reaches zero and it unloads. The build checks that the log contains the greeting, the exit code, a clean unload, and no Linux error report.
 
 <div class="recap">
 

@@ -12,8 +12,8 @@
 # One test each (every one builds what it needs, boots, and checks the log):
 #
 #   make hello        the unedited 100-line kernel: Hello, world
-#   make probe        demand paging, three non-page-fault exceptions (ud2, int3,
-#                     hlt), eviction
+#   make probe        demand paging, exceptions other than page faults (ud2
+#                     twice, int3, hlt), eviction
 #   make yield        the watch timer: two boots under preempt=none, off and on
 #   make sched-policy the sched kernel's own scheduler obeys its policy
 #   make sched-coop   the mirror: with it, without it, and with an overstayer
@@ -21,8 +21,11 @@
 #   make mem-func     tenant memory: faults, protection, the withheld set
 #   make mem-r2       the sleeping contract, broken on purpose
 #   make mem-conc     two virtual CPUs: copies, the range lock, retire
-#   make mem-kill     a carrier stopped, continued and killed from outside;
-#                     its sibling carries on
+#   make mem-kill     a carrier sent signals it must ignore, stopped,
+#                     continued and killed from outside: the kill ends the
+#                     whole sandbox; then two short boots that kill a carrier
+#                     idle in vcpu_idle (kill-idle) and one looping in a kernel
+#                     task (kill-spin)
 #   make mem-pressure the area's entries survive Linux's reclaim
 #
 # The pieces:
@@ -53,7 +56,15 @@ QEMU          ?= qemu-system-x86_64
 ARCH           ?= x86_64
 # Parallel jobs for the Linux and module builds.
 JOBS           ?= 8
+# How long one boot may take, in seconds, before it is killed and fails. Each
+# test sets its own (120 to 300 s); a TIMEOUT given on the command line wins
+# over all of them, for a slow host: make test TIMEOUT=600.
 TIMEOUT        ?= 120
+ifeq ($(origin TIMEOUT),command line)
+USER_TIMEOUT := $(TIMEOUT)
+endif
+# $(call boot_timeout,<the test's own>): the command line's, or the test's.
+boot_timeout = $(or $(USER_TIMEOUT),$(1))
 KERNEL_CMDLINE ?= console=ttyS0 panic=-1
 
 FRAGMENT  := $(CURDIR)/linux/config.fragment
@@ -73,19 +84,22 @@ CARGO      ?= cargo
 RUST_TARGET := x86_64-unknown-none
 CARGO_DIR  := $(BUILD)/cargo
 # Which crate is the kernel proper of the image: `hello` (the unedited 100-line
-# kernel), `probe`, `yieldk`, `schedk` or `mem`. One image per module build.
+# kernel), `probe`, `yieldk`, `schedk` or `mem`. One image per module build;
+# any other name is an error.
 KLET_KERNEL ?= hello
 STATICLIB  := $(CARGO_DIR)/$(RUST_TARGET)/release/lib$(KLET_KERNEL).a
 ifeq ($(KLET_KERNEL),hello)
 KERNEL_PROPER_DEP := kernel-proper-check $(CURDIR)/hello/hello
 else ifeq ($(KLET_KERNEL),probe)
 KERNEL_PROPER_DEP := $(CURDIR)/probe/probe
+else ifeq ($(KLET_KERNEL),yieldk)
+KERNEL_PROPER_DEP := $(CURDIR)/yield/yield
 else ifeq ($(KLET_KERNEL),schedk)
 KERNEL_PROPER_DEP := $(CURDIR)/sched/sched
 else ifeq ($(KLET_KERNEL),mem)
 KERNEL_PROPER_DEP := $(CURDIR)/mem/mem
 else
-KERNEL_PROPER_DEP := $(CURDIR)/yield/yield
+$(error KLET_KERNEL=$(KLET_KERNEL) is not a kernel proper of this repository: hello, probe, yieldk, schedk or mem)
 endif
 IMAGE      := $(CURDIR)/endovisor/image.o_shipped
 HELLO_ELF  := $(CURDIR)/hello/hello
@@ -427,14 +441,12 @@ stage-sched: kernelet-module runtime
 	printf '$(SCHED_RUNMODE)\n' > $(STAGE)/tests/10-sched.arg
 	@echo "staged: kernelet.ko (sched), /tests/10-sched $(SCHED_RUNMODE), /sched.klet mode=$(SCHED_MODE)"
 
-SCHED_CMDLINE := console=ttyS0 panic=-1
-
 # One boot of the sched kernel. Everything about it comes from the variables above.
 .PHONY: sched-boot
 sched-boot:
 	$(MAKE) KLET_KERNEL=schedk linux
 	$(MAKE) KLET_KERNEL=schedk stage-sched initramfs
-	$(MAKE) run KERNEL_CMDLINE="$(SCHED_CMDLINE)" TIMEOUT=$(SCHED_TIMEOUT)
+	$(MAKE) run TIMEOUT=$(call boot_timeout,$(SCHED_TIMEOUT))
 
 SCHED_TIMEOUT ?= 180
 
@@ -482,6 +494,7 @@ sched-coop:
 
 # 3. Fair: the sandbox's share of the processors, with 1, 50 and 50+overstayer.
 sched-fair:
+	rm -f $(SCHED_FAIR1) $(SCHED_FAIR50) $(SCHED_FAIR50O)
 	$(MAKE) sched-boot SCHED_MODE=fair SCHED_ARGS="tasks=1" SCHED_RUNMODE=fair SCHED_DUR=10000 SCHED_TIMEOUT=180
 	cp $(SERIAL) $(SCHED_FAIR1)
 	$(MAKE) sched-boot SCHED_MODE=fair SCHED_ARGS="tasks=50" SCHED_RUNMODE=fair SCHED_DUR=10000 SCHED_TIMEOUT=180
@@ -499,18 +512,30 @@ sched-perf:
 	done
 	@test -n "$(BOOTS_ONLY)" || $(MAKE) --no-print-directory check-sched-perf
 
-# A clean module unload, in the log $(1): init's delete_module succeeded (it
-# prints "delete_module kernelet failed" if not), the endovisor printed its
-# counters on the way out (kernelet: STATS), init got to the end, and every
-# carrier record the endovisor allocated was freed ("0 live").
+# A clean end of the sandbox and a clean module unload, in the log $(1): when
+# the last carrier died, the endovisor gave back what the sandbox held
+# ("the sandbox is gone"); init's delete_module succeeded (it prints
+# "delete_module kernelet failed" if not); the endovisor printed its counters
+# on the way out (kernelet: STATS); init got to the end; and nothing the
+# endovisor allocated for the sandbox is left: no heap block, no kernelet
+# stack, no carrier record ("0 live" in each count).
 CHECK_UNLOAD = \
 	if grep -qF 'delete_module kernelet failed' $(1) || \
 	   ! grep -qF 'kernelet: STATS' $(1) || ! grep -qF 'INIT: done' $(1); then \
 	  echo "  BAD     $$(basename $(1)): the module did not unload cleanly"; rc=1; \
 	else echo "  ok      $$(basename $(1)): clean module unload"; fi; \
-	if grep -qE 'kernelet: carrier records: [0-9]+ made, [0-9]+ freed, 0 live' $(1); then \
-	  echo "  ok      $$(basename $(1)): $$(grep -oE 'carrier records: [0-9]+ made, [0-9]+ freed, 0 live' $(1) | head -1)"; \
-	else echo "  BAD     $$(basename $(1)): carrier records left: $$(grep -oE 'carrier records: .*' $(1) | head -1)"; rc=1; fi
+	if grep -qF 'kernelet: the sandbox is gone: ' $(1); then \
+	  echo "  ok      $$(basename $(1)): $$(grep -oE 'the sandbox is gone: .*' $(1) | head -1 | tr -d '\r')"; \
+	else echo "  BAD     $$(basename $(1)): the sandbox's end never gave back what it held"; rc=1; fi; \
+	for what in 'heap: [0-9]+ blocks allocated, [0-9]+ freed by the kernelet, [0-9]+ freed at teardown, 0 live' \
+	            'kernelet stacks: [0-9]+ made, [0-9]+ returned, 0 live' \
+	            'carrier records: [0-9]+ made, [0-9]+ freed, 0 live'; do \
+	  if grep -qE "kernelet: $$what" $(1); then \
+	    echo "  ok      $$(basename $(1)): $$(grep -oE "$$what" $(1) | head -1)"; \
+	  else echo "  BAD     $$(basename $(1)): not $$what: $$(grep -oE "kernelet: $${what%%:*}: .*" $(1) | head -1 | tr -d '\r')"; rc=1; fi; \
+	done; \
+	if grep -qF 'mem_free call(s) refused' $(1); then \
+	  echo "  BAD     $$(basename $(1)): $$(grep -oE 'heap: [0-9]+ mem_free call.*' $(1) | head -1 | tr -d '\r')"; rc=1; fi
 
 check-sched-policy:
 	@rc=0; \
@@ -649,6 +674,8 @@ MEM_MODPARAMS ?=
 MEM_RUNMODE   ?= plain
 MEM_TIMEOUT   ?= 180
 MEM_LOGDIR    := $(BUILD)/mem
+# The target whose verdict check-mem-log prints.
+MEM_TARGET    ?= mem-$(MEM_LOG)
 SWAP_IMG      := $(MEM_LOGDIR)/swap.img
 
 .PHONY: stage-mem mem-boot mem mem-func mem-r2 mem-conc mem-kill mem-pressure mem-perf
@@ -673,7 +700,7 @@ mem-boot:
 	mkdir -p $(MEM_LOGDIR)
 	$(MAKE) KLET_KERNEL=mem linux
 	$(MAKE) KLET_KERNEL=mem stage-mem initramfs
-	$(MAKE) run TIMEOUT=$(MEM_TIMEOUT)
+	$(MAKE) run TIMEOUT=$(call boot_timeout,$(MEM_TIMEOUT))
 	cp $(SERIAL) $(MEM_LOGDIR)/$(MEM_LOG).log
 
 # Everything a passing mem boot's log must and must not contain.
@@ -690,7 +717,7 @@ check-mem-log:
 	  if grep -qF "$$pat" $$f; then echo "  BAD     the log contains $$pat"; grep -nF "$$pat" $$f | head -3; rc=1; \
 	  else echo "  ok      no $$pat"; fi; \
 	done; \
-	if [ $$rc -eq 0 ]; then echo "$(MEM_LOG): PASS"; else echo "$(MEM_LOG): FAIL"; fi; exit $$rc
+	if [ $$rc -eq 0 ]; then echo "make $(MEM_TARGET): PASS"; else echo "make $(MEM_TARGET): FAIL"; fi; exit $$rc
 
 # E2, E3, E4 and E10: mapped pages need no Linux fault, one fault maps a
 # fault-around window, a protection change keeps the entries, a map under a
@@ -714,7 +741,7 @@ check-mem-r2:
 	if [ "$${m:-1}" = "0" ]; then echo "  ok      no vm_map ever reached the endovisor"; else echo "  BAD     vm_map crossed ($$m)"; rc=1; fi; \
 	for pat in $(CHECK_BAD); do if grep -qF "$$pat" $$f; then echo "  BAD     Linux reported $$pat"; rc=1; fi; done; \
 	$(call CHECK_UNLOAD,$$f); \
-	if [ $$rc -eq 0 ]; then echo "mem-r2: PASS"; else echo "mem-r2: FAIL"; fi; exit $$rc
+	if [ $$rc -eq 0 ]; then echo "make mem-r2: PASS"; else echo "make mem-r2: FAIL"; fi; exit $$rc
 
 # E8 and E11 on two virtual CPUs: lockless copies against concurrent unmaps,
 # a contended cursor whose holder sleeps in vm_map (the test hook), and a
@@ -773,7 +800,7 @@ check-mem-kill-quiet:
 	  if grep -qF "$$pat" $$f; then echo "  BAD     the log contains $$pat"; grep -nF "$$pat" $$f | head -3; rc=1; \
 	  else echo "  ok      no $$pat"; fi; \
 	done; \
-	if [ $$rc -eq 0 ]; then echo "$(MEM_LOG): PASS"; else echo "$(MEM_LOG): FAIL"; fi; exit $$rc
+	if [ $$rc -eq 0 ]; then echo "make mem-kill, boot $(MEM_LOG): PASS"; else echo "make mem-kill, boot $(MEM_LOG): FAIL"; fi; exit $$rc
 
 check-mem-kill:
 	@f=$(MEM_LOGDIR)/kill.log; rc=0; \
@@ -793,6 +820,16 @@ check-mem-kill:
 	           'RUN-MEM: no carrier left (module references: 0)' 'INIT: done'; do \
 	  if grep -qF "$$pat" $$f; then echo "  ok      $$pat"; else echo "  MISSING $$pat"; rc=1; fi; \
 	done; \
+	ign=fffffffffffbfeff; \
+	if grep -qF "signal dispositions: vcpu 1 carrier SigIgn $$ign SigBlk 0000000000000000, root carrier SigIgn $$ign" $$f; then \
+	  echo "  ok      both carriers ignore every signal but SIGKILL and SIGSTOP, and block none (SigIgn $$ign)"; \
+	else echo "  BAD     the carriers' signal dispositions: $$(grep -o 'signal dispositions: .*' $$f | tr -d '\r')"; rc=1; fi; \
+	if grep -q 'after 2000 rounds of SIGQUIT, SIGABRT, SIGTSTP, SIGTTIN and SIGTTOU the carrier of vcpu 1 is alive (state [RS]), the root carrier alive' $$f; then \
+	  echo "  ok      2000 rounds of SIGQUIT, SIGABRT, SIGTSTP, SIGTTIN and SIGTTOU left both carriers alive and running"; \
+	else echo "  BAD     the core-dump and stop signals: $$(grep -o 'after 2000 rounds.*' $$f | tr -d '\r')"; rc=1; fi; \
+	n=$$(grep -cE 'kernelet: signal (3|6|20|21|22|15|10) ' $$f); \
+	if [ "$$n" -eq 0 ]; then echo "  ok      none of them reached a carrier's queue: discarded when sent"; \
+	else echo "  BAD     $$n of them reached the drain"; rc=1; fi; \
 	if grep -q 'vcpu 1 carrier state [RS], after SIGSTOP T, after SIGCONT [RS]' $$f; then \
 	  echo "  ok      SIGSTOP stopped the carrier of vcpu 1 (state T) and SIGCONT let it go on"; \
 	else echo "  BAD     the carrier of vcpu 1 did not stop and go on"; rc=1; fi; \
@@ -804,7 +841,7 @@ check-mem-kill:
 	  if grep -qF "$$pat" $$f; then echo "  BAD     the log contains $$pat"; grep -nF "$$pat" $$f | head -3; rc=1; \
 	  else echo "  ok      no $$pat"; fi; \
 	done; \
-	if [ $$rc -eq 0 ]; then echo "kill: PASS"; else echo "kill: FAIL"; fi; exit $$rc
+	if [ $$rc -eq 0 ]; then echo "make mem-kill, boot kill: PASS"; else echo "make mem-kill, boot kill: FAIL"; fi; exit $$rc
 
 # E7: the area's entries survive reclaim. A 512 MiB sparse swap file on a
 # virtio disk; the hog in run-mem pushes the guest into swap.
@@ -832,7 +869,7 @@ mem-perf:
 check-mem-perf:
 	@fail=0; for f in $(MEM_LOGDIR)/perf-*.log; do \
 	  b=$$(basename $$f .log); \
-	  if $(MAKE) --no-print-directory check-mem-log MEM_LOG=$$b >/dev/null 2>&1; then \
+	  if $(MAKE) --no-print-directory check-mem-log MEM_LOG=$$b MEM_TARGET="mem-perf, boot $$b" >/dev/null 2>&1; then \
 	    echo "  ok      boot $$b"; \
 	  else echo "  BAD     boot $$b failed its checks"; fail=$$((fail+1)); fi; \
 	done; \
@@ -899,10 +936,10 @@ YIELD_OFF_LOG := $(BUILD)/serial-yield-off.log
 yield:
 	$(MAKE) KLET_KERNEL=yieldk linux
 	$(MAKE) KLET_KERNEL=yieldk WATCH=0 stage-yield initramfs
-	$(MAKE) run KERNEL_CMDLINE="$(YIELD_CMDLINE)" TIMEOUT=180
+	$(MAKE) run KERNEL_CMDLINE="$(YIELD_CMDLINE)" TIMEOUT=$(call boot_timeout,180)
 	cp $(SERIAL) $(YIELD_OFF_LOG)
 	$(MAKE) KLET_KERNEL=yieldk WATCH=1 stage-yield initramfs
-	$(MAKE) run KERNEL_CMDLINE="$(YIELD_CMDLINE)" TIMEOUT=180
+	$(MAKE) run KERNEL_CMDLINE="$(YIELD_CMDLINE)" TIMEOUT=$(call boot_timeout,180)
 	cp $(SERIAL) $(BUILD)/serial-yield-on.log
 	@$(MAKE) --no-print-directory check-yield-log
 
@@ -979,8 +1016,16 @@ check-probe-log:
 	@sed -n '/INIT: loading kernelet.ko/,$$p' $(SERIAL) | sed 's/\r$$//'
 	@echo "----------------------------------------------------------------"
 	@rc=0; \
+	n=$$(grep -c 'probe: illegal instruction at' $(SERIAL)); \
+	if [ "$$n" -eq 2 ]; then echo "  ok      two illegal instructions in a row, both handed over as trap 6"; \
+	else echo "  BAD     $$n illegal instruction(s) handed over, not 2"; rc=1; fi; \
+	n=$$(grep -c 'is trap [0-9]* -> exception; ignored again' $(SERIAL)); \
+	if [ "$$n" -eq 4 ]; then echo "  ok      each of the four fault signals was ignored again after the drain took it"; \
+	else echo "  BAD     $$n fault signal(s) ignored again, not 4"; rc=1; fi; \
+	if grep -qF 'RUN-PROBE: vcpu 0 carrier SigIgn fffffffffffbfeff SigBlk 0000000000000000 SigPnd 0000000000000000' $(SERIAL); then \
+	  echo "  ok      after the faults, the vCPU carrier ignores every signal but SIGKILL and SIGSTOP again"; \
+	else echo "  BAD     the vCPU carrier's signals after the faults: $$(grep -o 'RUN-PROBE: vcpu 0 carrier Sig.*' $(SERIAL) | tr -d '\r')"; rc=1; fi; \
 	for pat in 'probe: demand paging: read back "PROBE-OK"' \
-	           'probe: illegal instruction at' \
 	           'probe: breakpoint before' \
 	           'probe: general protection fault at' \
 	           'probe: spinning inside the kernelet at depth 0' \
@@ -1008,6 +1053,9 @@ check-log:
 	stub=$$(grep -o 'service stub: [0-9]* cycles through the stack switch, [0-9]* for the service body alone' $(SERIAL) | head -1); \
 	if [ -n "$$stub" ]; then echo "  ok      $$stub"; \
 	else echo "  MISSING the service stub measurement"; rc=1; fi; \
+	heap=$$(grep -o 'heap: a 64-byte allocation and its free, [0-9]* cycles the pair' $(SERIAL) | head -1); \
+	if [ -n "$$heap" ]; then echo "  ok      $$heap"; \
+	else echo "  MISSING the heap measurement"; rc=1; fi; \
 	for pat in 'Hello, world' 'kernelet: stopped, exit code 0' \
 	           'INIT: unloading kernelet' 'INIT: done'; do \
 	  if grep -qF "$$pat" $(SERIAL); then echo "  ok      $$pat"; \

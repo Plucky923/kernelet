@@ -92,8 +92,14 @@ static const struct file_operations klet_lifeline_fops = {
 
 struct file *klet_lifeline_create(struct klet_carrier *c)
 {
-	return anon_inode_getfile("[kernelet-carrier]", &klet_lifeline_fops,
+	struct file *file;
+
+	/* The file's own reference, given back by its release, or here. */
+	file = anon_inode_getfile("[kernelet-carrier]", &klet_lifeline_fops,
 				  klet_carrier_get(c), O_RDWR);
+	if (IS_ERR(file))
+		klet_carrier_put(c);
+	return file;
 }
 
 /* ------------------------------------------------------------------ */
@@ -267,7 +273,7 @@ static int klet_load_binary(struct linux_binprm *bprm)
 	err = klet_read_config(inst, bprm, &nr_vcpus);
 	if (err)
 		return err;
-	if (inst->stopped || inst->dying)
+	if (inst->stopped || inst->dying || inst->root_gone)
 		return -ENOEXEC;
 	if (atomic_read(&inst->nr_carriers) != 0)
 		return -EBUSY;	/* exactly one instance in this prototype */
@@ -314,36 +320,44 @@ static int klet_load_binary(struct linux_binprm *bprm)
 		return err;
 	}
 
-	/* Children are reaped without anybody waiting for them. */
-	kernel_sigaction(SIGCHLD, SIG_IGN);
-
 	/*
-	 * begin_new_exec() reset every handler to SIG_DFL, except the ones the
-	 * runtime had set to SIG_IGN, which flush_signal_handlers() keeps; the
-	 * signal mask survives the exec too. Neither matters: an ignored signal is
-	 * discarded when it is sent, where the drain would have dropped it, and a
-	 * fault signal Linux raises for the tenant's instruction un-ignores and
-	 * unblocks itself (force_sig_info_to_task()), so it still reaches the
-	 * drain. A signal whose default action is to terminate without a core
-	 * dump is fatal at the moment it is sent (complete_signal() turns it into
-	 * SIGKILL): it would never reach the drain. An operator's SIGTERM to a carrier, or a stray
-	 * SIGPIPE, would end the sandbox. So they are ignored, here, and the
-	 * vCPU carriers inherit it from the root; SIGKILL and SIGSTOP cannot be,
-	 * and keep their meaning. The core-dump class (SIGQUIT, SIGABRT, the
-	 * fault signals, SIGSYS, SIGXCPU, SIGXFSZ) still goes through the queue
-	 * and the drain.
+	 * Every signal that can be ignored is, here, and the vCPU carriers
+	 * inherit it from the root, since a clone copies its parent's
+	 * dispositions; the mask is cleared too, because a blocked signal is
+	 * queued even when it is ignored. SIGKILL and SIGSTOP cannot be ignored,
+	 * and keep their meaning. SIGCHLD ignored also means the children are
+	 * reaped without anybody waiting for them.
+	 *
+	 * Draining is not enough. The resume hook drains the queue and returns,
+	 * but in the same pass of the exit loop Linux goes on to deliver signals
+	 * if the work flags it read before the hook said one was pending, and a
+	 * signal that arrives between the drain and that delivery would be
+	 * Linux's to act on: a SIGQUIT or SIGABRT would dump core and end the
+	 * carrier, and with it the sandbox, a SIGTSTP, SIGTTIN or SIGTTOU would
+	 * stop it. And a signal whose default action is to terminate without a
+	 * core dump (SIGTERM, SIGPIPE, ...) never reaches the queue at all: it is
+	 * fatal at the moment it is sent (complete_signal() turns it into
+	 * SIGKILL). An ignored signal is discarded when it is sent, so none of
+	 * them ever becomes pending.
+	 *
+	 * The fault signals are ignored as well, and still arrive: a fault of
+	 * the tenant's is sent with force_sig_info_to_task(), which first sets
+	 * an ignored or blocked signal back to SIG_DFL, so it is queued, and the
+	 * hook drains it before Linux can deliver it, because it was queued
+	 * before the exit loop began. The drain then ignores it again
+	 * (klet_drain_signals), so that the next one is forced, and drained, in
+	 * the same way, and the same signal sent by a process in the meantime
+	 * is discarded.
 	 */
 	{
-		static const int terminate[] = {
-			SIGHUP, SIGINT, SIGTERM, SIGUSR1, SIGUSR2, SIGALRM, SIGPIPE,
-			SIGIO, SIGPROF, SIGVTALRM, SIGSTKFLT, SIGPWR,
-		};
-		int i;
+		sigset_t none;
+		int sig;
 
-		for (i = 0; i < ARRAY_SIZE(terminate); i++)
-			kernel_sigaction(terminate[i], SIG_IGN);
-		for (i = SIGRTMIN; i <= SIGRTMAX; i++)
-			kernel_sigaction(i, SIG_IGN);
+		sigemptyset(&none);
+		sigprocmask(SIG_SETMASK, &none, NULL);
+		for (sig = 1; sig <= _NSIG; sig++)
+			if (!sig_kernel_only(sig))
+				kernel_sigaction(sig, SIG_IGN);
 	}
 
 	pr_info("kernelet: root carrier exec (pid %d), address space emptied, %u virtual CPU(s), cmdline \"%s\"\n",
@@ -439,6 +453,7 @@ static int __init klet_init(void)
 	spin_lock_init(&inst->lock);
 	INIT_LIST_HEAD(&inst->carriers);
 	INIT_LIST_HEAD(&inst->kstack_all);
+	klet_heap_init(inst);
 	init_waitqueue_head(&inst->root_wq);
 	atomic_set(&inst->nr_carriers, 0);
 	atomic_set(&inst->sweeps, 0);
@@ -505,8 +520,21 @@ static void __exit klet_exit(void)
 	klet_watch_exit();
 	klet_evict_exit();
 	klet_sched_exit();
+	/*
+	 * What the sandbox held was freed when its last carrier died
+	 * (klet_sandbox_gone); these find something only if no sandbox ever
+	 * got that far, or a carrier record was kept.
+	 */
 	klet_spaces_free(inst);
-	klet_kstack_pool_destroy(inst);
+	{
+		unsigned long bytes;
+		unsigned long blocks = klet_heap_destroy(inst, &bytes);
+		unsigned int stacks = klet_kstack_pool_destroy(inst, NULL);
+
+		if (blocks || stacks)
+			pr_info("kernelet: at unload: %lu heap block(s) (%lu bytes) and %u kernelet stack(s) were left, and are freed now\n",
+				blocks, bytes, stacks);
+	}
 	klet_grant_free(inst);
 	kfree(inst->cmdline);
 	inst->cmdline = NULL;
@@ -545,7 +573,7 @@ static void __exit klet_exit(void)
 		atomic_read(&inst->fpu_rejects),
 		atomic_read(&inst->mirror_faults),
 		atomic_read(&inst->stolen_ms),
-		inst->kstack_made);
+		inst->kstack_total);
 	{
 		struct klet_mem_stats *m = inst->mem_stats;
 
@@ -564,6 +592,22 @@ static void __exit klet_exit(void)
 	pr_info("kernelet: kills: %d found in a service, %d in kernelet code by the watch timer\n",
 		atomic_read(&inst->kills_in_service),
 		atomic_read(&inst->kills_in_kernelet));
+	{
+		s64 allocs = atomic64_read(&inst->heap_allocs);
+		s64 frees = atomic64_read(&inst->heap_frees);
+		s64 reaped = atomic64_read(&inst->heap_reaped);
+
+		s64 bad = atomic64_read(&inst->heap_bad_frees);
+
+		pr_info("kernelet: heap: %lld blocks allocated, %lld freed by the kernelet, %lld freed at teardown, %lld live\n",
+			allocs, frees, reaped, allocs - frees - reaped);
+		if (bad)
+			pr_warn("kernelet: heap: %lld mem_free call(s) refused: not a block mem_alloc handed out\n",
+				bad);
+		pr_info("kernelet: kernelet stacks: %u made, %u returned, %u live\n",
+			inst->kstack_total, inst->kstack_returned,
+			inst->kstack_total - inst->kstack_returned);
+	}
 	pr_info("kernelet: carrier records: %d made, %d freed, %d live\n",
 		atomic_read(&inst->carriers_made), atomic_read(&inst->carriers_freed),
 		atomic_read(&inst->carriers_made) - atomic_read(&inst->carriers_freed));

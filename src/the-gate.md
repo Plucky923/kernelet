@@ -47,7 +47,7 @@ flowchart TB
 
 **A hook structure and a pointer per task.** A new header defines two function pointers, and `struct task_struct` gains a pointer to a structure holding them. A task whose pointer is null is unaffected by anything else in the patch.
 
-*From `prototype/patches/0001-kernelet-gate.patch`: `kernelet_gate_ops`, `kernelet_gate`.*
+*Simplified from `prototype/patches/0001-kernelet-gate.patch`: `kernelet_gate_ops`, `kernelet_gate`.*
 
 ```c
 /* include/linux/kernelet.h (new) */
@@ -71,6 +71,8 @@ struct kernelet_gate {
 
 **The syscall hook.** Inside `syscall_trace_enter()`, directly after seccomp:
 
+*Simplified from `prototype/patches/0001-kernelet-gate.patch`: `SYSCALL_WORK_KERNELET`.*
+
 ```c
 /* kernel/entry/common.c, syscall_trace_enter() */
 	if (work & SYSCALL_WORK_KERNELET) {
@@ -82,6 +84,8 @@ struct kernelet_gate {
 Returning `-1` from this function is Linux's existing convention for "an earlier stage has answered this call; do not dispatch it", and [`do_syscall_64()`](https://elixir.bootlin.com/linux/v6.12/source/arch/x86/entry/common.c#L76) then skips the table. The hook is placed *after* seccomp, which means the filter a sandbox was started with runs on every one of the tenant's system calls *before* the kernelet sees them. That is a tool for the kernelet runtime, the host program that creates sandboxes (chapter 5), with a sharp edge: a filter that allows a call lets the kernelet serve it; one that returns an error answers the call in Linux, and the kernelet never hears of it; one that kills ends a carrier, and with it, as chapter 11 shows, the whole sandbox. A filter for a sandbox therefore bounds what the tenant may ask of its *kernelet*, and must be written for that, not copied from a host process. The prototype's runtime installs none.
 
 **The resume hook.** At the top of `exit_to_user_mode_loop()`, after interrupts are enabled and before Linux delivers signals:
+
+*Simplified from `prototype/patches/0001-kernelet-gate.patch`: `resume_user_mode_work`.*
 
 ```c
 /* kernel/entry/common.c, exit_to_user_mode_loop() */

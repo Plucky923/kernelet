@@ -10,9 +10,9 @@
 //!    the faulting address, maps a fresh frame there with a cursor, and returns to
 //!    user mode, where the store is retried. The program then reads back what it
 //!    wrote and reports it with a `write` system call.
-//! 2. **A non-page-fault exception.** The program executes `ud2`. The kernel gets
-//!    [`CpuException::InvalidOpcode`], logs it, and steps over the two bytes.
-//!    Then `int3`, which Linux reports as a SIGTRAP with `SI_KERNEL`; the kernel
+//! 2. **Exceptions other than page faults.** The program executes `ud2`, twice
+//!    in a row. Each time the kernel gets [`CpuException::InvalidOpcode`], logs
+//!    it, and steps over the two bytes. Then `int3`, which Linux reports as a SIGTRAP with `SI_KERNEL`; the kernel
 //!    gets [`CpuException::BreakPoint`] (trap 3) and carries on, since rip is
 //!    already past the instruction. Then `hlt`, privileged, which Linux reports
 //!    as a SIGSEGV with `SI_KERNEL`; the kernel gets

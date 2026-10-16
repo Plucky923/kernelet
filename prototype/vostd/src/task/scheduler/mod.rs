@@ -23,7 +23,8 @@
 //!   only notes a preemption asked for inside it (`RESCHED_DEFERRED`), and
 //!   whoever closes the window acts on the note (see [`might_preempt`]).
 //!
-//! These two are the additions to OSTD's own logic in this file.
+//! The first replaces OSTD's mechanism; the other two are additions to OSTD's
+//! own logic. All three are in this file.
 //!
 //! # Scheduler injection
 //!

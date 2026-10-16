@@ -34,9 +34,11 @@
  *    klet_svc_enter5 behind it), which finds the carrier through `current`,
  *    packs the arguments and calls klet_run_on_linux_stack, the few
  *    instructions that move to the Linux stack and call klet_svc_body there;
- *    the wrappers of vm_wait, vcpu_yield and stop, which on the way back look
- *    at the carrier's flags and leave the kernelet for good if the sandbox is
- *    dying; user_run and klet_leave, which take the mirror off Linux's
+ *    on the way back, every stub looks at the carrier's `doomed` mark (a fatal
+ *    signal the body found pending) and leaves the kernelet for good if it is
+ *    set, and the wrappers of vm_wait, vcpu_yield and stop also leave for
+ *    good if the sandbox is stopping or dying, or (stop) always; user_run and
+ *    klet_leave, which take the mirror off Linux's
  *    preemption count and switch to the Linux stack; klet_yield_body and
  *    klet_evict_leave, the same for the yield and exit stubs; klet_coro_main,
  *    which calls the kernelet's entry point on a vCPU's first coroutine and
@@ -142,6 +144,10 @@ struct klet_carrier *klet_carrier_new(struct klet_inst *inst, enum klet_kind kin
 {
 	struct klet_carrier *c;
 
+	/* A clone the root started just before it died: see below. */
+	if (kind != KLET_ROOT && READ_ONCE(inst->root_gone))
+		return NULL;
+
 	c = kzalloc(sizeof(*c), GFP_KERNEL);
 	if (!c)
 		return NULL;
@@ -183,12 +189,28 @@ struct klet_carrier *klet_carrier_new(struct klet_inst *inst, enum klet_kind kin
 		c->state = KLET_RUNNING;
 	}
 
+	/*
+	 * Counted under the lock, together with the test of root_gone that the
+	 * root's death notice sets under it: either this carrier is counted
+	 * first, and the root's death is then not the last and kills it, or the
+	 * root's death comes first, its notice ends the sandbox and frees what
+	 * the sandbox held, and this carrier never starts. Without the test, a
+	 * clone the root made just before it died would enter the kernelet after
+	 * the sandbox's heap and stacks were gone.
+	 */
 	c->task = get_task_struct(current);
-
 	spin_lock(&inst->lock);
+	if (kind != KLET_ROOT && inst->root_gone) {
+		spin_unlock(&inst->lock);
+		put_task_struct(c->task);
+		free_page((unsigned long)c->fpu_stage);
+		klet_kstack_put(inst, (u64)(unsigned long)c->stack);
+		kfree(c);
+		return NULL;
+	}
 	list_add_tail(&c->link, &inst->carriers);
-	spin_unlock(&inst->lock);
 	atomic_inc(&inst->nr_carriers);
+	spin_unlock(&inst->lock);
 	atomic_inc(&inst->carriers_made);
 
 	return c;
@@ -258,6 +280,28 @@ static void klet_detach(struct klet_carrier *c)
 	}
 }
 
+/*
+ * The sandbox's last carrier is gone: everything the sandbox held goes back to
+ * Linux now, not when the module is unloaded. Its address spaces; whatever the
+ * kernelet still held on its heap, which is all of it for a kernelet that was
+ * stopped or evicted in mid-flight; and the whole kernelet-stack pool, the
+ * stacks of the tasks it never ended included. No kernelet code can be
+ * running, since every carrier that could run it has died, and nothing of the
+ * endovisor's still points into any of it. The module's own records (the
+ * grant, the space records, the counters) stay until unload.
+ */
+static void klet_sandbox_gone(struct klet_inst *inst)
+{
+	unsigned long blocks, bytes;
+	unsigned int stacks, busy;
+
+	klet_spaces_destroy(inst);
+	blocks = klet_heap_destroy(inst, &bytes);
+	stacks = klet_kstack_pool_destroy(inst, &busy);
+	pr_info("kernelet: the sandbox is gone: %lu heap block(s) the kernelet still held freed (%lu bytes), %u kernelet stack(s) returned to vmalloc (%u still in use)\n",
+		blocks, bytes, stacks, busy);
+}
+
 /* The lifeline was closed: this is the death notice. */
 void klet_carrier_lifeline_closed(struct klet_carrier *c)
 {
@@ -271,6 +315,8 @@ void klet_carrier_lifeline_closed(struct klet_carrier *c)
 	list_del_init(&c->link);
 	if (c->vcpu >= 0 && c->vcpu < KLET_MAX_VCPUS && inst->vcpus[c->vcpu] == c)
 		inst->vcpus[c->vcpu] = NULL;
+	if (was_root)
+		inst->root_gone = true;	/* before the count drops: klet_carrier_new */
 	spin_unlock(&inst->lock);
 
 	last = atomic_dec_and_test(&inst->nr_carriers);
@@ -323,7 +369,7 @@ void klet_carrier_lifeline_closed(struct klet_carrier *c)
 	}
 
 	if (last)
-		klet_spaces_destroy(inst);
+		klet_sandbox_gone(inst);
 
 	/*
 	 * The carrier's own reference, and with it, once the lifeline file has
@@ -381,7 +427,9 @@ static void klet_carrier_die(struct klet_carrier *c)
 
 /*
  * Every kernelet stack is KLET_STACK_SIZE and comes from a per-sandbox pool that
- * is not given back to vmalloc until the sandbox is destroyed.
+ * is not given back to vmalloc until the sandbox is destroyed, and then whole:
+ * when its last carrier is gone (klet_sandbox_gone), the stacks the kernelet
+ * still had in use with the rest.
  *
  * The reason is the host's, not the kernelet's: a kernel that forks and exits
  * churns task stacks, and every vfree() of a vmalloc area eventually costs the
@@ -418,6 +466,7 @@ u64 klet_kstack_alloc(struct klet_inst *inst)
 		return 0;
 	}
 	inst->kstack_made++;
+	inst->kstack_total++;
 	spin_unlock(&inst->lock);
 
 	/*
@@ -431,6 +480,7 @@ u64 klet_kstack_alloc(struct klet_inst *inst)
 		vfree(base);
 		spin_lock(&inst->lock);
 		inst->kstack_made--;
+		inst->kstack_total--;
 		spin_unlock(&inst->lock);
 		return 0;
 	}
@@ -460,20 +510,37 @@ void klet_kstack_put(struct klet_inst *inst, u64 base)
 	pr_warn("kernelet: kstack_free of %#llx, which is not ours\n", base);
 }
 
-void klet_kstack_pool_destroy(struct klet_inst *inst)
+/*
+ * Gives the whole pool back to vmalloc, busy stacks too: called once no
+ * carrier is left, when nothing can be running on any of them. Returns how
+ * many stacks it freed, and in *busy how many of those the kernelet had not
+ * given back. The pool is left empty and usable.
+ */
+unsigned int klet_kstack_pool_destroy(struct klet_inst *inst, unsigned int *busy)
 {
 	struct klet_kstack *k, *tmp;
+	unsigned int n = 0, in_use = 0;
 	LIST_HEAD(dead);
 
 	spin_lock(&inst->lock);
 	list_splice_init(&inst->kstack_all, &dead);
+	inst->kstack_made = 0;
 	spin_unlock(&inst->lock);
 
 	list_for_each_entry_safe(k, tmp, &dead, link) {
 		list_del(&k->link);
+		if (k->busy)
+			in_use++;
 		vfree(k->base);
 		kfree(k);
+		n++;
 	}
+	spin_lock(&inst->lock);
+	inst->kstack_returned += n;
+	spin_unlock(&inst->lock);
+	if (busy)
+		*busy = in_use;
+	return n;
 }
 
 /* ------------------------------------------------------------------ */
@@ -805,7 +872,7 @@ static bool klet_drain_signals(struct klet_carrier *c)
 	kernel_siginfo_t info;
 	enum pid_type type;
 	sigset_t mask;
-	bool exception = false;
+	bool exception = false, reignored;
 	int signr;
 
 	if (!signal_pending(current))
@@ -820,17 +887,34 @@ static bool klet_drain_signals(struct klet_carrier *c)
 	while ((signr = dequeue_signal(&mask, &info, &type)) != 0) {
 		spin_unlock_irq(&current->sighand->siglock);
 
+		/*
+		 * Every signal a carrier can be sent is ignored (klet_load_binary),
+		 * so what is queued is a signal Linux forced on it, which set its
+		 * disposition back to SIG_DFL on the way: a fault, or seccomp's
+		 * SIGSYS. Ignore it again, so that the next one is forced, and so
+		 * drained, too, and the same signal sent by a process in the
+		 * meantime is discarded rather than left for Linux to deliver.
+		 */
+		reignored = false;
+		if (!sig_kernel_only(signr) &&
+		    current->sighand->action[signr - 1].sa.sa_handler != SIG_IGN) {
+			kernel_sigaction(signr, SIG_IGN);
+			reignored = true;
+		}
+
 		if (klet_is_fault_signal(signr, info.si_code) && !exception) {
 			c->exc_trap = current->thread.trap_nr;
 			c->exc_error = current->thread.error_code;
 			c->exc_addr = (unsigned long)info.si_addr;
 			c->exc_pending = true;
 			exception = true;
-			pr_info("kernelet: signal %d (si_code %d) from pid %d is trap %llu -> exception\n",
-				signr, info.si_code, current->pid, c->exc_trap);
+			pr_info("kernelet: signal %d (si_code %d) from pid %d is trap %llu -> exception%s\n",
+				signr, info.si_code, current->pid, c->exc_trap,
+				reignored ? "; ignored again" : "");
 		} else {
-			pr_info("kernelet: signal %d (si_code %d) to pid %d dropped\n",
-				signr, info.si_code, current->pid);
+			pr_info("kernelet: signal %d (si_code %d) to pid %d dropped%s\n",
+				signr, info.si_code, current->pid,
+				reignored ? "; ignored again" : "");
 		}
 
 		spin_lock_irq(&current->sighand->siglock);
@@ -932,11 +1016,31 @@ static int klet_carrier_main(void *arg)
 	/*
 	 * Drop the copy of the root carrier's lifeline that came with the fresh
 	 * descriptor table, so that the root's death notice is the root's alone.
+	 *
+	 * If the root died between the kernel_clone() that made this task and
+	 * this close, this copy is the file's last reference, and a plain
+	 * close_fd() would defer the release, and with it the root's death
+	 * notice, to task work, which runs only when this task first returns to
+	 * user mode: after this vCPU had booted the kernelet, perhaps never. So
+	 * the reference is taken over first and dropped synchronously, and the
+	 * root's death, if it was the last reference, is noticed here, before
+	 * this carrier exists, which klet_carrier_new() then refuses.
 	 */
-	if (inst->root_lifeline_fd >= 0)
+	if (inst->root_lifeline_fd >= 0) {
+		struct file *f = fget(inst->root_lifeline_fd);
+
 		close_fd(inst->root_lifeline_fd);
+		if (f)
+			__fput_sync(f);
+	}
 
 	c = klet_carrier_new(inst, KLET_VCPU, vcpu);
+	if (!c && READ_ONCE(inst->root_gone)) {
+		pr_info("kernelet: vcpu %d carrier (pid %d) not started: the root carrier is gone\n",
+			vcpu, current->pid);
+		force_sig(SIGKILL);
+		return 0;
+	}
 	if (!c) {
 		pr_err("kernelet: no memory for the carrier of vcpu %d\n", vcpu);
 		klet_stop_instance(inst, 1);
@@ -1267,34 +1371,189 @@ static void klet_do_log_write(struct klet_inst *inst, const char *ptr, u64 len)
 }
 
 /*
- * kmalloc only promises natural alignment for power-of-two sizes, so the block
- * is over-allocated and the base pointer parked just below the aligned address.
+ * The kernelet's heap is kmalloc, and it is the sandbox's: every block is
+ * recorded in inst->heap from mem_alloc to mem_free, so that whatever the
+ * kernelet still holds when the sandbox ends (its tasks, its address spaces,
+ * its run queues, everything a Box, Vec or Arc kept alive at the stop or the
+ * eviction) is freed then, and uncharged from the sandbox's memory cgroup,
+ * rather than leaked for good.
+ *
+ * The record is the endovisor's, outside the blocks: a table of the blocks
+ * kmalloc returned, indexed by a small number, with a stack of the numbers
+ * not in use, so that recording a block and forgetting it are each a few
+ * instructions under a spin lock. A block's number is written in the eight
+ * bytes below the address the kernelet is given, and mem_free trusts it no
+ * further than as a guess: it frees only if the table holds a block under that
+ * number and that block's address for the kernelet, computed again, is the
+ * pointer being freed. A pointer mem_alloc did not hand out, or one whose
+ * number the kernelet overwrote, is refused instead of passed to kfree, and
+ * the endovisor never writes through anything it read from a block.
+ *
+ * The table doubles when it is full, allocated outside the lock; it never
+ * shrinks while the sandbox lives.
  */
-static void *klet_do_mem_alloc(u64 size, u64 align)
+#define KLET_HEAP_FIRST 256
+
+void klet_heap_init(struct klet_inst *inst)
 {
-	void *base;
-	unsigned long aligned;
+	spin_lock_init(&inst->heap.lock);
+}
 
-	if (align < sizeof(void *))
-		align = sizeof(void *);
-	if (size == 0)
-		size = 1;
+/*
+ * Where in a block the kernelet's address is: past the block's number, and
+ * aligned. kmalloc aligns every block to 8 at least, so that is at most
+ * `align` bytes in, and a block of size + align bytes always has room.
+ */
+static void *klet_heap_ptr(void *base, u64 align)
+{
+	return PTR_ALIGN((char *)base + sizeof(u64), align);
+}
 
-	/* Charged to the memory cgroup of the calling carrier, the sandbox's. */
-	base = kmalloc(size + align + sizeof(void *), GFP_KERNEL_ACCOUNT);
+static u64 klet_heap_align(u64 align)
+{
+	return align < sizeof(u64) ? sizeof(u64) : align;
+}
+
+/* Called with the heap's lock held, and returns with it held. */
+static int klet_heap_grow(struct klet_heap *h)
+{
+	while (!h->nr_free) {
+		u32 old = h->size, size = old ? old * 2 : KLET_HEAP_FIRST, n;
+		void **block, **old_block;
+		u32 *free, *old_free;
+
+		spin_unlock(&h->lock);
+		block = kvcalloc(size, sizeof(*block), GFP_KERNEL_ACCOUNT);
+		free = kvmalloc_array(size, sizeof(*free), GFP_KERNEL_ACCOUNT);
+		spin_lock(&h->lock);
+		if (!block || !free || h->size != old) {
+			/* No memory, or another carrier grew it meanwhile. */
+			spin_unlock(&h->lock);
+			kvfree(block);
+			kvfree(free);
+			spin_lock(&h->lock);
+			if (h->size == old)
+				return -ENOMEM;
+			continue;
+		}
+		if (old)
+			memcpy(block, h->block, old * sizeof(*block));
+		/* The new numbers, lowest on top. */
+		for (n = size; n > old; n--)
+			free[h->nr_free++] = n - 1;
+		old_block = h->block;
+		old_free = h->free;
+		h->block = block;
+		h->free = free;
+		h->size = size;
+		spin_unlock(&h->lock);
+		kvfree(old_block);
+		kvfree(old_free);
+		spin_lock(&h->lock);
+	}
+	return 0;
+}
+
+static void *klet_do_mem_alloc(struct klet_inst *inst, u64 size, u64 align)
+{
+	struct klet_heap *h = &inst->heap;
+	void *base, *ptr;
+	u32 n;
+
+	align = klet_heap_align(align);
+	if (!is_power_of_2(align) || size > KMALLOC_MAX_SIZE)
+		return NULL;
+
+	/*
+	 * Charged to the memory cgroup of the calling carrier, the sandbox's,
+	 * and so is the table.
+	 */
+	base = kmalloc(size + align, GFP_KERNEL_ACCOUNT);
 	if (!base)
 		return NULL;
 
-	aligned = ALIGN((unsigned long)base + sizeof(void *), align);
-	((void **)aligned)[-1] = base;
-	return (void *)aligned;
+	spin_lock(&h->lock);
+	if (unlikely(!h->nr_free) && klet_heap_grow(h)) {
+		spin_unlock(&h->lock);
+		kfree(base);
+		return NULL;
+	}
+	n = h->free[--h->nr_free];
+	h->block[n] = base;
+	spin_unlock(&h->lock);
+
+	ptr = klet_heap_ptr(base, align);
+	((u64 *)ptr)[-1] = n;
+	atomic64_inc(&inst->heap_allocs);
+	return ptr;
 }
 
-static void klet_do_mem_free(void *ptr)
+static void klet_do_mem_free(struct klet_inst *inst, void *ptr, u64 align)
 {
+	struct klet_heap *h = &inst->heap;
+	void *base = NULL;
+	u64 n;
+
 	if (!ptr)
 		return;
-	kfree(((void **)ptr)[-1]);
+	n = ((u64 *)ptr)[-1];
+
+	spin_lock(&h->lock);
+	if (n < h->size && h->block[n] &&
+	    klet_heap_ptr(h->block[n], klet_heap_align(align)) == ptr) {
+		base = h->block[n];
+		h->block[n] = NULL;
+		h->free[h->nr_free++] = n;
+	}
+	spin_unlock(&h->lock);
+
+	if (!base) {
+		atomic64_inc(&inst->heap_bad_frees);
+		pr_warn_ratelimited("kernelet: mem_free of %px, which mem_alloc did not hand out\n",
+				    ptr);
+		return;
+	}
+	kfree(base);
+	atomic64_inc(&inst->heap_frees);
+}
+
+/*
+ * Frees every block the kernelet did not, when the sandbox ends: no carrier is
+ * left, so no kernelet code can run, and nothing the endovisor still holds
+ * points into the heap (a carrier's register context, the one pointer it
+ * keeps there between calls, went with the carrier). Returns how many blocks
+ * it freed, and their size in *bytes. The heap is left empty and usable.
+ */
+unsigned long klet_heap_destroy(struct klet_inst *inst, unsigned long *bytes)
+{
+	struct klet_heap *h = &inst->heap;
+	unsigned long count = 0, sum = 0;
+	void **block;
+	u32 *free, size, n;
+
+	spin_lock(&h->lock);
+	block = h->block;
+	free = h->free;
+	size = h->size;
+	h->block = NULL;
+	h->free = NULL;
+	h->size = 0;
+	h->nr_free = 0;
+	spin_unlock(&h->lock);
+
+	for (n = 0; n < size; n++) {
+		if (!block[n])
+			continue;
+		sum += ksize(block[n]);
+		kfree(block[n]);
+		count++;
+	}
+	kvfree(block);
+	kvfree(free);
+	atomic64_add(count, &inst->heap_reaped);
+	if (bytes)
+		*bytes = sum;
+	return count;
 }
 
 static void klet_do_vcpu_boot(struct klet_inst *inst, u64 id)
@@ -1662,10 +1921,10 @@ void klet_svc_body(struct klet_svc_args *args)
 		klet_do_log_write(c->inst, (const char *)args->a0, args->a1);
 		break;
 	case KLET_SVC_MEM_ALLOC:
-		args->ret = (u64)klet_do_mem_alloc(args->a0, args->a1);
+		args->ret = (u64)klet_do_mem_alloc(c->inst, args->a0, args->a1);
 		break;
 	case KLET_SVC_MEM_FREE:
-		klet_do_mem_free((void *)args->a0);
+		klet_do_mem_free(c->inst, (void *)args->a0, args->a2);
 		break;
 	case KLET_SVC_KSTACK_ALLOC:
 		args->ret = klet_kstack_alloc(c->inst);

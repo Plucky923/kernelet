@@ -498,10 +498,30 @@ struct klet_inst {
 
 	/* the kernelet-stack pool: every stack ever made, busy or free */
 	struct list_head kstack_all;
-	unsigned int kstack_made;
+	unsigned int kstack_made;	/* the pool's size, against its bound */
+	unsigned int kstack_total;	/* stacks made over the module's life */
+	unsigned int kstack_returned;	/* ... and given back to vmalloc */
+
+	/*
+	 * The kernelet's heap: every block mem_alloc handed out that mem_free
+	 * has not taken back, by number (carrier.c, klet_do_mem_alloc). What is
+	 * left in it when the sandbox ends is freed then.
+	 */
+	struct klet_heap {
+		spinlock_t lock;
+		void **block;	/* block[n]: the block numbered n, or NULL */
+		u32 *free;	/* the numbers not in use, a stack */
+		u32 nr_free;
+		u32 size;	/* entries in block[] and free[] */
+	} heap;
+	atomic64_t heap_allocs;		/* blocks handed out */
+	atomic64_t heap_frees;		/* ... freed by the kernelet */
+	atomic64_t heap_reaped;		/* ... freed when the sandbox ended */
+	atomic64_t heap_bad_frees;	/* mem_free of an address that is not a block */
 
 	bool stopped;	/* the kernelet asked to power off */
 	bool dying;	/* the sandbox is being destroyed from outside */
+	bool root_gone;	/* the root carrier's lifeline is closed: no carrier may start */
 	u64 exit_code;
 
 	int root_lifeline_fd;
@@ -723,7 +743,11 @@ void klet_watch_fire_now(void);
 /* kstack.c, in carrier.c */
 u64 klet_kstack_alloc(struct klet_inst *inst);
 void klet_kstack_put(struct klet_inst *inst, u64 base);
-void klet_kstack_pool_destroy(struct klet_inst *inst);
+unsigned int klet_kstack_pool_destroy(struct klet_inst *inst, unsigned int *busy);
+
+/* the heap, in carrier.c */
+void klet_heap_init(struct klet_inst *inst);
+unsigned long klet_heap_destroy(struct klet_inst *inst, unsigned long *bytes);
 
 /* sched.c */
 int klet_sched_init(void);
