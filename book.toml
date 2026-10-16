@@ -1,0 +1,28 @@
+[book]
+language = "en"
+src = "src"
+title = "Introduction to Kernelets in Linux"
+description = "A tutorial on running a kernel of your own inside Linux, with a working prototype"
+
+[build]
+create-missing = false
+# Index pages are README.md so that GitHub shows them when a directory is opened. mdBook's
+# default `index` preprocessor renders a README.md chapter as index.html but keeps rewriting
+# links to it as README.html; with it off, the page and every link to it are README.html.
+use-default-preprocessors = false
+
+[output.html]
+additional-css = ["assets/book.css"]
+additional-js = ["assets/mermaid.min.js", "assets/mermaid-init.js"]
+
+[output.html.playground]
+editable = false
+copyable = true
+copy-js = true
+line-numbers = false
+runnable = false
+
+[preprocessor.links]
+
+[preprocessor.mermaid]
+command = "mdbook-mermaid"

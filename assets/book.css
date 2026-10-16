@@ -1,0 +1,18 @@
+/* Small additions to mdBook's default theme: figure and code captions. */
+.content figure { margin: 1.2em 0; }
+.content figure.diagram { text-align: center; }
+.content figure.diagram svg { max-width: 100%; height: auto; }
+.content figcaption { font-size: 0.9em; color: var(--fg); opacity: 0.8; margin-top: 0.4em; text-align: center; }
+/* The caption that precedes every code excerpt: "Simplified from prototype/…". */
+.content p.src, .content p:has(> em.src) { margin-bottom: 0.2em; }
+.content p > em:first-child:has(> code:first-child) { opacity: 0.85; }
+.content table { margin: 1em auto; }
+.content .recap { border-left: 4px solid var(--links); padding: 0.4em 1em; margin: 1.2em 0; background: var(--quote-bg); }
+.content .recap p:first-child { margin-top: 0; }
+.content .recap p:last-child { margin-bottom: 0; }
+.content .linux { border-left: 4px solid #d99; padding: 0.4em 1em; margin: 1.2em 0; background: var(--quote-bg); }
+.content .linux p:first-child { margin-top: 0; }
+.content .linux p:last-child { margin-bottom: 0; }
+.content .rust { border-left: 4px solid #d9a066; padding: 0.4em 1em; margin: 1.2em 0; background: var(--quote-bg); }
+.content .rust p:first-child { margin-top: 0; }
+.content .rust p:last-child { margin-bottom: 0; }
