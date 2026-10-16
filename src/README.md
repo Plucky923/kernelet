@@ -32,7 +32,7 @@ The code is in the `prototype/` directory of this repository. Every code excerpt
 
 "Simplified" means that logging, counters, error paths and comments have been cut so that the mechanism fits on the page. The file holds the real thing, with its comments, and is worth opening beside the book.
 
-To build and run the prototype you need a Linux machine with a Rust nightly toolchain, `gcc`, `make`, `cpio`, `curl`, and QEMU with hardware virtualization. From the `prototype/` directory, `make hello` downloads Linux 6.12, patches and builds it, builds the kernelet and the module, boots the result in QEMU, and checks the serial log. The first run takes about ten minutes and about 4 GB of disk; later runs take a minute or two. `make test` runs every test the book mentions, and `make bench` the measurements of the last chapter. `prototype/README.md` has the details.
+To build and run the prototype you need a Linux machine with a Rust nightly toolchain, `gcc`, `make`, `cpio`, `curl`, and QEMU with hardware virtualization. From the `prototype/` directory, `make hello` downloads Linux 6.12, patches and builds it, builds the kernelet and the module, boots the result in QEMU, and checks the serial log. The first run takes a few minutes and about 2.5 GB of disk; later runs take under a minute. `make test` runs every test the book mentions, about three minutes, and `make bench` the measurements of the last chapter. `prototype/README.md` has the details.
 
 ## The chapters
 

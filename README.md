@@ -23,4 +23,4 @@ make test           # build everything, boot it in QEMU, run the tests the book 
 make bench          # the measurements of the last chapter
 ```
 
-Both delegate to `prototype/Makefile`, which has the details and the individual targets. The first build downloads Linux 6.12 (about 140 MB) and builds it (about ten minutes on eight cores); it needs about 4 GB of disk under `prototype/.build/`, a Rust nightly toolchain (`prototype/rust-toolchain.toml` names it), `gcc`, `make`, `cpio`, `curl`, `python3` and QEMU with KVM.
+Both delegate to `prototype/Makefile`, which has the details and the individual targets. The first `make test` downloads Linux 6.12 (about 140 MB), builds it, and runs the tests, about five minutes on eight cores; later runs take about three minutes. It needs about 2.5 GB of disk under `prototype/.build/`, a Rust nightly toolchain (`prototype/rust-toolchain.toml` names it; `rustup` installs it), `gcc`, `make`, `flex`, `bison`, `bc`, `libelf` headers, `cpio`, `xz`, `curl`, `python3` and QEMU with KVM. `prototype/README.md` has the full list.

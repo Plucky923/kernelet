@@ -237,30 +237,37 @@ Page faults on tenant memory take a shorter path through the endovisor's own fau
 
 ## Hello, world
 
-With chapters 3 to 7 built, `make hello` boots Linux in QEMU, loads the module, runs the runtime, and this appears in the serial log (one line of Linux's own about an out-of-tree module is left out):
+With chapters 3 to 7 built, `make hello` boots Linux in QEMU, loads the module, runs the runtime, and this appears in the serial log (one line of Linux's own about an out-of-tree module, and three lines of statistics at unload, are left out):
 
 ```
 INIT: loading kernelet.ko
-kernelet: endovisor loaded: grant 4096 KiB at 0x800000, linear map 0xffff8ea580000000, ...
+kernelet: kernelet image text [0xffffffffc030b1ce, 0xffffffffc0318665), 54423 bytes; virq_entry at +0x1eef
+kernelet: endovisor loaded: grant 4096 KiB at 0xc00000, linear map 0xffff99d5c0000000, watch on, mirror on, fpu area 1088 B, tsc 3791992 kHz
 INIT: running /tests/10-hello
 RUN-HELLO: creating a sandbox from /hello.klet
-kernelet: root carrier exec (pid 32), address space emptied, 1 virtual CPU(s)
-kernelet: vcpu 0 carrier starting (pid 33)
-kernelet: vOSTD up: grant 0x800000..0xc00000, 1 vCPU(s), ...
-kernelet: space 1 created: root 0x1234000, area [0x10000, 0x7ffffffff000), ...
+kernelet: host offsets: gs:current 0x1fac0, gs:preempt_count 0x1fac8, task->kernelet +1968, gate->vrec +8
+kernelet: root carrier exec (pid 34), address space emptied, 1 virtual CPU(s), cmdline ""
+kernelet: vcpu 0 carrier starting (pid 35)
+kernelet: service stub: 41 cycles through the stack switch, 25 for the service body alone (n=2000, rdtsc, interrupts off)
+kernelet: vOSTD up: grant 0xc00000..0x1000000, linear map 0xffff99d5c0000000, 1 vCPU(s), tsc 3791992 kHz, fpu area 1088 B
+kernelet: space 1 created: root 0x8c6000, area [0x10000, 0x7ffffffff000), its own inode, mm owner a task
 kernelet: Hello, world
 kernelet:
 kernelet: stopped, exit code 0
-kernelet: vcpu 0 carrier (pid 33) dying
-kernelet: root carrier (pid 32) dying
-kernelet: vcpu 0 carrier (pid 33) lifeline closed
-kernelet: root carrier (pid 32) lifeline closed, the last one
+kernelet: vcpu 0 carrier (pid 35) dying
+kernelet: root carrier (pid 34) dying
+kernelet: vcpu 0 carrier (pid 35) lifeline closed
+kernelet: root carrier (pid 34) lifeline closed, the last one
+RUN-HELLO: root carrier (pid 34) killed by signal 9
 RUN-HELLO: no carrier left (module references: 0)
+RUN-HELLO: done
+INIT: /tests/10-hello exited 0
 INIT: unloading kernelet
+kernelet: endovisor unloaded
 INIT: done
 ```
 
-Line by line: the root carrier is made by the handler (chapter 5); it clones the carrier of virtual CPU 0, which enters the image (chapter 3); the kernel proper creates its address space (chapter 12); the program's `write` arrives by the syscall hook and the kernel proper prints the message through `log_write`; its `exit` becomes the `stop` service (chapter 11); both carriers die and their lifelines close; the module's reference count reaches zero and it unloads. The build checks that the log contains the greeting, the exit code, a clean unload, and no Linux error report.
+Line by line: the endovisor publishes the offsets by which vOSTD will find its way around Linux (chapter 8); the root carrier is made by the handler (chapter 5); it clones the carrier of virtual CPU 0, which enters the image (chapter 3) and, before anything else, times a service call that does nothing (chapter 14); the kernel proper creates its address space (chapter 12); the program's `write` arrives by the syscall hook and the kernel proper prints the message through `log_write`, followed by the message's own newline as an empty line; its `exit` becomes the `stop` service (chapter 11); both carriers die and their lifelines close; the module's reference count reaches zero and it unloads. The build checks that the log contains the greeting, the exit code, a clean unload, and no Linux error report.
 
 <div class="recap">
 
