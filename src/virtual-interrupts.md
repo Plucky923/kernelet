@@ -224,7 +224,7 @@ static void klet_kick_ipi(void *arg)            /* runs in interrupt context on 
 }
 ```
 
-A kick whose bit is already set does nothing at all, so a thousand kicks cost one delivery.
+A requested firing is not a tick: the callback raises no TICK for it, takes no strike (chapter 10), and puts the timer back on the expiry of the period it cut short, so a kick neither advances the kernelet's clock nor delays its next tick. A kick whose bit is already set does nothing at all, so a thousand kicks cost one delivery.
 
 <div class="recap">
 

@@ -290,6 +290,13 @@ extern char __klet_image_text_end[];
  */
 #define KLET_STACK_SIZE (256 * 1024)
 
+/*
+ * The bound on the pool: at most this many kernelet stacks per sandbox (128
+ * MiB of them). Every one is charged to the sandbox's memory cgroup, and the
+ * bound keeps a kernel proper that spawns tasks without end from taking more.
+ */
+#define KLET_MAX_KSTACKS 512
+
 /* The lowest address of a space's area: the tree's VMAR_LOWEST_ADDR, 64 KiB. */
 #define KLET_WINDOW_START 0x10000UL
 
@@ -434,6 +441,14 @@ struct klet_carrier {
 	struct list_head link;
 };
 
+/* What the log says about the first few forced yields of a sandbox. */
+#define KLET_FORCED_RECORDS 3
+struct klet_forced_rec {
+	int vcpu, pid, cpu;
+	unsigned long ip;
+	u32 guards, irq_off;
+};
+
 struct klet_inst {
 	/* the grant */
 	struct page *grant_pages;
@@ -481,10 +496,18 @@ struct klet_inst {
 	atomic_t sweeps;
 	atomic_t evictions;
 	atomic_t ticks;
+	atomic_t watch_fires;		/* requested firings of the watch timer (kicks) */
+	atomic_t kick_ipis;		/* kick IPIs that found their carrier running */
+	atomic_t fires_redirected;	/* requested firings that delivered an upcall */
+	atomic_t fires_elsewhere;	/* ... that found user mode, a service or Linux code */
+	atomic_t fires_masked;		/* ... that found a critical section */
 	atomic_t virqs;			/* upcalls delivered by redirect */
 	atomic_t deferrals;		/* ticks that found the vCPU masked */
-	atomic_t longest_defer_us;	/* the longest such run, in tick units */
+	atomic_t longest_defer_us;	/* the longest such run, in microseconds */
+	atomic_t longest_tick_gap_us;	/* the longest gap between two ticks of a running watch timer */
 	atomic_t forced_yields;
+	atomic_t forced_recorded;
+	struct klet_forced_rec forced_rec[KLET_FORCED_RECORDS];
 	atomic_t yields;		/* voluntary vcpu_yield service calls */
 	atomic_t bad_preempt;		/* involuntary switch-out while masked */
 	atomic_t on_spins;
@@ -599,8 +622,14 @@ enum klet_svc_op {
 	KLET_SVC_VM_WAKE,
 };
 
-/* How many empty services the one-off measurement of the stub times. */
+/*
+ * The one-off measurement of the stub: KLET_MEASURE_ROUNDS rounds of
+ * KLET_MEASURE_N empty services each, and the least round counts, because the
+ * machine beneath the guest can take the processor away in the middle of a
+ * round, interrupts off or not.
+ */
 #define KLET_MEASURE_N 2000
+#define KLET_MEASURE_ROUNDS 7
 
 struct klet_svc_args {
 	u64 op;
@@ -666,6 +695,7 @@ int klet_watch_init(void);
 void klet_watch_exit(void);
 void klet_watch_arm(struct klet_carrier *c);
 bool klet_virq_redirect(struct klet_carrier *c, struct pt_regs *regs);
+void klet_watch_fire_now(void);
 
 /* kstack.c, in carrier.c */
 u64 klet_kstack_alloc(struct klet_inst *inst);

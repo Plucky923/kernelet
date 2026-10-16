@@ -18,8 +18,9 @@
  *
  * 3. **The reschedule IPI.** A kick to a vCPU whose carrier is running right now
  *    on another processor does not want to wait for that processor's next watch
- *    tick, so it is an inter-processor interrupt whose handler redirects the
- *    interrupted kernelet code into the upcall stub immediately.
+ *    tick, so it is an inter-processor interrupt whose handler makes that
+ *    processor's watch timer fire at once, and the timer's callback redirects
+ *    the interrupted kernelet code into the upcall stub.
  */
 
 #include <linux/kernel.h>
@@ -31,7 +32,6 @@
 #include <linux/jiffies.h>
 #include <linux/ktime.h>
 
-#include <asm/irq_regs.h>
 #include <asm/ptrace.h>
 
 #include "kernelet.h"
@@ -119,6 +119,14 @@ static void klet_sched_out(struct preempt_notifier *pn, struct task_struct *next
 static void klet_sched_out_common(struct preempt_notifier *pn)
 {
 	struct klet_carrier *c = container_of(pn, struct klet_carrier, pnotifier);
+
+	/*
+	 * Off the processor, the carrier has given it back, so a first strike
+	 * the watch timer took on it is over. Otherwise the two-tick bound would
+	 * be measured across the time it spent descheduled, and across whatever
+	 * critical section it is in when it comes back.
+	 */
+	c->strike1_ns = 0;
 
 	/* Only time spent off a processor *while running kernelet code* is stolen. */
 	if (klet_in_kernelet(c))
@@ -258,21 +266,23 @@ void klet_do_on_spin(struct klet_carrier *c)
 /* ------------------------------------------------------------------ */
 
 /*
- * Runs in hard interrupt context on the processor the target carrier is on. If it
- * interrupted that carrier's kernelet code with nothing masked, redirect straight
- * into the upcall stub; otherwise the pending bit the caller already set is picked
- * up by the next guard drop or watch tick.
+ * Runs in hard interrupt context on the processor the target carrier is on.
+ * The handler of this vector is not given the interrupted registers
+ * (get_irq_regs() is NULL here: smp_call_function_single()'s vector never
+ * calls set_irq_regs()), so it cannot redirect the interrupted kernelet code
+ * itself. It makes the processor's watch timer fire at once instead, and the
+ * timer's callback, which is given the registers, delivers the KICK the caller
+ * has already raised: into the upcall stub if the kernelet can take it, and
+ * otherwise at its next guard drop or unmask, as for any pending interrupt.
  */
 static void klet_kick_ipi(void *arg)
 {
 	struct klet_carrier *c = arg;
-	struct pt_regs *regs = get_irq_regs();
 
 	if (!current->kernelet || current->kernelet != &c->gate)
 		return;
-	if (!regs)
-		return;
-	klet_virq_redirect(c, regs);
+	atomic_inc(&c->inst->kick_ipis);
+	klet_watch_fire_now();
 }
 
 void klet_kick_remote(struct klet_carrier *c)

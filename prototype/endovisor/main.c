@@ -411,10 +411,17 @@ static int __init klet_init(void)
 	atomic_set(&inst->sweeps, 0);
 	atomic_set(&inst->evictions, 0);
 	atomic_set(&inst->ticks, 0);
+	atomic_set(&inst->watch_fires, 0);
+	atomic_set(&inst->kick_ipis, 0);
+	atomic_set(&inst->fires_redirected, 0);
+	atomic_set(&inst->fires_elsewhere, 0);
+	atomic_set(&inst->fires_masked, 0);
 	atomic_set(&inst->virqs, 0);
 	atomic_set(&inst->deferrals, 0);
 	atomic_set(&inst->longest_defer_us, 0);
+	atomic_set(&inst->longest_tick_gap_us, 0);
 	atomic_set(&inst->forced_yields, 0);
+	atomic_set(&inst->forced_recorded, 0);
 	atomic_set(&inst->yields, 0);
 	atomic_set(&inst->bad_preempt, 0);
 	atomic_set(&inst->on_spins, 0);
@@ -469,12 +476,29 @@ static void __exit klet_exit(void)
 	if (atomic_read(&inst->sweeps))
 		pr_info("kernelet: eviction: %d sweep(s), %d eviction(s)\n",
 			atomic_read(&inst->sweeps), atomic_read(&inst->evictions));
+	{
+		int i, n = min(atomic_read(&inst->forced_recorded), KLET_FORCED_RECORDS);
+
+		for (i = 0; i < n; i++) {
+			struct klet_forced_rec *r = &inst->forced_rec[i];
+
+			pr_info("kernelet: forced yield of vcpu %d (pid %d) on cpu %d at ip %#lx (%pS), guards %u, irq_off %u\n",
+				r->vcpu, r->pid, r->cpu, r->ip, (void *)r->ip,
+				r->guards, r->irq_off);
+		}
+	}
 	pr_info("kernelet: watch timer: %d tick(s), %d upcall(s), %d voluntary yield(s)\n",
 		atomic_read(&inst->ticks), atomic_read(&inst->virqs),
 		atomic_read(&inst->yields));
-	pr_info("kernelet: STATS deferrals=%d longest_defer_us=%d forced_yields=%d bad_preempt=%d on_spin=%d yield_to=%d mm_switch=%d fpu_swap=%d fpu_reject=%d mirror_fault=%d stolen_ms=%d kstacks=%u\n",
+	pr_info("kernelet: kicks: %d IPI(s), %d requested firing(s): %d delivered an upcall, %d found user mode or a service, %d a critical section\n",
+		atomic_read(&inst->kick_ipis), atomic_read(&inst->watch_fires),
+		atomic_read(&inst->fires_redirected),
+		atomic_read(&inst->fires_elsewhere),
+		atomic_read(&inst->fires_masked));
+	pr_info("kernelet: STATS deferrals=%d longest_defer_us=%d longest_tick_gap_us=%d forced_yields=%d bad_preempt=%d on_spin=%d yield_to=%d mm_switch=%d fpu_swap=%d fpu_reject=%d mirror_fault=%d stolen_ms=%d kstacks=%u\n",
 		atomic_read(&inst->deferrals),
 		atomic_read(&inst->longest_defer_us),
+		atomic_read(&inst->longest_tick_gap_us),
 		atomic_read(&inst->forced_yields),
 		atomic_read(&inst->bad_preempt),
 		atomic_read(&inst->on_spins),

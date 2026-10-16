@@ -111,7 +111,7 @@ static int klet_spawn_vcpu(struct klet_inst *inst, int vcpu)
 }
 ```
 
-`wait_event_interruptible` is Linux's ordinary way to sleep until a condition holds: the task is woken whenever someone signals the wait queue it names, and checks the condition again. Each clone is a separate process, not a thread: no `CLONE_VM`, no `CLONE_FILES`, no `CLONE_THREAD`. It gets a *copy* of the root's empty address space, a copy of its descriptor table, and, because Linux copies the task structure, the root's gate pointer, syscall-work bit, control group, credentials and seccomp filter. The endovisor sets none of those up per carrier; `fork` does.
+`wait_event_interruptible` is Linux's ordinary way to sleep until a condition holds: the task is woken whenever someone signals the wait queue it names, and checks the condition again; the *killable* variant the clones use wakes for a fatal signal only, so that a `SIGSTOP` left pending for the carrier (chapter 7) does not end the wait. Each clone is a separate process, not a thread: no `CLONE_VM`, no `CLONE_FILES`, no `CLONE_THREAD`. It gets a *copy* of the root's empty address space, a copy of its descriptor table, and, because Linux copies the task structure, the root's gate pointer, syscall-work bit, control group, credentials and seccomp filter. The endovisor sets none of those up per carrier; `fork` does.
 
 ```mermaid
 flowchart TB
@@ -140,7 +140,7 @@ static int klet_carrier_main(void *arg)
 	inst->vcpus[vcpu] = c;
 
 	if (vcpu != 0)                              /* virtual CPU 0 boots; the others wait to be started */
-		wait_event_interruptible(c->idle_wq, c->boot_requested || inst->dying);
+		wait_event_killable(c->idle_wq, c->boot_requested || inst->dying);   /* only SIGKILL cuts the wait short */
 
 	klet_enter(c, KLET_RUN_EVENT);              /* switch to a kernelet stack and run kernelet code */
 

@@ -37,12 +37,24 @@
  *      it pending. vOSTD delivers it itself when it unmasks.
  *
  * 3. **The bound (two strikes).** If the tick found the carrier in kernelet text in
- *    a critical section *and* Linux wanting the processor, note when. At the first
- *    tick at least a millisecond later, preempt it anyway: redirect into the yield
+ *    a critical section *and* Linux wanting the processor, note when (the note is
+ *    dropped when the carrier leaves the processor, sched.c). At the first tick
+ *    at least a millisecond later, preempt it anyway: redirect into the yield
  *    stub with `forced` set, which reschedules on the carrier's Linux stack with
  *    the mirrored count taken off, and comes back to the interrupted instruction.
  *    The grace is at most two ticks, and the borrowed time is charged to the
  *    sandbox's control group by Linux like any other.
+ *
+ * The timer also fires on request. A kick of a vCPU whose carrier is running
+ * kernelet code on another processor is an inter-processor interrupt, and the
+ * handler of the vector smp_call_function_single() uses is not given the
+ * interrupted registers (it never calls set_irq_regs()), so it cannot redirect
+ * anything itself. What it can do is make this timer expire at once:
+ * klet_watch_fire_now(). The callback, which does see the registers, then
+ * performs step 2 for the KICK the kicker has already raised. Such a firing is
+ * not a tick: it raises no TICK, takes no strike, counts no deferral, and puts
+ * the timer back on the expiry of the period it interrupted, so a kick neither
+ * advances the kernelet's clock nor delays its next tick.
  */
 
 #include <linux/hrtimer.h>
@@ -69,6 +81,21 @@ MODULE_PARM_DESC(klet_watch,
 
 static DEFINE_PER_CPU(struct hrtimer, klet_watch_timer);
 static bool klet_watch_ready;
+
+/*
+ * Set by klet_watch_fire_now() and cleared by the callback: the next firing on
+ * this processor was requested, and `klet_watch_period_end` is the expiry of
+ * the period that the request cut short.
+ */
+static DEFINE_PER_CPU(bool, klet_watch_requested);
+static DEFINE_PER_CPU(ktime_t, klet_watch_period_end);
+
+/*
+ * When this processor's timer last ticked while it kept running, 0 when it was
+ * (re)started: the longest gap between two ticks of a running timer is how late
+ * Linux, or the machine beneath it, delivered one.
+ */
+static DEFINE_PER_CPU(u64, klet_watch_last_tick);
 
 /*
  * Points the interrupted instruction pointer at the image's virtual-interrupt
@@ -113,23 +140,51 @@ static enum hrtimer_restart klet_watch_fn(struct hrtimer *timer)
 	struct klet_inst *inst = &klet_inst;
 	struct pt_regs *regs = get_irq_regs();
 	struct klet_carrier *c;
+	bool tick = true;
 	u64 now;
 
-	atomic_inc(&inst->ticks);
+	/*
+	 * A requested firing is a tick as well only if the period it cut short
+	 * has run out in the meantime.
+	 */
+	if (this_cpu_read(klet_watch_requested)) {
+		this_cpu_write(klet_watch_requested, false);
+		atomic_inc(&inst->watch_fires);
+		if (ktime_before(hrtimer_cb_get_time(timer),
+				 this_cpu_read(klet_watch_period_end)))
+			tick = false;
+	}
+	if (tick) {
+		u64 t = ktime_get_mono_fast_ns(), last = this_cpu_read(klet_watch_last_tick);
+
+		atomic_inc(&inst->ticks);
+		if (last && t > last) {
+			u32 gap_us = (u32)((t - last) / 1000);
+
+			if (gap_us > (u32)atomic_read(&inst->longest_tick_gap_us))
+				atomic_set(&inst->longest_tick_gap_us, gap_us);
+		}
+		this_cpu_write(klet_watch_last_tick, t);
+	}
 
 	/*
 	 * The timer lives exactly as long as this processor is running a carrier of
 	 * a live sandbox. Nothing else has to be tracked.
 	 */
-	if (!current->kernelet)
+	if (!current->kernelet) {
+		this_cpu_write(klet_watch_last_tick, 0);
 		return HRTIMER_NORESTART;
+	}
 	c = klet_current_carrier();
 	if (c->kind == KLET_ROOT || c->inst != inst || c->state == KLET_DEAD ||
-	    inst->dying || inst->stopped)
+	    inst->dying || inst->stopped) {
+		this_cpu_write(klet_watch_last_tick, 0);
 		return HRTIMER_NORESTART;
+	}
 
 	/* 1. The tick: this sandbox's timer interrupt. */
-	klet_virq_raise(c, KLET_VIRQ_TICK);
+	if (tick)
+		klet_virq_raise(c, KLET_VIRQ_TICK);
 
 	if (!regs)
 		goto again;
@@ -139,13 +194,18 @@ static enum hrtimer_restart klet_watch_fn(struct hrtimer *timer)
 	    !klet_in_kernelet(c)) {
 		/* User mode, a service, or Linux's own code. Leave it pending. */
 		c->strike1_ns = 0;
+		if (!tick)
+			atomic_inc(&inst->fires_elsewhere);
 		goto again;
 	}
 
 	if (!klet_critical(c)) {
 		c->strike1_ns = 0;
-		if (klet_virq_redirect(c, regs))
+		if (klet_virq_redirect(c, regs)) {
+			if (!tick)
+				atomic_inc(&inst->fires_redirected);
 			goto again;
+		}
 		/*
 		 * The kernelet could not take the interrupt — no room on its stack.
 		 * If Linux wants the processor anyway, yield it through the yield
@@ -161,8 +221,13 @@ static enum hrtimer_restart klet_watch_fn(struct hrtimer *timer)
 
 	/*
 	 * A critical section. The interrupt stays pending and vOSTD delivers it when
-	 * it unmasks. But if Linux wants the processor, the grace is bounded.
+	 * it unmasks. But if Linux wants the processor, the grace is bounded; the
+	 * bound is the ticks', so a requested firing leaves it alone.
 	 */
+	if (!tick) {
+		atomic_inc(&inst->fires_masked);
+		goto again;
+	}
 	if (!need_resched()) {
 		c->strike1_ns = 0;
 		goto again;
@@ -187,14 +252,56 @@ static enum hrtimer_restart klet_watch_fn(struct hrtimer *timer)
 	c->yield_ip = regs->ip;
 	c->forced = true;
 	regs->ip = (unsigned long)klet_yield_stub;
-	if (atomic_read(&inst->forced_yields) < 3)
-		pr_info("kernelet: forced yield of vcpu %d (pid %d) on cpu %d at ip %#lx (%pS), guards %u, irq_off %u\n",
-			c->vcpu, current->pid, smp_processor_id(), c->yield_ip,
-			(void *)c->yield_ip, klet_guards(c), klet_irq_off(c));
+	/*
+	 * The first few are recorded for the log, and printed when the module is
+	 * unloaded, not here: a printk from this hard-interrupt callback to a
+	 * serial console keeps interrupts off for milliseconds, which holds this
+	 * processor's next tick back and lengthens the very deferrals the bound
+	 * is about.
+	 */
+	{
+		int i = atomic_inc_return(&inst->forced_recorded) - 1;
+
+		if (i < KLET_FORCED_RECORDS)
+			inst->forced_rec[i] = (struct klet_forced_rec) {
+				.vcpu = c->vcpu, .pid = current->pid,
+				.cpu = smp_processor_id(), .ip = c->yield_ip,
+				.guards = klet_guards(c), .irq_off = klet_irq_off(c),
+			};
+	}
 
 again:
+	if (!tick) {
+		/* Back to the period the request cut short. */
+		hrtimer_set_expires(timer, this_cpu_read(klet_watch_period_end));
+		return HRTIMER_RESTART;
+	}
 	hrtimer_forward_now(timer, ns_to_ktime(KLET_WATCH_INTERVAL_NS));
 	return HRTIMER_RESTART;
+}
+
+/*
+ * Makes this processor's watch timer expire now, for a kick. Called in hard
+ * interrupt context on this processor (the kick's IPI handler), where
+ * hrtimer_start() of an active timer is legal: the timer is pinned here, and
+ * its callback cannot be running, because it too runs in hard interrupt
+ * context on this processor. A request already outstanding is enough.
+ */
+void klet_watch_fire_now(void)
+{
+	struct hrtimer *timer = this_cpu_ptr(&klet_watch_timer);
+	ktime_t end;
+
+	if (!klet_watch || !klet_watch_ready || this_cpu_read(klet_watch_requested))
+		return;
+
+	if (hrtimer_active(timer))
+		end = hrtimer_get_expires(timer);
+	else
+		end = ktime_add_ns(ktime_get(), KLET_WATCH_INTERVAL_NS);
+	this_cpu_write(klet_watch_period_end, end);
+	this_cpu_write(klet_watch_requested, true);
+	hrtimer_start(timer, 0, HRTIMER_MODE_REL_PINNED_HARD);
 }
 
 /*
@@ -211,9 +318,11 @@ void klet_watch_arm(struct klet_carrier *c)
 		return;
 
 	timer = this_cpu_ptr(&klet_watch_timer);
-	if (!hrtimer_active(timer))
+	if (!hrtimer_active(timer)) {
+		this_cpu_write(klet_watch_last_tick, 0);
 		hrtimer_start(timer, ns_to_ktime(KLET_WATCH_INTERVAL_NS),
 			      HRTIMER_MODE_REL_PINNED_HARD);
+	}
 }
 
 int klet_watch_init(void)

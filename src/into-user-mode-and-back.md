@@ -168,7 +168,8 @@ static bool klet_drain_signals(struct klet_carrier *c)
 {
 	sigset_t mask = current->blocked;
 	sigaddset(&mask, SIGKILL);                  /* the two signals nobody may take are left in the queue */
-	sigaddset(&mask, SIGSTOP);
+	if (c->kind != KLET_ROOT)                   /* (the root carrier never returns to user mode, where a stop would act) */
+		sigaddset(&mask, SIGSTOP);
 
 	spin_lock_irq(&current->sighand->siglock);
 	while ((signr = dequeue_signal(&mask, &info, &type)) != 0) {
@@ -186,7 +187,7 @@ static bool klet_drain_signals(struct klet_carrier *c)
 }
 ```
 
-A fault signal is recognized by its number and its `si_code` together: `SIGSEGV`, `SIGBUS`, `SIGILL`, `SIGFPE` or `SIGTRAP` with a code that Linux's trap handlers use, which is positive and below the value the kernel reserves for signals it sends on its own account; a general-protection fault is the one trap that arrives as `SIGSEGV` with that kernel code. Anything else, whether sent by a process, which on the host side can only be the operator, or by Linux for a reason of its own, is discarded. `SIGKILL` and `SIGSTOP` are left alone: the first is how the operator and the endovisor end a carrier, and Linux acts on it in the same loop.
+A fault signal is recognized by its number and its `si_code` together: `SIGSEGV`, `SIGBUS`, `SIGILL`, `SIGFPE` or `SIGTRAP` with a code that Linux's trap handlers use, which is positive and below the value the kernel reserves for signals it sends on its own account; a general-protection fault is the one trap that arrives as `SIGSEGV` with that kernel code. Anything else, whether sent by a process, which on the host side can only be the operator, or by Linux for a reason of its own, is discarded. `SIGKILL` and `SIGSTOP` are left alone: the first is how the operator and the endovisor end a carrier, and Linux acts on it in the same loop; the second stops a carrier as it stops any task, on its way to user mode, and a stopped carrier is a stopped virtual CPU until `SIGCONT`. The root carrier is the exception for `SIGSTOP`: it never returns to user mode, so a stop could never act on it, and one left pending would make every clone it attempts fail, so it drops the signal with the rest.
 
 The resume hook brings the exception into the kernelet:
 
@@ -237,20 +238,20 @@ Page faults on tenant memory take a shorter path through the endovisor's own fau
 
 ## Hello, world
 
-With chapters 3 to 7 built, `make hello` boots Linux in QEMU, loads the module, runs the runtime, and this appears in the serial log (one line of Linux's own about an out-of-tree module, and three lines of statistics at unload, are left out):
+With chapters 3 to 7 built, `make hello` boots Linux in QEMU, loads the module, runs the runtime, and this appears in the serial log (one line of Linux's own about an out-of-tree module, and four lines of statistics at unload, are left out):
 
 ```
 INIT: loading kernelet.ko
-kernelet: kernelet image text [0xffffffffc030b1ce, 0xffffffffc0318665), 54423 bytes; virq_entry at +0x1eef
-kernelet: endovisor loaded: grant 4096 KiB at 0xc00000, linear map 0xffff99d5c0000000, watch on, mirror on, fpu area 1088 B, tsc 3791992 kHz
+kernelet: kernelet image text [0xffffffffc02bf4a4, 0xffffffffc02cc945), 54433 bytes; virq_entry at +0x1ef9
+kernelet: endovisor loaded: grant 4096 KiB at 0xc00000, linear map 0xffff96b340000000, watch on, mirror on, fpu area 1088 B, tsc 3791992 kHz
 INIT: running /tests/10-hello
 RUN-HELLO: creating a sandbox from /hello.klet
 kernelet: host offsets: gs:current 0x1fac0, gs:preempt_count 0x1fac8, task->kernelet +1968, gate->vrec +8
 kernelet: root carrier exec (pid 34), address space emptied, 1 virtual CPU(s), cmdline ""
 kernelet: vcpu 0 carrier starting (pid 35)
-kernelet: service stub: 41 cycles through the stack switch, 25 for the service body alone (n=2000, rdtsc, interrupts off)
-kernelet: vOSTD up: grant 0xc00000..0x1000000, linear map 0xffff99d5c0000000, 1 vCPU(s), tsc 3791992 kHz, fpu area 1088 B
-kernelet: space 1 created: root 0x8c6000, area [0x10000, 0x7ffffffff000), its own inode, mm owner a task
+kernelet: service stub: 34 cycles through the stack switch, 25 for the service body alone (least of 7 rounds of 2000, rdtsc, interrupts off)
+kernelet: vOSTD up: grant 0xc00000..0x1000000, linear map 0xffff96b340000000, 1 vCPU(s), tsc 3791992 kHz, fpu area 1088 B
+kernelet: space 1 created: root 0x902000, area [0x10000, 0x7ffffffff000), its own inode, mm owner a task
 kernelet: Hello, world
 kernelet:
 kernelet: stopped, exit code 0

@@ -108,7 +108,7 @@ to `.build/bench/<name>.table`.
 | `make mem-func` | E2, E3, E4, E10: no Linux fault on mapped pages, fault-around, protection changes, a map under a guard, the withheld set | 12, 13 |
 | `make mem-r2` | E5: the sleeping contract, broken on purpose, ends the kernelet | 13 |
 | `make mem-conc` | E8, E11 on two vCPUs: lockless copies, the contended range lock, a process exiting under a copy, the retire list | 13 |
-| `make mem-kill` | E11: one carrier of a process killed from outside, its sibling carries on | 11, 12 |
+| `make mem-kill` | E11: one carrier of a process stopped and continued, then killed from outside; its sibling carries on | 11, 12 |
 | `make mem-pressure` | E7: the area's entries survive reclaim and swap | 12 |
 | `make sched-fair` | measurement: a sibling group's share of the processors with 1, 50, and 50 tasks and an overstayer | 10, 14 |
 | `make sched-perf` | measurement: kernelet task switch and wake-up beside native Linux, five boots | 14 |
@@ -153,26 +153,38 @@ a missing line it expects, and on an unclean module unload. The endovisor
 prints its counters when it unloads (`STATS`, `MEMSTATS`, the watch timer's
 ticks and upcalls), which is the last thing in every log.
 
+## Signals, stops and memory
+
+- **Signals.** A carrier's pending signals are drained by the endovisor on its
+  way to user mode. A fault signal Linux raised for the tenant's own
+  instruction (`SIGSEGV`, `SIGBUS`, `SIGILL`, `SIGFPE`, `SIGTRAP` with a
+  fault's `si_code`, and the `SIGSEGV` of a general-protection fault) becomes
+  the CPU exception the kernel proper sees; every other signal is dropped,
+  except two. `SIGKILL` is Linux's, and kills the carrier. `SIGSTOP` stops a
+  vCPU carrier the way it stops any task, and **a stopped carrier is a stopped
+  virtual CPU**: the kernelet's tasks on it do not run, a sibling vCPU waiting
+  for one of them waits, until `SIGCONT`. The root carrier never returns to
+  user mode and cannot stop; it drops `SIGSTOP`.
+- **Memory.** What the kernelet allocates through the host is charged to the
+  memory cgroup of the carrier that asked, which is the sandbox's: its heap
+  (`mem_alloc`, `GFP_KERNEL_ACCOUNT`), its kernelet stacks (`__vmalloc` with
+  `GFP_KERNEL_ACCOUNT`, at most `KLET_MAX_KSTACKS` = 512 of 256 KiB per
+  sandbox; beyond that `kstack_alloc` returns 0 and vOSTD reports
+  `Error::NoMemory`), and the page-table pages of its address spaces, which
+  Linux allocates and charges itself. The grant, the 4 MiB of frames the
+  kernelet maps for its tenants, is not charged: the endovisor allocates it
+  when the module is loaded, before any sandbox or control group exists.
+
 ## Known problems
 
-- **The kick IPI never delivers an upcall itself.** A `vcpu_kick` of a vCPU
-  whose carrier is running kernelet code on another processor sends an
-  inter-processor interrupt whose handler (`klet_kick_ipi`) means to redirect
-  the interrupted code into the upcall stub. On x86 Linux 6.12 the
-  call-function IPI does not set `get_irq_regs()`, so the handler finds no
-  registers and returns; the kick is taken at the target's next watch tick or
-  guard drop instead, within a millisecond. Instrumented once in a
-  `sched-policy` boot: 50 kick IPIs, all 50 with no registers, none
-  redirected, and the longest cross-vCPU wake-up 3,893,942 cycles (about
-  1 ms, one tick). Correctness does not depend on the IPI, only the latency
-  of a cross-vCPU wake-up does; it has not been fixed.
-- **`make sched-coop`'s bound can be missed on a busy host.** Its last check
-  asserts that no critical section kept a processor for more than 3000 us
-  (the design's bound is two 1 ms ticks). In one of thirteen runs on the
-  shared machine the prototype was developed on, the overstayer boot reported
-  3042 us; the other twelve reported 2027 to 2767 us. The watch timer is an
-  hrtimer in a KVM guest, and a guest vCPU that the host itself deschedules
-  takes its tick late; the boot's `stolen_ms` counts such time. Rerun it.
+- **`make sched-coop`'s deferral is measured in wall clock.** The design
+  forces a critical section off the processor at the first watch tick at
+  least 1 ms after the first strike, two ticks at most, and on this machine
+  the longest deferral is 2.0 to 2.1 ms. The check allows 4000 us, and prints
+  beside the deferral the boot's `stolen_ms` (the time its carriers spent off
+  a processor while running kernelet code) and the longest gap between two
+  watch ticks, because a tick that a busy host delivers late lengthens a
+  deferral beyond two ticks.
 - `make sched-fair` and `make sched-perf` can fail on a busy host (a share of
   0.8 of a processor where 1.0 is expected, a native reference with no
   samples). They are measurements, which is why `make bench` does not fail on

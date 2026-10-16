@@ -10,9 +10,10 @@
  *    process until /proc/vmstat shows that reclaim has run and swapped out at
  *    least HOG_SWAP_PAGES pages, then frees it. The kernelet's tenant is
  *    spinning in user mode all that time; afterwards it reads every page back.
- *  - "kill" (E11): kills the carrier of virtual CPU 1 from outside, with
- *    SIGKILL, once the kernelet has said it is ready, while vCPU 0's tenant
- *    thread keeps faulting in the same address space.
+ *  - "kill" (E11): once the kernelet has said it is ready, stops the carrier
+ *    of virtual CPU 1 with SIGSTOP and lets it go on with SIGCONT, then kills
+ *    it from outside with SIGKILL, while vCPU 0's tenant thread keeps
+ *    faulting in the same address space.
  */
 #define _GNU_SOURCE
 
@@ -214,6 +215,47 @@ static void hog(void)
 	_exit(0);
 }
 
+/* --- stopping a carrier -------------------------------------------------- */
+
+/* The state letter of /proc/<pid>/stat: R, S, T, ... or '?'. */
+static char task_state(long pid)
+{
+	char buf[512], *p;
+	ssize_t n;
+	int fd;
+
+	snprintf(buf, sizeof(buf), "/proc/%ld/stat", pid);
+	fd = open(buf, O_RDONLY);
+	if (fd < 0)
+		return '?';
+	n = read(fd, buf, sizeof(buf) - 1);
+	close(fd);
+	if (n <= 0)
+		return '?';
+	buf[n] = 0;
+	p = strrchr(buf, ')');
+	return p && p[1] && p[2] ? p[2] : '?';
+}
+
+/*
+ * SIGSTOP and SIGCONT to a vCPU carrier, as an operator would send them: Linux
+ * must stop it like any task (a stopped virtual CPU) and let it go on.
+ */
+static void stop_and_continue(long pid)
+{
+	struct timespec half = { .tv_sec = 0, .tv_nsec = 500 * 1000 * 1000 };
+	char before = task_state(pid), stopped, after;
+
+	kill((pid_t)pid, SIGSTOP);
+	nanosleep(&half, NULL);
+	stopped = task_state(pid);
+	kill((pid_t)pid, SIGCONT);
+	nanosleep(&half, NULL);
+	after = task_state(pid);
+	outf("RUN-MEM: vcpu 1 carrier state %c, after SIGSTOP %c, after SIGCONT %c\n",
+	     before, stopped, after);
+}
+
 /* --- main -------------------------------------------------------------- */
 
 int main(void)
@@ -278,6 +320,7 @@ int main(void)
 			cpid = strtol(kmsg_hit + strlen("vcpu 1 carrier starting (pid "), NULL, 10);
 		if (cpid > 0 && wait_kmsg("MEM-KILL-ME", 30) == 0) {
 			usleep(500 * 1000);	/* let the sibling fault for a while first */
+			stop_and_continue(cpid);
 			outf("RUN-MEM: killing the carrier of vcpu 1 (pid %ld) from outside\n", cpid);
 			kill((pid_t)cpid, SIGKILL);
 		} else {

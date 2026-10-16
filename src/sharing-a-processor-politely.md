@@ -174,7 +174,7 @@ The mirror lets a kernelet defer Linux's preemption, and "must not defer it for 
 	regs->ip = (unsigned long)klet_yield_stub;
 ```
 
-The grace is about two milliseconds. What the kernelet borrows is charged: Linux accounts the extra run time to the sandbox's control group like any other, so the sandbox's long-run share does not grow by a microsecond; what a neighbor can lose is latency, at most the grace, per preemption. Forced yields are counted, and a sandbox that collects them is misbehaving in a way the operator can see.
+The note of the first strike is dropped when the carrier leaves the processor, since a carrier that has given the processor back is deferring nothing, and the bound is on time held, not on time elapsed. The grace is about two milliseconds. What the kernelet borrows is charged: Linux accounts the extra run time to the sandbox's control group like any other, so the sandbox's long-run share does not grow by a microsecond; what a neighbor can lose is latency, at most the grace, per preemption. Forced yields are counted, and a sandbox that collects them is misbehaving in a way the operator can see.
 
 ```mermaid
 flowchart LR

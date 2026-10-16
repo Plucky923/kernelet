@@ -30,4 +30,4 @@ The book explains creating a sandbox and the root carrier in chapter 5
 | `run-probe.c` | creates the sandbox, then kills the root carrier from outside, so that the endovisor has to evict the kernelet spinning in kernel mode | `make probe` |
 | `run-yield.c` | the sandbox and a competitor pinned to one CPU; the competitor computes the same checksum in user space and reports its progress | `make yield` |
 | `run-sched.c` | the sandbox in its own control group; with `coop`, `fair` or `perf` also competitors in a sibling group, the fairness measurement, and the same switch and wake-up measurements on native Linux | `make sched-*` |
-| `run-mem.c` | the sandbox; with `pressure` also swap and a memory hog until reclaim has run; with `kill`, a SIGKILL to vCPU 1's carrier | `make mem-*` |
+| `run-mem.c` | the sandbox; with `pressure` also swap and a memory hog until reclaim has run; with `kill`, a SIGSTOP and a SIGCONT, then a SIGKILL, to vCPU 1's carrier | `make mem-*` |

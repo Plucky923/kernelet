@@ -17,7 +17,7 @@ The tests go by E-numbers in the code and the logs:
 | `func` | `make mem-func` | E2: pages mapped by `vm_map` take no Linux fault; one tenant fault maps a sixteen-page fault-around window. E3: a protection change keeps the entries present; a write to a read-only page is one `pfn_mkwrite` report. E4: a map under a preemption guard is legal because the service prologue lifts the mirror, and nothing switches. E10: `PROT_NONE` and back through the withheld set, contents intact |
 | `r2` | `make mem-r2` | E5: a sleeping service called under a kernelet spin lock ends the kernelet by vOSTD's own assertion, and Linux reports nothing |
 | `conc` | `make mem-conc` | E8: lockless copies on one vCPU against map/unmap loops on the other see no torn page and no foreign frame; a second cursor waits in `vm_wait` for one whose holder sleeps in `vm_map`. E11: a process exits under a copy into its memory, no frame is freed before the grace period, and the space is retired with interrupts off and drained later |
-| `kill` | `make mem-kill` | E11: one carrier of a two-thread process is killed from outside while its sibling keeps faulting in the same address space |
+| `kill` | `make mem-kill` | E11: one carrier of a two-thread process is stopped and continued (`SIGSTOP`, `SIGCONT`), then killed from outside, while its sibling keeps faulting in the same address space |
 | `pressure` | `make mem-pressure` | E7: every entry survives Linux's reclaim while the guest swaps |
 | `perf` | `make mem-perf` (measurement) | E6: first touch, map, protect, read after protect, copies. E9: fork of 64 MiB, the child's reads, the parent's re-reads, munmap |
 

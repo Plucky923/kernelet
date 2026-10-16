@@ -336,22 +336,36 @@ u64 klet_kstack_alloc(struct klet_inst *inst)
 			return (u64)(unsigned long)k->base;
 		}
 	}
+	/*
+	 * A new stack: within the pool's bound, reserved before the allocation
+	 * so that two vCPUs cannot both take the last one. Beyond the bound the
+	 * answer is 0, which vOSTD turns into Error::NoMemory.
+	 */
+	if (inst->kstack_made >= KLET_MAX_KSTACKS) {
+		spin_unlock(&inst->lock);
+		return 0;
+	}
+	inst->kstack_made++;
 	spin_unlock(&inst->lock);
 
-	/* vmalloc's own guard page is the stack's guard page. */
-	base = vmalloc(KLET_STACK_SIZE);
-	if (!base)
-		return 0;
-	k = kzalloc(sizeof(*k), GFP_KERNEL);
+	/*
+	 * vmalloc's own guard page is the stack's guard page. The pages are
+	 * charged to the memory cgroup of the carrier that asked, which is the
+	 * sandbox's.
+	 */
+	base = __vmalloc(KLET_STACK_SIZE, GFP_KERNEL_ACCOUNT);
+	k = base ? kzalloc(sizeof(*k), GFP_KERNEL) : NULL;
 	if (!k) {
 		vfree(base);
+		spin_lock(&inst->lock);
+		inst->kstack_made--;
+		spin_unlock(&inst->lock);
 		return 0;
 	}
 	k->base = base;
 	k->busy = true;
 	spin_lock(&inst->lock);
 	list_add_tail(&k->link, &inst->kstack_all);
-	inst->kstack_made++;
 	spin_unlock(&inst->lock);
 	return (u64)(unsigned long)base;
 }
@@ -653,8 +667,42 @@ void klet_virq_raise(struct klet_carrier *c, u32 bit)
 /* ------------------------------------------------------------------ */
 
 /*
- * Drains the carrier's pending signals, SIGKILL excepted, and turns the ones
- * Linux raised for a fault of the tenant's own making into a kernelet exception.
+ * Whether a signal is Linux's report of a fault of the tenant's own making,
+ * which the kernelet must see as the CPU exception it was. Those are the
+ * synchronous fault signals with a fault's si_code (0 < si_code < SI_KERNEL),
+ * and SIGSEGV with SI_KERNEL, which is how x86's general-protection handler
+ * reports a #GP (arch/x86/kernel/traps.c, do_general_protection(), force_sig()).
+ * Everything else that has a positive si_code is not a trap, and
+ * thread.trap_nr is stale for it: SIGXCPU from RLIMIT_CPU and the other
+ * SI_KERNEL signals, and seccomp's SIGSYS (SYS_SECCOMP).
+ */
+static bool klet_is_fault_signal(int signr, int si_code)
+{
+	switch (signr) {
+	case SIGSEGV:
+		if (si_code == SI_KERNEL)
+			return true;
+		fallthrough;
+	case SIGBUS:
+	case SIGILL:
+	case SIGFPE:
+	case SIGTRAP:
+		return si_code > 0 && si_code < SI_KERNEL;
+	default:
+		return false;
+	}
+}
+
+/*
+ * Drains the carrier's pending signals and turns the ones Linux raised for a
+ * fault of the tenant's own making into a kernelet exception; every other
+ * signal is dropped. SIGKILL is never drained, so that Linux kills the carrier
+ * as it would any task. Nor is a vCPU carrier's SIGSTOP: Linux's own stop
+ * handling applies to it on its way to user mode, as to any task, and a
+ * stopped vCPU carrier is a stopped virtual CPU. The root carrier never
+ * returns to user mode, so a stop could never take effect on it, and one left
+ * pending would make every kernel_clone() of its vCPU carriers fail; it drops
+ * SIGSTOP like any other signal.
  *
  * Returns true if an exception is now pending on the carrier.
  */
@@ -671,12 +719,14 @@ static bool klet_drain_signals(struct klet_carrier *c)
 
 	mask = current->blocked;
 	sigaddset(&mask, SIGKILL);
+	if (c->kind != KLET_ROOT)
+		sigaddset(&mask, SIGSTOP);
 
 	spin_lock_irq(&current->sighand->siglock);
 	while ((signr = dequeue_signal(&mask, &info, &type)) != 0) {
 		spin_unlock_irq(&current->sighand->siglock);
 
-		if (info.si_code > 0 && !exception) {
+		if (klet_is_fault_signal(signr, info.si_code) && !exception) {
 			c->exc_trap = current->thread.trap_nr;
 			c->exc_error = current->thread.error_code;
 			c->exc_addr = (unsigned long)info.si_addr;
@@ -820,7 +870,12 @@ static int klet_carrier_main(void *arg)
 	 * where OSTD would have started an application processor.
 	 */
 	if (vcpu != 0) {
-		wait_event_interruptible(c->idle_wq,
+		/*
+		 * Killable rather than interruptible: a SIGSTOP stays pending on a
+		 * vCPU carrier until it goes to user mode, and must not cut this
+		 * wait short.
+		 */
+		wait_event_killable(c->idle_wq,
 					 c->boot_requested || inst->stopped ||
 					 inst->dying ||
 					 fatal_signal_pending(current));
@@ -1037,8 +1092,9 @@ static void klet_do_log_write(struct klet_inst *inst, const char *ptr, u64 len)
 	/* The measurement klet_svc_log_write made on the first call, if any. */
 	if (inst->stub_cycles && !inst->stub_reported) {
 		inst->stub_reported = true;
-		pr_info("kernelet: service stub: %llu cycles through the stack switch, %llu for the service body alone (n=%d, rdtsc, interrupts off)\n",
-			inst->stub_cycles, inst->body_cycles, KLET_MEASURE_N);
+		pr_info("kernelet: service stub: %llu cycles through the stack switch, %llu for the service body alone (least of %d rounds of %d, rdtsc, interrupts off)\n",
+			inst->stub_cycles, inst->body_cycles, KLET_MEASURE_ROUNDS,
+			KLET_MEASURE_N);
 	}
 	printk(KERN_INFO "kernelet: %.*s\n", (int)len, ptr);
 }
@@ -1057,7 +1113,8 @@ static void *klet_do_mem_alloc(u64 size, u64 align)
 	if (size == 0)
 		size = 1;
 
-	base = kmalloc(size + align + sizeof(void *), GFP_KERNEL);
+	/* Charged to the memory cgroup of the calling carrier, the sandbox's. */
+	base = kmalloc(size + align + sizeof(void *), GFP_KERNEL_ACCOUNT);
 	if (!base)
 		return NULL;
 
@@ -1540,24 +1597,36 @@ static u64 klet_svc_enter(u64 op, u64 a0, u64 a1, u64 a2)
  * prologue and epilogue alone, run on the Linux stack. Only the loop and the
  * cycle counter run here on the kernelet stack; the result is printed by the
  * log service, on the Linux stack.
+ *
+ * Each half is timed KLET_MEASURE_ROUNDS times and the least round is kept:
+ * interrupts off keep Linux out of a round, but not the hypervisor, which can
+ * take the processor away in the middle of one, and a single round then
+ * reports tens of cycles a call that were never spent on the call.
  */
 static void klet_measure_switch(struct klet_carrier *c)
 {
 	struct klet_svc_args nop = { .op = KLET_SVC_NOP };
 	struct klet_svc_args loop = { .op = KLET_SVC_NOP, .a0 = KLET_MEASURE_N };
+	u64 viastub = ~0ULL, body = ~0ULL;
 	unsigned long flags;
-	u64 t0, viastub;
-	int i;
+	int r, i;
 
-	local_irq_save(flags);
-	t0 = rdtsc_ordered();
-	for (i = 0; i < KLET_MEASURE_N; i++)
-		klet_run_on_linux_stack(c->linux_sp, &nop);
-	viastub = rdtsc_ordered() - t0;
-	klet_run_on_linux_stack(c->linux_sp, &loop);
-	local_irq_restore(flags);
+	for (r = 0; r < KLET_MEASURE_ROUNDS; r++) {
+		u64 t0, t;
 
-	c->inst->body_cycles = loop.ret / KLET_MEASURE_N;
+		local_irq_save(flags);
+		t0 = rdtsc_ordered();
+		for (i = 0; i < KLET_MEASURE_N; i++)
+			klet_run_on_linux_stack(c->linux_sp, &nop);
+		t = rdtsc_ordered() - t0;
+		klet_run_on_linux_stack(c->linux_sp, &loop);
+		local_irq_restore(flags);
+
+		viastub = min(viastub, t);
+		body = min(body, loop.ret);
+	}
+
+	c->inst->body_cycles = body / KLET_MEASURE_N;
 	c->inst->stub_cycles = viastub / KLET_MEASURE_N;
 }
 
