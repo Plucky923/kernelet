@@ -127,7 +127,7 @@ static void klet_do_vcpu_idle(struct klet_carrier *c, u64 deadline_ns)
 
 The order of the first three lines is the one every Linux sleep uses so that no wake-up is lost: the sleeper marks itself, *then* checks; the waker sets the bit, *then* checks the mark. One of the two always sees the other. The sleep is *killable*, so that `SIGKILL` ends it (chapter 11).
 
-**Kicking.** When the kernelet's scheduler puts a task on another virtual CPU's run queue, that virtual CPU should notice soon, as a machine would be told by an inter-processor interrupt. vOSTD calls `vcpu_kick(i)`, which sets a KICK bit in the target's record and does whichever of three things gets it seen: wakes the carrier if it is asleep in `vcpu_idle`, flags it if it is in user mode, or, if it is running kernelet code on another processor right now, sends that processor an interrupt whose handler delivers the kick at once (chapter 9).
+**Kicking.** When the kernelet's scheduler puts a task on another virtual CPU's run queue, that virtual CPU should notice soon, as a machine would be told by an inter-processor interrupt. vOSTD calls `vcpu_kick(i)`, which sets a KICK bit in the target's record and does whichever of three things gets it seen: wakes the carrier if it is asleep in `vcpu_idle`, flags it if it is in user mode, or, if it is running kernelet code on another processor right now, sends that processor an interrupt that makes the kick be delivered within microseconds instead of at the next tick (chapter 9).
 
 <div class="rust">
 
@@ -167,7 +167,7 @@ fn reschedule<F>(mut f: F) {                     // the heart of every schedulin
 
 ## One carrier, many threads
 
-A virtual CPU runs the threads of many tenant processes in turn, and each process has its own address space. The kernel proper, as on a machine, activates the right `VmSpace` before it runs a thread; in vOSTD, `activate` records the space in the virtual CPU's record (the `space` field above), and the carrier switches to that process's Linux address space on its next trip to user mode. The switch itself is chapter 12's `klet_adopt_space`, which both hooks of chapter 7 call just before they apply the registers.
+A virtual CPU runs the threads of many tenant processes in turn, and each process has its own address space. The kernel proper, as on a machine, activates the right `VmSpace` before it runs a thread; in vOSTD, `activate` records the space in the virtual CPU's record (the `space` field above), and the carrier switches to that process's Linux address space on its next trip to user mode. The switch itself is chapter 12's `klet_space_adopt`, which both hooks of chapter 7 call just before they apply the registers.
 
 The floating-point and vector registers belong to a tenant thread too. To Linux they are the *carrier's* user state: Linux saves them when it switches the carrier out and restores them, lazily, before the carrier next returns to user mode, and it does not know that the kernelet has put a different thread on the carrier in between.
 

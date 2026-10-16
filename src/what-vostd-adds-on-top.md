@@ -27,7 +27,7 @@ fn leaf_of(e: u64) -> Option<Leaf> {                      // a present, user-acc
 
 pub(crate) fn walk(root: Paddr, va: Vaddr) -> Option<Leaf> {
     let mut node = root;
-    for level in (2..=4).rev() {                          // four levels on x86-64
+    for level in (2..=4).rev() {                          // four levels; vOSTD refuses a five-level host at start
         node = child(read_entry(node, index(va, level)))?;
     }
     leaf_of(read_entry(node, index(va, 1)))
@@ -38,7 +38,7 @@ That is the walk a processor does, in software, four dependent loads. It takes n
 
 ## Copying to and from the tenant
 
-The hundred-line kernel's `write` handler reads the program's buffer through `vm_space.reader(addr, len)`. On a machine OSTD would dereference the address and let the fault handler catch a bad one. Inside Linux that is forbidden twice over: the processor refuses a kernel-mode access to a user page unless a flag is set (the protection called SMAP), and recovering from a bad address needs an entry in Linux's exception table, which code Linux did not build does not have.
+The hundred-line kernel's `write` handler reads the program's buffer through `vm_space.reader(addr, len)`. On a machine OSTD would dereference the address and let the fault handler catch a bad one. Inside Linux that is forbidden twice over: the processor refuses a kernel-mode access to a user page unless a flag is set (the protection called SMAP), and recovering from a bad address needs an entry in an exception table, the list of instructions allowed to fault and where to resume, which Linux keeps for its own code and for each module's; the Rust compiler emits no such entries for the image.
 
 vOSTD never dereferences a tenant address. A copy walks the page table from the tenant address to the frame, and copies through the frame's direct-map alias, an ordinary kernel address. An unmapped address is a *result* of the walk, not a fault, and becomes the same page-fault error the kernel proper would have got from a trap.
 

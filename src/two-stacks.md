@@ -40,7 +40,7 @@ One Linux task, two stacks. Linux tolerates this better than one might fear:
 - An interrupt that arrives while the carrier is on a kernelet stack pushes its frame there and then moves to Linux's per-processor interrupt stack, as it would from any kernel stack.
 - `pt_regs` are found from the top of the Linux stack, which does not move.
 
-What Linux does *not* tolerate is kernelet code calling into Linux while on a kernelet stack, for any length of time. Linux's code assumes its own stack: its stack-overflow checks, its backtraces, and above all its ability to sleep. So the rule is: **kernelet code runs on a kernelet stack; Linux's code and the endovisor's run on the Linux stack.** Every crossing between the two switches stacks.
+What Linux does *not* tolerate is kernelet code calling into Linux while on a kernelet stack, for any length of time. Linux's code assumes its own stack: its unwinder and backtraces, its checks that a buffer lies on the task's stack, and its idea of how much room is left. So the rule is: **kernelet code runs on a kernelet stack; Linux's code and the endovisor's run on the Linux stack.** Every crossing between the two switches stacks.
 
 ## The switch
 
@@ -121,11 +121,11 @@ Where does `klet_enter` get called? From exactly three places: the carrier's sta
 
 <div class="linux">
 
-**Linux: `vmalloc`.** Linux has two kinds of kernel memory: the direct map, physically contiguous, from `kmalloc` and the page allocator; and the **vmalloc area**, where the kernel builds virtually contiguous ranges out of scattered pages with [`vmalloc()`](https://elixir.bootlin.com/linux/v6.12/source/mm/vmalloc.c#L3924). Ranges there are separated by unmapped *guard pages*, so running off the end of one faults instead of silently overwriting its neighbor.
+**Linux: `vmalloc`.** Linux has two kinds of kernel memory: the direct map, physically contiguous, from `kmalloc` and the page allocator; and the **vmalloc area**, where the kernel builds virtually contiguous ranges out of scattered pages with [`vmalloc()`](https://elixir.bootlin.com/linux/v6.12/source/mm/vmalloc.c#L3924). Each range is followed by an unmapped *guard page*, so running off the end of one faults instead of silently overwriting its neighbor.
 
 </div>
 
-A kernelet stack is 256 KiB from `vmalloc`, with the guard page `vmalloc` provides. The endovisor keeps a **pool** of them per sandbox: a freed stack goes back to the pool, not to Linux, and the pool is returned whole when the sandbox is destroyed. The reason is a Linux detail a tenant could otherwise turn against the machine: freeing `vmalloc` memory is batched, and the batch ends in a TLB flush on *every* processor, so a kernel that created and ended tasks in a loop would tax processors it is not allowed to run on.
+A kernelet stack is 256 KiB from `vmalloc`, with an unmapped page before and after it, since every `vmalloc` range is followed by one. What the guard page buys is less than it seems: a stack that runs off its end faults with a stack pointer that is already bad, the processor cannot deliver that fault, and Linux halts the machine on the double fault that results. The full design answers that with a check at every function entry of the image; this prototype has no such check, so a kernel proper with unbounded recursion would halt the host, and the test kernels are written not to recurse. The endovisor keeps a **pool** of them per sandbox: a freed stack goes back to the pool, not to Linux, and the pool is returned whole when the sandbox is destroyed. The reason is a Linux detail a tenant could otherwise turn against the machine: freeing `vmalloc` memory is batched, and the batch ends in a TLB flush on *every* processor, so a kernel that created and ended tasks in a loop would tax processors it is not allowed to run on.
 
 *Simplified from `prototype/endovisor/carrier.c`: `klet_kstack_alloc`, `klet_kstack_put`.*
 

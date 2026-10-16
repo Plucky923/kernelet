@@ -23,7 +23,7 @@ flowchart LR
     kbuild --> insmod["insmod kernelet.ko"]
 ```
 
-"No undefined symbols" is the whole security story of the build, so it deserves a sentence. A symbol is undefined in an object when the code calls a function the object does not contain; the linker fills it in later. An image with none cannot call anything outside itself. It reaches Linux in exactly one way: through a table of function pointers the endovisor hands it when it starts. That is the service table, and the kernelet cannot call what is not in it, because it cannot name anything else.
+"No undefined symbols" is the whole security story of the build, so it deserves a sentence. A symbol is undefined in an object when the code calls a function the object does not contain; the linker fills it in later. An image with none cannot call anything outside itself. It *calls* Linux in exactly one way: through a table of function pointers the endovisor hands it when it starts. That is the service table, and the kernelet cannot call what is not in it, because it cannot name anything else. (It also reads two words of Linux's and writes one, at offsets the endovisor publishes, for reasons chapters 8 and 10 give; those are the whole of its other contact with the host.)
 
 In this prototype the image is linked statically into the module, so there is one kernelet per module load. A full endovisor would load images at run time, sharing one copy of the code among many kernelets; the prototype's shortcut changes nothing below this chapter.
 
@@ -128,7 +128,7 @@ static int klet_grant_alloc(struct klet_inst *inst)
 
 <div class="linux">
 
-**Linux: the direct map.** Linux maps *all* of physical memory, in order, into one region of the kernel's address space, called the direct map or linear map. Turning a physical address into a pointer the kernel can dereference is therefore one addition: `__va(paddr)` is `paddr + base`. Every kernel allocator hands out memory from the direct map, so a kernel pointer and a physical address are two names for the same bytes. The line `__va(0)` above is simply the base.
+**Linux: the direct map.** Linux maps *all* of physical memory, in order, into one region of the kernel's address space, called the direct map or linear map. Turning a physical address into a pointer the kernel can dereference is therefore one addition: `__va(paddr)` is `paddr + base`. `kmalloc` and the page allocator hand out direct-map memory, so for them a kernel pointer and a physical address are two names for the same bytes; `vmalloc`, which chapter 6 uses, is the exception, because it maps scattered pages into a separate region. The line `__va(0)` above is simply the base.
 
 </div>
 

@@ -109,7 +109,7 @@ static bool klet_gate_syscall(struct pt_regs *regs)
 
 	/* ... the kernelet handled the call and called user_run again ... */
 	if (c->state == KLET_USER) {
-		klet_adopt_space(c, c->vrec.space);     /* the right address space: chapter 12 */
+		klet_space_adopt(c, c->vrec.space);     /* the right address space: chapter 12 */
 		klet_ctx_to_regs(c, regs);              /* its new registers */
 	} else {
 		klet_carrier_die(c);                    /* the kernelet stopped instead */
@@ -147,7 +147,7 @@ sequenceDiagram
     L->>U: restore pt_regs, return to user mode
 ```
 
-Note what the sequence does *not* say: that the task which comes back is the one that left. Between the two switches the kernelet's own scheduler may have run another task, and then it is that task's `execute` that leaves, with another thread's registers. Nothing in Linux's exit path minds, because everything Linux will restore is in `pt_regs`, and the hook overwrites all of it.
+Note what the sequence does *not* say: that the task which comes back is the one that left. Between the two switches the kernelet's own scheduler may have run another task, and then it is that task's `execute` that leaves, with another thread's registers. Nothing in Linux's exit path minds, because everything Linux will restore from the stack is in `pt_regs`, and the hook overwrites all of it. One thing is not there: the base of the segment register that programs use for thread-local storage, which Linux keeps per task and restores from its own record. The prototype's context carries no such base, so its tenant threads share their carrier's; a full vOSTD would carry one per thread and have the endovisor set it on each trip.
 
 ## Coming back by an exception
 
@@ -155,7 +155,7 @@ A tenant's instruction can fault: divide by zero, an illegal instruction, a touc
 
 <div class="linux">
 
-**Linux: exceptions become signals.** When a user instruction faults, Linux's exception handler records the trap number, error code and address in the task's thread structure, queues a **signal** on the task (`SIGSEGV`, `SIGILL`, `SIGFPE`, and so on) with [`force_sig()`](https://elixir.bootlin.com/linux/v6.12/source/kernel/signal.c#L1666), and heads for user mode. Signals are acted on in the exit loop: Linux either kills the task or arranges for a handler in the program to run. The one signal that cannot be caught or blocked is `SIGKILL`.
+**Linux: exceptions become signals.** When a user instruction faults, Linux's exception handler records the trap number, error code and address in the task's thread structure, queues a **signal** on the task (`SIGSEGV`, `SIGILL`, `SIGFPE`, and so on) with [`force_sig()`](https://elixir.bootlin.com/linux/v6.12/source/kernel/signal.c#L1666), and heads for user mode. Signals are acted on in the exit loop: Linux either kills or stops the task or arranges for a handler in the program to run. Two signals cannot be caught or blocked: `SIGKILL` and `SIGSTOP`. For a fault, Linux's handlers queue the signal with [`force_sig_fault()`](https://elixir.bootlin.com/linux/v6.12/source/kernel/signal.c#L1733), whose `si_code` says what kind of fault it was.
 
 </div>
 
@@ -167,11 +167,12 @@ The resume hook runs at the top of that loop, before Linux delivers anything. So
 static bool klet_drain_signals(struct klet_carrier *c)
 {
 	sigset_t mask = current->blocked;
-	sigaddset(&mask, SIGKILL);                  /* everything but SIGKILL is ours to take */
+	sigaddset(&mask, SIGKILL);                  /* the two signals nobody may take are left in the queue */
+	sigaddset(&mask, SIGSTOP);
 
 	spin_lock_irq(&current->sighand->siglock);
 	while ((signr = dequeue_signal(&mask, &info, &type)) != 0) {
-		if (info.si_code > 0 && !exception) {   /* raised by the kernel for a fault, not sent by a process */
+		if (klet_is_fault_signal(signr, info.si_code) && !exception) {   /* raised by a trap handler for this task's own fault */
 			c->exc_trap = current->thread.trap_nr;
 			c->exc_error = current->thread.error_code;
 			c->exc_addr = (unsigned long)info.si_addr;
@@ -185,7 +186,7 @@ static bool klet_drain_signals(struct klet_carrier *c)
 }
 ```
 
-A signal whose `si_code` is positive was raised by the kernel for a fault of the task's own making; one with a zero or negative code was sent by a process, which on the host side can only be the operator, and is discarded. `SIGKILL` is left alone, because it is how the operator and the endovisor end a carrier. Linux then acts on it in the same loop.
+A fault signal is recognized by its number and its `si_code` together: `SIGSEGV`, `SIGBUS`, `SIGILL`, `SIGFPE` or `SIGTRAP` with a code that Linux's trap handlers use, which is positive and below the value the kernel reserves for signals it sends on its own account; a general-protection fault is the one trap that arrives as `SIGSEGV` with that kernel code. Anything else, whether sent by a process, which on the host side can only be the operator, or by Linux for a reason of its own, is discarded. `SIGKILL` and `SIGSTOP` are left alone: the first is how the operator and the endovisor end a carrier, and Linux acts on it in the same loop.
 
 The resume hook brings the exception into the kernelet:
 
@@ -207,10 +208,12 @@ static void klet_gate_resume(struct pt_regs *regs)
 			klet_enter(c, KLET_RUN_EVENT);
 			continue;
 		}
-		if (c->state == KLET_USER && !c->exc_pending && klet_drain_signals(c))
+		if (c->state == KLET_USER && !c->exc_pending && klet_drain_signals(c) && c->user_live)
 			klet_regs_snapshot(c, regs);                         /* the faulting registers, into ctx */
-		if (c->exc_pending) {
+		if (c->exc_pending) {                                    /* from a signal, or from the fault handler of chapter 12 */
 			c->exc_pending = false;
+			if (c->state == KLET_USER && c->user_live)
+				klet_regs_snapshot(c, regs);                     /* same: ctx must hold the registers of the faulting instruction */
 			klet_ctx_set_exception(c);                           /* trap, error code, address -> ctx */
 			klet_enter(c, KLET_RUN_EXCEPTION);                   /* user_run returns 1 */
 			continue;
@@ -221,14 +224,14 @@ static void klet_gate_resume(struct pt_regs *regs)
 			continue;
 		}
 		/* KLET_USER and nothing pending: the kernelet wants user mode */
-		klet_adopt_space(c, c->vrec.space);
+		klet_space_adopt(c, c->vrec.space);
 		klet_ctx_to_regs(c, regs);
 		return;
 	}
 }
 ```
 
-The loop shape matters: each `klet_enter` returns when the kernelet calls `user_run` again, and the hook then goes round once more to see whether anything else is pending before it finally applies the registers and returns to Linux. One line is easy to miss and was a bug once: before an exception is reported, the hook must copy the *current* `pt_regs` into the context (`klet_regs_snapshot`), because the context still holds the registers of the previous trip, and the kernel proper must see the registers of the faulting instruction.
+The loop shape matters: each `klet_enter` returns when the kernelet calls `user_run` again, and the hook then goes round once more to see whether anything else is pending before it finally applies the registers and returns to Linux. Two lines are easy to miss and were a bug once: before an exception is reported, by either route, the hook must copy the *current* `pt_regs` into the context (`klet_regs_snapshot`), because the context still holds the registers of the previous trip, and the kernel proper must see the registers of the faulting instruction. `user_live` records that the tenant has run since the context was last applied, so that the snapshot is taken exactly once per trip.
 
 Page faults on tenant memory take a shorter path through the endovisor's own fault handler, which sets `exc_pending` directly; that is chapter 12. What the kernel proper sees is the same in both cases: `execute` returns `UserException`, with a `CpuException::PageFault` carrying the address.
 

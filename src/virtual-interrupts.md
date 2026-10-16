@@ -19,7 +19,7 @@ The question is *when* the handler runs, and the answer depends on what the virt
 
 <div class="linux">
 
-**Linux: high-resolution timers and preemption notifiers.** An [`hrtimer`](https://elixir.bootlin.com/linux/v6.12/source/kernel/time/hrtimer.c) is a timer whose callback runs in interrupt context on the processor that armed it; a *pinned* timer stays on that processor, and a *hard* one runs in the interrupt itself even on a real-time kernel. A timer callback can read the registers of whatever the interrupt interrupted with `get_irq_regs()`, which is how Linux's profiler samples programs; if the callback changes the saved instruction pointer, the interrupt returns somewhere else. A **preemption notifier** ([`preempt_notifier_register()`](https://elixir.bootlin.com/linux/v6.12/source/kernel/sched/core.c#L4866)) is a pair of callbacks Linux runs for one task every time it switches that task out of a processor and in to one; KVM uses it to know where its virtual CPUs are.
+**Linux: high-resolution timers and preemption notifiers.** An [`hrtimer`](https://elixir.bootlin.com/linux/v6.12/source/kernel/time/hrtimer.c) is a timer whose callback runs in interrupt context, normally on the processor that armed it; a *pinned* timer is guaranteed to stay there, and a *hard* one runs in the interrupt itself even on a real-time kernel. The timer interrupt publishes the registers of whatever it interrupted, and a callback reads them with `get_irq_regs()`, which is how Linux's profiler samples programs; if the callback changes the saved instruction pointer, the interrupt returns somewhere else. Not every interrupt publishes its registers that way: the timer does, and the plain cross-processor call of the last section does not. A **preemption notifier** ([`preempt_notifier_register()`](https://elixir.bootlin.com/linux/v6.12/source/kernel/sched/core.c#L4866)) is a pair of callbacks Linux runs for one task every time it switches that task out of a processor and in to one; KVM uses it to know where its virtual CPUs are.
 
 </div>
 
@@ -204,7 +204,7 @@ The same check runs whenever the last guard drops, which follows every service t
 
 ## The kick's interrupt
 
-When one virtual CPU kicks another that is running kernelet code on a different processor, waiting for that processor's next watch tick could cost a millisecond. The endovisor sends an inter-processor interrupt instead, with the one Linux function for running a function on another processor:
+When one virtual CPU kicks another that is running kernelet code on a different processor, waiting for that processor's next watch tick could cost a millisecond. The endovisor sends an inter-processor interrupt instead, with the one Linux function for running a function on another processor. The function it runs cannot redirect anything itself, because that kind of interrupt does not publish the interrupted registers; what it can do is make the processor's watch timer fire at once, and the watch timer's callback, which does see the registers, delivers the kick:
 
 *Simplified from `prototype/endovisor/sched.c`: `klet_kick_remote`, `klet_kick_ipi`.*
 
@@ -220,7 +220,7 @@ static void klet_kick_ipi(void *arg)            /* runs in interrupt context on 
 {
 	struct klet_carrier *c = arg;
 	if (current->kernelet == &c->gate)          /* still the same carrier there? */
-		klet_virq_redirect(c, get_irq_regs());  /* then deliver now */
+		klet_watch_fire_now();                  /* then make the watch timer fire, and it will redirect */
 }
 ```
 

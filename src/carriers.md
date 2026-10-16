@@ -12,7 +12,7 @@ Linux has a kind of task that runs only kernel code, the *kernel thread*, and it
 
 **Linux: how tasks are made.** Every task is created by one function, [`kernel_clone()`](https://elixir.bootlin.com/linux/v6.12/source/kernel/fork.c#L2745), which underlies `fork`, `clone` and kernel-thread creation. It copies the parent's task structure and then, depending on flags, shares or copies the address space, open files and so on. Called with a function pointer in its arguments and *without* the kernel-thread flag, it makes a task that starts in that function in kernel mode and, when the function returns, continues to user mode with whatever is in its saved registers. That is how Linux itself starts `init`. The function is not exported to modules; the patch exports it.
 
-The other way to give a task a fresh address space is [`execve`](https://elixir.bootlin.com/linux/v6.12/source/fs/exec.c#L1222): Linux offers the file to each registered **binary-format handler** ([`struct linux_binfmt`](https://elixir.bootlin.com/linux/v6.12/source/include/linux/binfmts.h#L82)) in turn, and the one that recognizes the file replaces the process's address space and sets its starting registers. A module can register a handler of its own.
+The other way to give a task a fresh address space is [`execve`](https://elixir.bootlin.com/linux/v6.12/source/fs/exec.c#L2097): Linux offers the file to each registered **binary-format handler** ([`struct linux_binfmt`](https://elixir.bootlin.com/linux/v6.12/source/include/linux/binfmts.h#L82)) in turn, and the one that recognizes the file replaces the process's address space and sets its starting registers. A module can register a handler of its own.
 
 </div>
 
@@ -36,7 +36,7 @@ Everything the runtime set up on that child before the `execve`, such as its con
 
 <div class="linux">
 
-**Linux: control groups.** A control group is a set of tasks that Linux accounts and limits together: their share of the processors, their memory, and more. A child starts in its parent's group. Containers are built on them, and so is a sandbox: because every carrier is in the sandbox's group, everything the kernelet does is charged to the tenant by machinery Linux already has.
+**Linux: control groups.** A control group is a set of tasks that Linux accounts and limits together: their share of the processors, their memory, and more. A child starts in its parent's group. Containers are built on them, and so is a sandbox: because every carrier is in the sandbox's group, the processor time the kernelet burns is charged to the tenant by machinery Linux already has, and so is any memory the endovisor allocates on a carrier with the flag that asks for it (`__GFP_ACCOUNT`). The prototype charges page tables, kernelet stacks and the heap that way; its one grant is allocated when the module loads, before any sandbox exists, and is not charged to anyone.
 
 </div>
 

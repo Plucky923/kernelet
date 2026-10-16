@@ -25,7 +25,7 @@ That is a stronger position than the one a kernel has on a machine, where a bug 
 
 <div class="linux">
 
-**Linux: address spaces, areas, and page faults.** A process's user memory is described by an address space, [`struct mm_struct`](https://elixir.bootlin.com/linux/v6.12/source/include/linux/mm_types.h#L779), which holds the page table's root (`mm->pgd`) and a set of **virtual memory areas** (VMAs): contiguous ranges with uniform permissions, each optionally backed by a file. Linux fills page tables lazily: touching an address with no entry raises a page fault, Linux finds the VMA, and asks *it* for the page, by calling the `fault` function of the VMA's operations table ([`struct vm_operations_struct`](https://elixir.bootlin.com/linux/v6.12/source/include/linux/mm.h#L598)). A driver that implements `mmap` on its device file supplies those operations, and so decides what appears at each address of its area.
+**Linux: address spaces, areas, and page faults.** A process's user memory is described by an address space, [`struct mm_struct`](https://elixir.bootlin.com/linux/v6.12/source/include/linux/mm_types.h#L790), which holds the page table's root (`mm->pgd`) and a set of **virtual memory areas** (VMAs): contiguous ranges with uniform permissions, each optionally backed by a file. Linux fills page tables lazily: touching an address with no entry raises a page fault, Linux finds the VMA, and asks *it* for the page, by calling the `fault` function of the VMA's operations table ([`struct vm_operations_struct`](https://elixir.bootlin.com/linux/v6.12/source/include/linux/mm.h#L598)). A driver that implements `mmap` on its device file supplies those operations, and so decides what appears at each address of its area.
 
 A VMA can be marked as holding **raw frame numbers** (`VM_PFNMAP`). Linux then maps exactly the frames it is told to, with [`vmf_insert_pfn_prot()`](https://elixir.bootlin.com/linux/v6.12/source/mm/memory.c#L2403), and takes no further interest in them: no reference counting, no swapping, no migration. The driver removes entries again with [`zap_vma_ptes()`](https://elixir.bootlin.com/linux/v6.12/source/mm/memory.c#L1952). This is how device drivers give a process a window onto their memory, and it is the right contract here, because the frames' lifetime belongs to the kernelet.
 
@@ -79,7 +79,7 @@ Three choices in this code each close a hole.
 
 **The file's inode.** The plain anonymous-inode helper hands every caller one shared inode. Linux keeps, per inode, the list of areas that map it, so every space's area would sit in one list, and an operation on one space's file could reach the others'. Each space gets an inode of its own.
 
-**The area's flags.** `VM_SHARED` is required, because Linux refuses raw frame numbers in a private writable area. `VM_DONTCOPY` keeps a `fork` of a carrier, which never happens but could, from copying entries that belong to the kernelet. The area covers exactly the range the kernel proper can map, so that a `vm_map` outside it can be refused, and `zap_vma_ptes()`, which silently does nothing for a range not wholly inside its area, is always inside.
+**The area's flags.** `VM_SHARED` is required for the host's sake: inserting a raw frame number into a private, copy-on-write area is a `BUG_ON` in Linux, which halts the machine rather than returning an error. `VM_DONTCOPY` keeps a `fork` of a carrier, which never happens but could, from copying entries that belong to the kernelet. The area covers exactly the range the kernel proper can map, so that a `vm_map` outside it can be refused, and `zap_vma_ptes()`, which silently does nothing for a range not wholly inside its area, is always inside.
 
 ## The address-space switch
 
@@ -87,7 +87,7 @@ Two of the lines above call `kernelet_switch_mm()`, the first of the patch's two
 
 <div class="linux">
 
-**Linux: changing a task's address space.** Linux has the operation twice: for a kernel thread that borrows a user address space ([`kthread_use_mm()`](https://elixir.bootlin.com/linux/v6.12/source/kernel/kthread.c#L1439)), and for `execve` ([`exec_mmap()`](https://elixir.bootlin.com/linux/v6.12/source/fs/exec.c#L958)), which replaces a process's address space with a fresh one. Neither will do for a user task that wants to swap between address spaces it holds references to: the first refuses a task that is not a kernel thread, and the second is private to `exec` and destroys the old space. And a module cannot write its own, because everything the switch touches is private to the core kernel.
+**Linux: changing a task's address space.** Linux has the operation twice: for a kernel thread that borrows a user address space ([`kthread_use_mm()`](https://elixir.bootlin.com/linux/v6.12/source/kernel/kthread.c#L1439)), and for `execve` ([`exec_mmap()`](https://elixir.bootlin.com/linux/v6.12/source/fs/exec.c#L958)), which replaces a process's address space with a fresh one. Neither will do for a user task that wants to swap between address spaces it holds references to: the first warns if its caller is not a kernel thread and takes the references a kernel thread needs, which a user task must not, and the second is private to `exec` and destroys the old space. And a module cannot write its own, because everything the switch touches is private to the core kernel.
 
 </div>
 
@@ -207,7 +207,7 @@ static int klet_pte_protect(pte_t *pte, unsigned long addr, void *data)
 	if (!pte_present(old))
 		return -EINVAL;
 	do {
-		new = pte_modify(old, ctx->prot);      /* keeps the frame number, the special bit, accessed and dirty */
+		new = pte_modify(old, ctx->prot);      /* keeps the frame number, the special bit, and the accessed and dirty bits */
 	} while (!try_cmpxchg64((u64 *)&pte->pte, (u64 *)&old.pte, pte_val(new)));
 	return 0;
 }

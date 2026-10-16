@@ -24,7 +24,7 @@ void klet_stop_instance(struct klet_inst *inst, u64 code)
 	pr_info("kernelet: stopped, exit code %llu\n", code);
 	list_for_each_entry(c, &inst->carriers, link)
 		send_sig(SIGKILL, c->task, 1);          /* every carrier, root included */
-	wake_up_all(&inst->root_wq);               /* and whoever sleeps in a service */
+	wake_up_all(&inst->root_wq);               /* and the root carrier; each idle carrier's own queue is woken too */
 }
 
 static void klet_svc_stop(u64 code)              /* the service, called by the kernelet */
@@ -79,7 +79,7 @@ void klet_kill_instance(struct klet_inst *inst)
 }
 ```
 
-A carrier killed while in user mode dies in Linux's exit path without the gate ever running again, so `klet_detach` never runs for it. The lifeline's release frees what the detach would have: this is why the death notice, not the detach, is the place where a carrier's records are finally released.
+A carrier killed from outside while in user mode passes through the resume hook once more, since the signal counts as pending work, but the hook finds no mark and steps aside; Linux kills the task, and `klet_detach` never runs for it. The lifeline's release frees what the detach would have: this is why the death notice, not the detach, is the place where a carrier's records are finally released.
 
 ## Eviction
 
