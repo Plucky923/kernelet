@@ -14,26 +14,27 @@ A **container** gives each tenant a slice of one kernel. The kernel is shared; w
 flowchart LR
     subgraph KL["Kernelets"]
         direction TB
-        a3[tenant A's programs] --> akl[tenant A's kernelet]
-        b3[tenant B's programs] --> bkl[tenant B's kernelet]
-        akl --> hk[the host kernel]
+        a3["tenant A's<br/>programs"] --> akl["tenant A's<br/>kernelet"]
+        b3["tenant B's<br/>programs"] --> bkl["tenant B's<br/>kernelet"]
+        akl --> hk["the host<br/>kernel"]
         bkl --> hk
         hk --> hw3[hardware]
     end
     subgraph CT["Containers"]
         direction TB
-        a2[tenant A's programs] --> sk[one shared kernel]
-        b2[tenant B's programs] --> sk
+        a2["tenant A's<br/>programs"] --> sk["one shared<br/>kernel"]
+        b2["tenant B's<br/>programs"] --> sk
         sk --> hw2[hardware]
     end
     subgraph VM["Virtual machines"]
         direction TB
-        a1[tenant A's programs] --> ak[tenant A's kernel]
-        b1[tenant B's programs] --> bk[tenant B's kernel]
+        a1["tenant A's<br/>programs"] --> ak["tenant A's<br/>kernel"]
+        b1["tenant B's<br/>programs"] --> bk["tenant B's<br/>kernel"]
         ak --> hv[hypervisor]
         bk --> hv
         hv --> hw1[hardware]
     end
+    VM ~~~ CT ~~~ KL
 ```
 
 The third panel is what this book is about. Each tenant gets a kernel of its own, as with a virtual machine. But that kernel is not a guest on simulated hardware. It is an ordinary piece of software loaded *into* the kernel that runs the machine, the **host kernel**, and it runs there in kernel mode, beside the host's own code. There is no hypervisor and no simulated hardware. Such a loaded kernel is a **kernelet**.
