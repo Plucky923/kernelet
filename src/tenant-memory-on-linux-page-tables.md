@@ -37,7 +37,7 @@ Every change to an address space is made under its lock, `mmap_lock`, and the ad
 
 `VmSpace::new()` is the service `vm_create`. The endovisor makes three things: an empty Linux address space, a file to own the area, and the area itself, one VMA over the whole user range.
 
-*Simplified from `prototype/endovisor/space.c`: `klet_do_vm_create`, `klet_space_make_area`, `klet_space_mmap`.*
+*Simplified from `prototype/linux/endovisor/space.c`: `klet_do_vm_create`, `klet_space_make_area`, `klet_space_mmap`.*
 
 ```c
 s64 klet_do_vm_create(struct klet_carrier *c)
@@ -93,7 +93,7 @@ Two of the lines above call `kernelet_switch_mm()`, the first of the patch's two
 
 The helper does what the two have in common: under the task's lock and with interrupts off, set the task's `mm` and `active_mm` to the new space, load the new page table with the architecture's `switch_mm_irqs_off()`, and keep Linux's per-space bookkeeping in step. It consumes the caller's reference on the new space and hands back the old one, for the caller to drop in a context that may sleep.
 
-*Simplified from `prototype/patches/0001-kernelet-gate.patch`: `kernelet_switch_mm`, `kernelet_mm_alloc`.*
+*Simplified from `prototype/linux/patches/0001-kernelet-gate.patch`: `kernelet_switch_mm`, `kernelet_mm_alloc`.*
 
 ```c
 struct mm_struct *kernelet_switch_mm(struct mm_struct *mm)
@@ -129,7 +129,7 @@ struct mm_struct *kernelet_mm_alloc(struct task_struct *owner)
 
 The two `lru_gen_*` calls are for Linux's multi-generational page reclaim, which keeps a list of the address spaces it may scan: a new space is put on it once, and a switch marks the space as in use. The two `sched_mm_cid_*` brackets are not optional. Linux gives each address space a small pool of *concurrency ids*, one per processor currently running one of its tasks, which programs may use to index per-processor data; a task that changes address space must return its id to the old space and take one from the new. Without the brackets a carrier would leak one concurrency id per switch, invisibly, until the pool ran dry and the task hung. That is the kind of bookkeeping that makes the helper belong in Linux rather than in a module.
 
-*Simplified from `prototype/endovisor/space.c`: `klet_space_adopt`.*
+*Simplified from `prototype/linux/endovisor/space.c`: `klet_space_adopt`.*
 
 ```c
 int klet_space_adopt(struct klet_carrier *c, u64 id)       /* called by both gate hooks before user mode */
@@ -154,7 +154,7 @@ Everything the kernel proper's cursor does to a space is one of four services. E
 
 **`vm_map(space, va, paddr, prot)`.** The protection crosses as three bits, readable, writable, executable; the endovisor builds Linux's page protection from its own constants and never from bits the kernelet supplies, because one such bit, *global*, would make a translation visible to every process on the machine.
 
-*Simplified from `prototype/endovisor/space.c`: `klet_prot_to_pgprot`, `klet_space_insert`, `klet_do_vm_map`.*
+*Simplified from `prototype/linux/endovisor/space.c`: `klet_prot_to_pgprot`, `klet_space_insert`, `klet_do_vm_map`.*
 
 ```c
 static int klet_prot_to_pgprot(u32 prot, pgprot_t *out)
@@ -198,7 +198,7 @@ s64 klet_do_vm_map(struct klet_carrier *c, u64 id, u64 va, u64 paddr, u32 prot)
 
 **`vm_protect(space, va, prot)`** rewrites one present entry in place. Linux's helpers for taking a page-table lock are not exported to modules, so the endovisor uses [`apply_to_page_range()`](https://elixir.bootlin.com/linux/v6.12/source/mm/memory.c#L2983), which is exported and takes that lock itself, here over the one entry, and in its callback replaces the entry with one atomic compare-and-exchange:
 
-*Simplified from `prototype/endovisor/space.c`: `klet_pte_protect`.*
+*Simplified from `prototype/linux/endovisor/space.c`: `klet_pte_protect`.*
 
 ```c
 static int klet_pte_protect(pte_t *pte, unsigned long addr, void *data)
@@ -223,7 +223,7 @@ Two more services complete the set: `vm_activate(space)` only records the space 
 
 The tenant touches an address with no entry, or writes a page whose entry is read-only. Linux calls the area's `fault` for the first and `pfn_mkwrite` for the second, on the carrier, in kernel mode, with the address-space lock held. The handler is endovisor code, and it has nothing to look up: Linux's table is the only table, and a fault on this area means the kernel proper has not mapped the page. The handler's whole job is to report it.
 
-*Simplified from `prototype/endovisor/space.c`: `klet_space_report`.*
+*Simplified from `prototype/linux/endovisor/space.c`: `klet_space_report`.*
 
 ```c
 static vm_fault_t klet_space_report(struct vm_fault *vmf, bool mkwrite)

@@ -8,18 +8,18 @@ A kernelet is three layers of code compiled into one file.
 
 1. **The kernel proper**, the hundred-line kernel of the last chapter: safe Rust, never edited.
 2. **vOSTD**, a Rust crate whose library name is `ostd`, so that the kernel proper's `use ostd::...` lines resolve to it. It offers every type and function the kernel proper uses, with the same names and signatures as the real OSTD. It is in `prototype/vostd/`.
-3. **The image ABI** (an *application binary interface* is the exact layout of what two separately compiled pieces of code pass each other), a few C-layout structures that both vOSTD and the endovisor know: what the host tells the kernelet at start, which functions the kernelet may call, and which functions the host may call. It is in `prototype/vostd/src/abi.rs` on the Rust side and `prototype/endovisor/kernelet.h` on the C side, and the two must agree byte for byte.
+3. **The image ABI** (an *application binary interface* is the exact layout of what two separately compiled pieces of code pass each other), a few C-layout structures that both vOSTD and the endovisor know: what the host tells the kernelet at start, which functions the kernelet may call, and which functions the host may call. It is in `prototype/vostd/src/abi.rs` on the Rust side and `prototype/linux/endovisor/kernelet.h` on the C side, and the two must agree byte for byte.
 
 The build compiles the kernel proper and vOSTD together into one static library, links it with `ld -r` into a single relocatable object, `image.o`, and checks two things about that object: that it has **no undefined symbols**, and that its *relocations*, the places in the code that the loader must patch with final addresses, are of kinds Linux's module loader accepts. Then it links `image.o` into the endovisor's kernel module, `kernelet.ko`, together with the endovisor's own C files.
 
 ```mermaid
 flowchart TB
-    hello["hello/src/lib.rs<br/>(kernel proper, safe Rust)"] --> cargo
+    hello["kernels/hello/src/lib.rs<br/>(kernel proper, safe Rust)"] --> cargo
     vostd["vostd/<br/>(the framework, Rust)"] --> cargo
     cargo["cargo build<br/>one static library"] --> ld["ld -r<br/>image.o"]
     ld --> check{"nm -u image.o empty?<br/>relocations of accepted kinds?"}
     check -- yes --> kbuild["kbuild<br/>kernelet.ko"]
-    endo["endovisor/*.c<br/>(the endovisor, C)"] --> kbuild
+    endo["linux/endovisor/*.c<br/>(the endovisor, C)"] --> kbuild
     kbuild --> insmod["insmod kernelet.ko"]
 ```
 
@@ -107,7 +107,7 @@ The endovisor checks `abi_version` against its own when the module loads, and re
 
 A kernel needs memory to manage. The endovisor gives a kernelet a **grant**: one physically contiguous block of RAM, 4 MiB in this prototype, taken from Linux's page allocator when the module loads and described in the boot arguments by its physical address and length.
 
-*Simplified from `prototype/endovisor/main.c`: `klet_grant_alloc`.*
+*Simplified from `prototype/linux/endovisor/main.c`: `klet_grant_alloc`.*
 
 ```c
 static int klet_grant_alloc(struct klet_inst *inst)

@@ -1,6 +1,6 @@
 # The kernel we will run
 
-Before building the machinery, it helps to know exactly what has to run on it. This chapter reads the kernel that the whole book is about: Asterinas's teaching example, a kernel in about a hundred lines of safe Rust. It is in the companion repository as `prototype/hello/src/lib.rs`, and the build compares it byte for byte with the original from the Asterinas tree before every run. It is never edited. That it needs no edit to run inside Linux is the claim the rest of the book makes good.
+Before building the machinery, it helps to know exactly what has to run on it. This chapter reads the kernel that the whole book is about: Asterinas's teaching example, a kernel in about a hundred lines of safe Rust. It is in the companion repository as `prototype/kernels/hello/src/lib.rs`, and the build compares it byte for byte with the original from the Asterinas tree before every run. It is never edited. That it needs no edit to run inside Linux is the claim the rest of the book makes good.
 
 Read the kernel in four pieces. After each, the chapter says what the piece asks of the machine, because that list is what the host has to provide.
 
@@ -8,7 +8,7 @@ Read the kernel in four pieces. After each, the chapter says what the piece asks
 
 The kernel runs one user program, a few lines of assembly, given here in full apart from its license line:
 
-*Unchanged: `prototype/hello/hello.S`.*
+*Unchanged: `prototype/kernels/hello/hello.S`.*
 
 ```asm
 .global _start                      # entry point
@@ -34,7 +34,7 @@ It makes two system calls with the `syscall` instruction, using Linux's numbers:
 
 ## Piece 1: main
 
-*Unchanged: `prototype/hello/src/lib.rs`.*
+*Unchanged: `prototype/kernels/hello/src/lib.rs`.*
 
 ```rust
 #[ostd::main]
@@ -53,7 +53,7 @@ The program's bytes are compiled into the kernel with `include_bytes!`. `main` b
 
 ## Piece 2: building the address space
 
-*Simplified from `prototype/hello/src/lib.rs`: `create_vm_space`.*
+*Simplified from `prototype/kernels/hello/src/lib.rs`: `create_vm_space`.*
 
 ```rust
 fn create_vm_space(program: &[u8]) -> VmSpace {
@@ -93,7 +93,7 @@ Three framework types appear here.
 
 ## Piece 3: the task and the loop
 
-*Simplified from `prototype/hello/src/lib.rs`: `create_user_task`, `create_user_context`.*
+*Simplified from `prototype/kernels/hello/src/lib.rs`: `create_user_task`, `create_user_context`.*
 
 ```rust
 fn create_user_task(vm_space: Arc<VmSpace>) -> Arc<Task> {
@@ -151,7 +151,7 @@ sequenceDiagram
 
 ## Piece 4: the system calls
 
-*Simplified from `prototype/hello/src/lib.rs`: `handle_syscall`.*
+*Simplified from `prototype/kernels/hello/src/lib.rs`: `handle_syscall`.*
 
 ```rust
 fn handle_syscall(user_context: &mut UserContext, vm_space: &VmSpace) {

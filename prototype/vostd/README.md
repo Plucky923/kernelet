@@ -3,7 +3,7 @@
 vOSTD is the library a kernel proper is compiled against when it runs as a
 kernelet on Linux. Its crate is `vostd` and its library name is `ostd`, so a
 kernel proper says `ostd = { package = "vostd", ... }` and its source does not
-change: the 100-line kernel in `../hello` is compiled against it byte for
+change: the 100-line kernel in `../kernels/hello` is compiled against it byte for
 byte. It exposes the same paths, types and signatures as Asterinas's OSTD at
 commit `ab9a4cfdc` for everything the kernels in this repository use, plus a
 few members of the same interface that no kernel here calls but a kernel
@@ -34,7 +34,7 @@ a processor) and 13 (what vOSTD adds on top of Linux's page tables).
 Never on its own: the top-level `make image` builds it together with one
 kernel proper (`KLET_KERNEL=hello`, the default) for `x86_64-unknown-none`,
 with `-Zbuild-std`, a static relocation model, the kernel code model and no
-red zone, and pre-links the result into `endovisor/image.o_shipped`, which the
+red zone, and pre-links the result into `linux/endovisor/image.o_shipped`, which the
 endovisor module links in. `OSTD_TASK_STACK_SIZE_IN_PAGES` is set to 64 so
 that OSTD's task layer asks for exactly the 256 KiB kernelet stacks the
 endovisor's pool hands out.

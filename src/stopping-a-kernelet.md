@@ -14,7 +14,7 @@ Once a carrier has left the image for good, no code from it runs on that carrier
 
 The kernel proper's `poweroff` is the service `stop`, and a panic in the kernelet ends in the same service. On the endovisor's side it marks the instance and sends `SIGKILL` to every carrier, the caller included; then the calling carrier leaves its kernelet stack for the last time.
 
-*Simplified from `prototype/endovisor/carrier.c`: `klet_stop_instance`, `klet_svc_stop`, `klet_carrier_die`.*
+*Simplified from `prototype/linux/endovisor/carrier.c`: `klet_stop_instance`, `klet_svc_stop`, `klet_carrier_die`.*
 
 ```c
 void klet_stop_instance(struct klet_inst *inst, u64 code)
@@ -57,7 +57,7 @@ Where each carrier is at the moment of the mark decides what stops it:
 
 The operator kills a carrier, or the out-of-memory killer does, or the test's runtime does it (`make probe`, at the end of this chapter): `kill(pid, SIGKILL)` on the root carrier's process id, or on a virtual CPU's. The root carrier is in its resume hook, sleeping in `wait_event_interruptible`; the signal wakes it, it dies, and Linux closes its descriptors, among them its lifeline. A virtual CPU's carrier dies the same way if the signal finds it in user mode; where Linux's exit path cannot reach it, the endovisor looks for the signal itself, as the end of this section shows. Either lifeline's release is the endovisor's notice:
 
-*Simplified from `prototype/endovisor/carrier.c`: `klet_carrier_lifeline_closed`, `klet_kill_instance`, `klet_sandbox_gone`.*
+*Simplified from `prototype/linux/endovisor/carrier.c`: `klet_carrier_lifeline_closed`, `klet_kill_instance`, `klet_sandbox_gone`.*
 
 ```c
 void klet_carrier_lifeline_closed(struct klet_carrier *c)
@@ -107,7 +107,7 @@ A carrier looping in kernelet code, say in a `loop {}` reached through a logic b
 
 The **eviction sweep** is one `hrtimer` per processor, pinned and hard like the watch timer, armed on every processor when a kernelet is marked dying, and re-armed every millisecond until no carrier is left. Its callback checks four things about what it interrupted: that the task is a carrier of a dying kernelet, that the interrupted context is kernel mode, that the interrupted instruction lies inside the kernelet image's text, and that the carrier's service-call depth is zero. If all four hold, it overwrites the saved instruction pointer with the address of an **exit stub**, and nothing else.
 
-*Simplified from `prototype/endovisor/evict.c`: `klet_sweep`.*
+*Simplified from `prototype/linux/endovisor/evict.c`: `klet_sweep`.*
 
 ```c
 static enum hrtimer_restart klet_sweep(struct hrtimer *timer)
@@ -132,7 +132,7 @@ again:
 
 The interrupt then returns to the stub instead of the loop. The stub realigns the stack pointer, because an interrupt can land between any two instructions, and leaves through the ordinary stack switch, never to come back:
 
-*Simplified from `prototype/endovisor/switch.S` and `prototype/endovisor/carrier.c`: `klet_exit_stub`, `klet_evict_leave`.*
+*Simplified from `prototype/linux/endovisor/switch.S` and `prototype/linux/endovisor/carrier.c`: `klet_exit_stub`, `klet_evict_leave`.*
 
 ```asm
 klet_exit_stub:
@@ -165,7 +165,7 @@ A carrier that is not on a processor at that instant is sent nothing; it is caug
 
 ## The test
 
-`make probe` runs the kernel in `prototype/probe/src/lib.rs`, whose handler for system call number 1000 is `loop {}`. The test's runtime waits a second and then kills the root carrier. The log shows the root's lifeline closing, the sweep being armed, the spinning carrier evicted by an early sweep at an address Linux's symbol lookup places inside the kernelet's user-task function, both carriers dying, and the module unloading with its reference count at zero. The build checks each of those lines and that Linux printed no warning, a check that means something only because the guest kernel is built with `CONFIG_BUG` on, which the minimal configuration it starts from turns off.
+`make probe` runs the kernel in `prototype/kernels/probe/src/lib.rs`, whose handler for system call number 1000 is `loop {}`. The test's runtime waits a second and then kills the root carrier. The log shows the root's lifeline closing, the sweep being armed, the spinning carrier evicted by an early sweep at an address Linux's symbol lookup places inside the kernelet's user-task function, both carriers dying, and the module unloading with its reference count at zero. The build checks each of those lines and that Linux printed no warning, a check that means something only because the guest kernel is built with `CONFIG_BUG` on, which the minimal configuration it starts from turns off.
 
 The same test exercises the other mechanisms of chapter 7 that the hundred-line kernel never reaches: a demand-paging fault (chapter 12), an illegal instruction (`ud2`, twice, so that the drain's re-ignoring of chapter 7 is exercised), a breakpoint (`int3`) and a privileged instruction (`hlt`), the last two being exceptions Linux reports with `SI_KERNEL`; the kernel proper steps past the three instructions, and the test reads the carrier's signal dispositions back and checks that everything but `SIGKILL` and `SIGSTOP` is ignored. The tenant also asks for a 4 MiB write, which the kernel proper refuses for want of memory rather than letting the host warn, and a second boot of the same test runs the tenant under a seccomp filter that kills on its endless system call, and checks that the sandbox ends by that signal.
 

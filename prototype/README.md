@@ -19,21 +19,29 @@ From the tenant program down to the hardware, with the directory that holds
 each layer and the chapter of the book that explains it:
 
 ```text
-  tenant program       hello/hello.S, probe.S, ...       user mode
+  tenant program       kernels/hello/hello.S, probe.S, ...        user mode
  ------------------------------------------------------------------------------
-  kernel proper        hello/src/lib.rs (never edited),  ch. 2
-                       probe/ yield/ sched/ mem/
-  vOSTD                vostd/                            ch. 3, 8, 9, 10, 13
+  kernel proper        kernels/hello/src/lib.rs (never edited),   ch. 2
+                       kernels/probe/ yield/ sched/ mem/
+  vOSTD                vostd/  (with libs/, two Asterinas crates) ch. 3, 8, 9, 10, 13
  ----------- the image ABI: services, entry table, boot arguments, ------------
-             vCPU records            vostd/src/abi.rs = endovisor/kernelet.h  ch. 3
-  endovisor            endovisor/  (kernelet.ko)         ch. 3, 5-12
-  the gate             patches/0001-kernelet-gate.patch  ch. 4
+             vCPU records   vostd/src/abi.rs = linux/endovisor/kernelet.h  ch. 3
+  endovisor            linux/endovisor/  (kernelet.ko)            ch. 3, 5-12
+  the gate             linux/patches/0001-kernelet-gate.patch     ch. 4
   Linux 6.12           .build/linux-6.12, configured by linux/config.fragment
  ------------------------------------------------------------------------------
-  kernelet runtime     runtime/run-*.c                   user mode on the host
-  initramfs (PID 1)    initramfs/init.c
+  kernelet runtime     host/runtime/run-*.c                       user mode on the host
+  initramfs (PID 1)    host/initramfs/init.c
   QEMU with KVM        the Makefile's `run`
 ```
+
+The top level holds five directories: `kernels/` (the five kernels proper, each
+with its tenant program), `vostd/` and `libs/` (the framework and the two
+crates it and the kernels take unchanged from the Asterinas tree), `linux/`
+(everything that is Linux's: the configuration fragment, the gate patch and the
+endovisor module), `host/` (what runs in the booted Linux's user space: the
+kernelet runtimes and PID 1) and `bench/` (the scripts that turn the
+measurement logs into tables).
 
 The kernel proper and vOSTD are one Rust static library, pre-linked into one
 relocatable object, the **image**, which is linked into the endovisor module.
@@ -155,7 +163,7 @@ Run them from `prototype/`, or from the repository root as
 |---|---|---|
 | `make test` | the eleven tests below, in order | – |
 | `make bench` | `sched-fair`, `sched-perf`, `mem-perf`, reported | 14 |
-| `make hello` | the 100-line kernel, byte-identical to `hello/upstream/`: "Hello, world", a clean stop, a clean module unload; also the one-off measurements of what a service costs ("service stub: N cycles") and of what a heap allocation and its free cost ("heap: ... N cycles the pair") | 2, 3, 6, 7 |
+| `make hello` | the 100-line kernel, byte-identical to `kernels/hello/upstream/`: "Hello, world", a clean stop, a clean module unload; also the one-off measurements of what a service costs ("service stub: N cycles") and of what a heap allocation and its free cost ("heap: ... N cycles the pair") | 2, 3, 6, 7 |
 | `make probe` | two boots. The probe: demand paging, a 4 MiB `write` whose buffer the heap refuses (the kernel proper answers `-ENOMEM`, and Linux's page allocator is never asked), exceptions other than page faults (`ud2` twice in a row, trap 6; `int3`, trap 3; `hlt`, trap 13, a general-protection fault), each fault signal ignored again after it was drained, and eviction of a kernelet spinning in kernel mode when the sandbox is killed. Then the same tenant under a seccomp filter that kills the process on its endless system call: Linux forces `SIGSYS` on the carrier as a fatal signal, the resume hook leaves it to Linux, the carrier dies by it, and its death ends the sandbox, with no warning | 4, 7, 11, 12 |
 | `make yield` | two boots under `preempt=none`, the watch timer off (the competitor starves) and on (it does not, and the checksums agree) | 9, 10 |
 | `make sched-policy` | the kernelet's own scheduler: its trace checked against a reference model | 8 |
@@ -175,15 +183,15 @@ Run them from `prototype/`, or from the repository root as
 | `make patch` | apply the gate patch; idempotent | 4 |
 | `make linux` | configure (once, from `linux/config.fragment`; `make config` does only that) and build `bzImage`, `modules` (which writes the tree's `Module.symvers`, without which no out-of-tree module links) and `modules_prepare` | 4 |
 | `make image` | build vOSTD and the kernel proper named by `KLET_KERNEL` (`hello`, `probe`, `yieldk`, `schedk`, `mem`) and pre-link the image | 3 |
-| `make kernelet-module` | the image, then `endovisor/kernelet.ko` | 3 |
+| `make kernelet-module` | the image, then `linux/endovisor/kernelet.ko` | 3 |
 | `make runtime`, `make initramfs`, `make run` | the runtimes; the initramfs from `.build/stage`; one boot | 5, 7 |
 | `make clean` | remove the harness's artifacts: the image and module, the runtimes, the staging area and the initramfs, the Rust build, every log and test output. It leaves the Linux tree, its build, the Cargo registry and `.build/crates.stamp` (which says the registry has the crates) | – |
 | `make distclean` | `clean`, then `make mrproper` in the Linux tree, which removes its build and its configuration (`.config`, `include/generated`). It leaves the unpacked source, the gate patch applied to it and the patch's stamp, so the next `make linux` configures and builds again but neither downloads nor patches | – |
 
 Internal targets, which the ones above call: `all` (`linux initramfs`),
 `module DIR=<dir>` and `stage-module DIR=<dir>` (an out-of-tree module, built
-against the tree and staged), `kernel-proper-check` (the `cmp` of `hello/`
-against `hello/upstream/`, before every `make hello`), `df-guard` (the free
+against the tree and staged), `kernel-proper-check` (the `cmp` of `kernels/hello/`
+against `kernels/hello/upstream/`, before every `make hello`), `df-guard` (the free
 space check above), and the `stage-*`, `*-boot` and `check-*` targets.
 
 ## Module parameters

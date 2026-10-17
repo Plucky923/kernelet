@@ -11,11 +11,11 @@ target/
 .*.cmd
 Module.symvers
 modules.order
-endovisor/image.o_shipped
+linux/endovisor/image.o_shipped
 
 # the tenant programs, assembled next to the kernels that include_bytes! them
-hello/hello
-probe/probe
-yield/yield
-sched/sched
-mem/mem
+kernels/hello/hello
+kernels/probe/probe
+kernels/yield/yield
+kernels/sched/sched
+kernels/mem/mem

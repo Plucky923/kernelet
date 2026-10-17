@@ -2,7 +2,7 @@
 
 A kernelet's user program runs in user mode on a real processor. When it executes `syscall`, the processor jumps into whatever the hardware's system-call entry register points at, and on a Linux machine that is Linux's entry code. Linux would then look the call number up in its own table and run `write`. Nothing in the hundred-line kernel would ever hear of it.
 
-So the first thing the design needs from Linux is a way to **hand a system call to a kernelet before Linux handles it**. Linux has no such interface, and this chapter adds one. It is the only change the design makes to Linux's own code, and it is small: a pointer in the task structure, one bit, two calls in the entry path, two helper functions and two exports. The patch is `prototype/patches/0001-kernelet-gate.patch`, applied to Linux 6.12.
+So the first thing the design needs from Linux is a way to **hand a system call to a kernelet before Linux handles it**. Linux has no such interface, and this chapter adds one. It is the only change the design makes to Linux's own code, and it is small: a pointer in the task structure, one bit, two calls in the entry path, two helper functions and two exports. The patch is `prototype/linux/patches/0001-kernelet-gate.patch`, applied to Linux 6.12.
 
 ## The entry path
 
@@ -47,7 +47,7 @@ flowchart TB
 
 **A hook structure and a pointer per task.** A new header defines two function pointers, and `struct task_struct` gains a pointer to a structure holding them. A task whose pointer is null is unaffected by anything else in the patch.
 
-*Simplified from `prototype/patches/0001-kernelet-gate.patch`: `kernelet_gate_ops`, `kernelet_gate`.*
+*Simplified from `prototype/linux/patches/0001-kernelet-gate.patch`: `kernelet_gate_ops`, `kernelet_gate`.*
 
 ```c
 /* include/linux/kernelet.h (new) */
@@ -71,7 +71,7 @@ struct kernelet_gate {
 
 **The syscall hook.** Inside `syscall_trace_enter()`, directly after seccomp:
 
-*Simplified from `prototype/patches/0001-kernelet-gate.patch`: `SYSCALL_WORK_KERNELET`.*
+*Simplified from `prototype/linux/patches/0001-kernelet-gate.patch`: `SYSCALL_WORK_KERNELET`.*
 
 ```c
 /* kernel/entry/common.c, syscall_trace_enter() */
@@ -85,7 +85,7 @@ Returning `-1` from this function is Linux's existing convention for "an earlier
 
 **The resume hook.** At the top of `exit_to_user_mode_loop()`, after interrupts are enabled and before Linux delivers signals:
 
-*Simplified from `prototype/patches/0001-kernelet-gate.patch`: `resume_user_mode_work`.*
+*Simplified from `prototype/linux/patches/0001-kernelet-gate.patch`: `resume_user_mode_work`.*
 
 ```c
 /* kernel/entry/common.c, exit_to_user_mode_loop() */

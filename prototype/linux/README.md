@@ -1,4 +1,11 @@
-# linux: the guest kernel's configuration
+# linux: everything that is Linux's
+
+Three things live here: the guest kernel's configuration (`config.fragment`,
+this file), the gate (`patches/`, the one patch to Linux v6.12) and the
+endovisor (`endovisor/`, the kernel module that hosts the kernelet). The two
+subdirectories have their own `README.md`.
+
+## The configuration
 
 `config.fragment` is what the prototype needs of Linux v6.12 beyond
 `tinyconfig`. `make config` (run by `make linux` once) starts from
@@ -18,7 +25,7 @@ endovisor refuses to load on a kernel built with it):
 - full preemption with `PREEMPT_DYNAMIC`, so that `preempt=none` on the command
   line gives `make yield` a kernel that does not preempt kernel code;
 - control groups and group scheduling, for the fairness and cooperation tests;
-- `CONFIG_KERNELET`, the gate (`../patches`), which selects
+- `CONFIG_KERNELET`, the gate (`patches/`), which selects
   `PREEMPT_NOTIFIERS`;
 - `RSEQ`, so that the concurrency-id brackets of `kernelet_switch_mm()` are
   exercised;
@@ -37,3 +44,5 @@ The book explains the gate and its configuration in chapter 4.
 | file | what it is |
 |---|---|
 | `config.fragment` | the configuration fragment |
+| `patches/` | the gate, `0001-kernelet-gate.patch` (chapter 4) |
+| `endovisor/` | the endovisor module, `kernelet.ko` (chapters 3 and 5 to 12) |

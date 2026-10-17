@@ -35,13 +35,13 @@
 #   make crates       download the Rust crates the build needs (once, online)
 #   make source       fetch and unpack Linux v6.12 if it is not there yet, and
 #                     apply the gate patch
-#   make patch        apply patches/0001-kernelet-gate.patch (idempotent)
+#   make patch        apply linux/patches/0001-kernelet-gate.patch (idempotent)
 #   make config       configure the tree: tinyconfig, then linux/config.fragment
 #   make linux        configure (once) and build bzImage, modules and
 #                     modules_prepare
 #   make image        build the kernelet image (vostd + a kernel proper) and
 #                     pre-link it; KLET_KERNEL names the kernel proper
-#   make kernelet-module  the image, then endovisor/kernelet.ko
+#   make kernelet-module  the image, then linux/endovisor/kernelet.ko
 #   make runtime      the static runtimes, .build/run-*
 #   make initramfs    compile init and pack .build/initramfs.cpio.gz
 #   make run          boot the kernel under QEMU, serial log to .build/serial.log
@@ -84,8 +84,8 @@ SERIAL    := $(BUILD)/serial.log
 KBUILD := $(MAKE) -C $(LINUX_DIR) ARCH=$(ARCH)
 
 # --- the kernelet prototype ---------------------------------------------
-PATCH      := $(CURDIR)/patches/0001-kernelet-gate.patch
-TEMPLATE   := $(CURDIR)/hello/upstream
+PATCH      := $(CURDIR)/linux/patches/0001-kernelet-gate.patch
+TEMPLATE   := $(CURDIR)/kernels/hello/upstream
 CARGO      ?= cargo
 RUST_TARGET := x86_64-unknown-none
 CARGO_DIR  := $(BUILD)/cargo
@@ -95,24 +95,24 @@ CARGO_DIR  := $(BUILD)/cargo
 KLET_KERNEL ?= hello
 STATICLIB  := $(CARGO_DIR)/$(RUST_TARGET)/release/lib$(KLET_KERNEL).a
 ifeq ($(KLET_KERNEL),hello)
-KERNEL_PROPER_DEP := kernel-proper-check $(CURDIR)/hello/hello
+KERNEL_PROPER_DEP := kernel-proper-check $(CURDIR)/kernels/hello/hello
 else ifeq ($(KLET_KERNEL),probe)
-KERNEL_PROPER_DEP := $(CURDIR)/probe/probe
+KERNEL_PROPER_DEP := $(CURDIR)/kernels/probe/probe
 else ifeq ($(KLET_KERNEL),yieldk)
-KERNEL_PROPER_DEP := $(CURDIR)/yield/yield
+KERNEL_PROPER_DEP := $(CURDIR)/kernels/yield/yield
 else ifeq ($(KLET_KERNEL),schedk)
-KERNEL_PROPER_DEP := $(CURDIR)/sched/sched
+KERNEL_PROPER_DEP := $(CURDIR)/kernels/sched/sched
 else ifeq ($(KLET_KERNEL),mem)
-KERNEL_PROPER_DEP := $(CURDIR)/mem/mem
+KERNEL_PROPER_DEP := $(CURDIR)/kernels/mem/mem
 else
 $(error KLET_KERNEL=$(KLET_KERNEL) is not a kernel proper of this repository: hello, probe, yieldk, schedk or mem)
 endif
-IMAGE      := $(CURDIR)/endovisor/image.o_shipped
-HELLO_ELF  := $(CURDIR)/hello/hello
-PROBE_ELF  := $(CURDIR)/probe/probe
-YIELD_ELF  := $(CURDIR)/yield/yield
-SCHED_ELF  := $(CURDIR)/sched/sched
-KERNELET_KO := $(CURDIR)/endovisor/kernelet.ko
+IMAGE      := $(CURDIR)/linux/endovisor/image.o_shipped
+HELLO_ELF  := $(CURDIR)/kernels/hello/hello
+PROBE_ELF  := $(CURDIR)/kernels/probe/probe
+YIELD_ELF  := $(CURDIR)/kernels/yield/yield
+SCHED_ELF  := $(CURDIR)/kernels/sched/sched
+KERNELET_KO := $(CURDIR)/linux/endovisor/kernelet.ko
 RUNTIME    := $(BUILD)/run-hello
 
 # `-Z plt=yes` is not cosmetic: the x86_64-unknown-none target sets
@@ -242,7 +242,7 @@ linux: $(PATCH_STAMP) $(CONFIG)
 
 # --- out-of-tree modules ------------------------------------------------
 
-# make module DIR=endovisor
+# make module DIR=linux/endovisor
 module:
 	@test -n "$(DIR)" || { echo "usage: make module DIR=<dir>"; exit 2; }
 	$(KBUILD) -j$(JOBS) M=$(abspath $(DIR)) modules
@@ -281,13 +281,13 @@ $(CRATES_STAMP): Cargo.lock
 # The kernel proper is never edited: it must stay byte-identical to the
 # template in the Asterinas tree.
 kernel-proper-check:
-	cmp $(CURDIR)/hello/src/lib.rs $(TEMPLATE)/lib.rs
-	cmp $(CURDIR)/hello/hello.S $(TEMPLATE)/hello.S
+	cmp $(CURDIR)/kernels/hello/src/lib.rs $(TEMPLATE)/lib.rs
+	cmp $(CURDIR)/kernels/hello/hello.S $(TEMPLATE)/hello.S
 	@echo "kernel proper: identical to the template"
 
 # The tenant program, assembled exactly as the book says. It has to sit next to
 # the kernel proper because `include_bytes!("../hello")` says so.
-$(HELLO_ELF): $(CURDIR)/hello/hello.S
+$(HELLO_ELF): $(CURDIR)/kernels/hello/hello.S
 	gcc -static -nostdlib $< -o $@
 
 # vostd + the kernel proper -> one relocatable object for kbuild to swallow.
@@ -311,8 +311,8 @@ image: $(CRATES_STAMP) $(KERNEL_PROPER_DEP)
 	  $(CARGO) build --offline --release -p $(KLET_KERNEL) \
 	    --target $(RUST_TARGET) $(KLET_BUILD_STD) || \
 	  { echo "image: the build failed; it is --offline, so if a crate is missing, run make crates (once, with a network)"; exit 1; }
-	gcc -c -o $(BUILD)/image_start.o endovisor/image_start.S
-	gcc -c -o $(BUILD)/image_end.o endovisor/image_end.S
+	gcc -c -o $(BUILD)/image_start.o linux/endovisor/image_start.S
+	gcc -c -o $(BUILD)/image_end.o linux/endovisor/image_end.S
 	ld -r --gc-sections \
 	  -u kernelet_entry_table -u __klet_image_text_start -u __klet_image_text_end \
 	  -o $(IMAGE) $(BUILD)/image_start.o \
@@ -327,28 +327,28 @@ image: $(CRATES_STAMP) $(KERNEL_PROPER_DEP)
 	  "$$(readelf -rW $(IMAGE) | awk '$$3 ~ /^R_X86_64/ { print $$3 }' | sort -u | tr '\n' ' ')"
 	@readelf -rW $(IMAGE) | awk '{print $$3}' | grep -E '^R_' | sort | uniq -c
 
-$(PROBE_ELF): $(CURDIR)/probe/probe.S
+$(PROBE_ELF): $(CURDIR)/kernels/probe/probe.S
 	gcc -static -nostdlib $< -o $@
 
-$(YIELD_ELF): $(CURDIR)/yield/yield.S
+$(YIELD_ELF): $(CURDIR)/kernels/yield/yield.S
 	gcc -static -nostdlib $< -o $@
 
-$(SCHED_ELF): $(CURDIR)/sched/sched.S
+$(SCHED_ELF): $(CURDIR)/kernels/sched/sched.S
 	gcc -static -nostdlib $< -o $@
 
-$(CURDIR)/mem/mem: $(CURDIR)/mem/mem.S
+$(CURDIR)/kernels/mem/mem: $(CURDIR)/kernels/mem/mem.S
 	gcc -static -nostdlib $< -o $@
 
 kernelet-module: image
-	$(MAKE) module DIR=endovisor
+	$(MAKE) module DIR=linux/endovisor
 	@echo "kernelet.ko built with the $(KLET_KERNEL) kernel proper"
 
-runtime: runtime/run-hello.c runtime/run-probe.c runtime/run-yield.c runtime/run-sched.c runtime/run-mem.c
-	gcc -static -O2 -Wall -Wextra -o $(RUNTIME) runtime/run-hello.c
-	gcc -static -O2 -Wall -Wextra -o $(BUILD)/run-probe runtime/run-probe.c
-	gcc -static -O2 -Wall -Wextra -o $(BUILD)/run-yield runtime/run-yield.c
-	gcc -static -O2 -Wall -Wextra -o $(BUILD)/run-sched runtime/run-sched.c -lpthread
-	gcc -static -O2 -Wall -Wextra -o $(BUILD)/run-mem runtime/run-mem.c
+runtime: host/runtime/run-hello.c host/runtime/run-probe.c host/runtime/run-yield.c host/runtime/run-sched.c host/runtime/run-mem.c
+	gcc -static -O2 -Wall -Wextra -o $(RUNTIME) host/runtime/run-hello.c
+	gcc -static -O2 -Wall -Wextra -o $(BUILD)/run-probe host/runtime/run-probe.c
+	gcc -static -O2 -Wall -Wextra -o $(BUILD)/run-yield host/runtime/run-yield.c
+	gcc -static -O2 -Wall -Wextra -o $(BUILD)/run-sched host/runtime/run-sched.c -lpthread
+	gcc -static -O2 -Wall -Wextra -o $(BUILD)/run-mem host/runtime/run-mem.c
 
 # --- initramfs ----------------------------------------------------------
 
@@ -369,8 +369,8 @@ $(GEN_INIT_CPIO): $(PATCH_STAMP)
 	$(KBUILD) usr/gen_init_cpio
 
 .PHONY: $(INITRAMFS)
-$(INITRAMFS): initramfs/init.c $(GEN_INIT_CPIO)
-	gcc -static -O2 -Wall -Wextra -o $(INIT) initramfs/init.c
+$(INITRAMFS): host/initramfs/init.c $(GEN_INIT_CPIO)
+	gcc -static -O2 -Wall -Wextra -o $(INIT) host/initramfs/init.c
 	mkdir -p $(STAGE)/dev $(STAGE)/proc $(STAGE)/sys $(STAGE)/modules $(STAGE)/tests
 	rm -f $(STAGE)/dev/console
 	cp $(INIT) $(STAGE)/init
@@ -1143,8 +1143,8 @@ check-log:
 
 clean:
 	rm -rf $(STAGE) $(INIT) $(INITRAMFS) $(SERIAL)
-	-$(KBUILD) M=$(CURDIR)/endovisor clean
-	rm -f $(IMAGE) $(HELLO_ELF) $(PROBE_ELF) $(YIELD_ELF) $(SCHED_ELF) $(CURDIR)/mem/mem $(RUNTIME)
+	-$(KBUILD) M=$(CURDIR)/linux/endovisor clean
+	rm -f $(IMAGE) $(HELLO_ELF) $(PROBE_ELF) $(YIELD_ELF) $(SCHED_ELF) $(CURDIR)/kernels/mem/mem $(RUNTIME)
 	rm -f $(BUILD)/run-probe $(BUILD)/run-yield $(BUILD)/run-sched $(BUILD)/run-mem
 	rm -f $(BUILD)/image_start.o $(BUILD)/image_end.o $(INITRAMFS_LIST)
 	rm -f $(BUILD)/*.log $(BUILD)/*.out

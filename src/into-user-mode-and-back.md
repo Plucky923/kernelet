@@ -31,7 +31,7 @@ So `user_run` returns `0` for a system call, `1` for an exception and `2` for "a
 
 On the endovisor's side, `user_run` is the one service that does not use the stub of the last chapter. It records the context, switches to the Linux stack, and does not come back until a hook brings the carrier into the kernelet again:
 
-*Simplified from `prototype/endovisor/carrier.c`: `klet_svc_user_run`.*
+*Simplified from `prototype/linux/endovisor/carrier.c`: `klet_svc_user_run`.*
 
 ```c
 static u64 klet_svc_user_run(struct klet_user_ctx *ctx)
@@ -57,7 +57,7 @@ The switch lands inside the `klet_enter` that last entered the kernelet on this 
 
 Whoever `klet_enter` returns into now has one job: copy the context into the carrier's `pt_regs`, so that when Linux returns to user mode, it returns to the tenant's program.
 
-*Simplified from `prototype/endovisor/carrier.c`: `klet_ctx_to_regs`.*
+*Simplified from `prototype/linux/endovisor/carrier.c`: `klet_ctx_to_regs`.*
 
 ```c
 static void klet_ctx_to_regs(struct klet_carrier *c, struct pt_regs *regs)
@@ -83,7 +83,7 @@ The first trip has a wrinkle. When `klet_carrier_main` returns, Linux's fork-ret
 
 The tenant runs, and executes `syscall`. Linux saves its registers in `pt_regs`, reaches the gate, and calls the syscall hook:
 
-*Simplified from `prototype/endovisor/carrier.c`: `klet_gate_syscall`, `klet_regs_to_ctx`.*
+*Simplified from `prototype/linux/endovisor/carrier.c`: `klet_gate_syscall`, `klet_regs_to_ctx`.*
 
 ```c
 static bool klet_gate_syscall(struct pt_regs *regs)
@@ -161,7 +161,7 @@ A tenant's instruction can fault: divide by zero, an illegal instruction, a touc
 
 The resume hook runs at the top of that loop, before Linux delivers anything. So the endovisor takes the signals off the queue itself:
 
-*Simplified from `prototype/endovisor/carrier.c`: `klet_drain_signals`.*
+*Simplified from `prototype/linux/endovisor/carrier.c`: `klet_drain_signals`.*
 
 ```c
 static bool klet_drain_signals(struct klet_carrier *c)
@@ -202,7 +202,7 @@ Most signals never reach the queue at all, and that is arranged earlier. The bin
 
 The resume hook brings the exception into the kernelet:
 
-*Simplified from `prototype/endovisor/carrier.c`: `klet_gate_resume`.*
+*Simplified from `prototype/linux/endovisor/carrier.c`: `klet_gate_resume`.*
 
 ```c
 static void klet_gate_resume(struct pt_regs *regs)

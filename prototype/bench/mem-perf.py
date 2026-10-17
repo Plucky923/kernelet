@@ -6,7 +6,7 @@ Each boot's log carries lines
 
     MEM-PERF <name> n=<n> median=<c> p99=<c> min=<c> max=<c>
 
-in TSC cycles, from the mem kernel (`mem/src/lib.rs`, perf_main). For every
+in TSC cycles, from the mem kernel (`kernels/mem/src/lib.rs`, perf_main). For every
 measurement this prints the median of the per-boot medians, the median and the
 worst of the per-boot p99s, and the same in nanoseconds at the TSC frequency
 the endovisor logged. It also lists the counters the kernel printed beside

@@ -25,7 +25,7 @@ The question is *when* the handler runs, and the answer depends on what the virt
 
 The **watch timer** is one `hrtimer` per processor, pinned and hard, with a period of one millisecond. The rule for when it runs is one sentence: **a processor's watch timer is armed exactly while the task running there is a carrier.** Each carrier registers a preemption notifier when it starts, and the notifier's switch-in callback arms the timer of whatever processor the carrier has just landed on; the timer's own callback re-arms itself if it interrupted a carrier and stops otherwise. So a carrier that Linux migrates is watched wherever it lands, and no timer runs on a processor that has no carrier.
 
-*Simplified from `prototype/endovisor/watch.c` and `prototype/endovisor/sched.c`: `klet_watch_arm`, `klet_sched_in`.*
+*Simplified from `prototype/linux/endovisor/watch.c` and `prototype/linux/endovisor/sched.c`: `klet_watch_arm`, `klet_sched_in`.*
 
 ```c
 static void klet_sched_in(struct preempt_notifier *pn, int cpu)   /* Linux just put this carrier on a processor */
@@ -44,7 +44,7 @@ void klet_watch_arm(struct klet_carrier *c)
 
 Every time a period expires, the callback raises TICK and then decides how to deliver whatever is pending:
 
-*Simplified from `prototype/endovisor/watch.c`: `klet_watch_fn`.*
+*Simplified from `prototype/linux/endovisor/watch.c`: `klet_watch_fn`.*
 
 ```c
 static enum hrtimer_restart klet_watch_fn(struct hrtimer *timer)
@@ -83,7 +83,7 @@ static enum hrtimer_restart klet_watch_fn(struct hrtimer *timer)
 
 The interesting case is the middle one: the carrier is executing kernelet code, at an arbitrary instruction, and is not in a critical section. A machine would push the interrupted instruction pointer and jump to the handler. The endovisor does the same, by changing one saved register:
 
-*Simplified from `prototype/endovisor/watch.c`: `klet_virq_redirect`.*
+*Simplified from `prototype/linux/endovisor/watch.c`: `klet_virq_redirect`.*
 
 ```c
 bool klet_virq_redirect(struct klet_carrier *c, struct pt_regs *regs)
@@ -216,7 +216,7 @@ The same check runs whenever the last guard drops, which follows every service t
 
 When one virtual CPU kicks another that is running kernelet code on a different processor, waiting for that processor's next watch tick could cost a millisecond. The endovisor sends an inter-processor interrupt instead, with the one Linux function for running a function on another processor. The function it runs cannot redirect anything itself, because that kind of interrupt does not publish the interrupted registers; what it can do is make the processor's watch timer fire at once, and the watch timer's callback, which does see the registers, delivers the kick:
 
-*Simplified from `prototype/endovisor/sched.c`: `klet_kick_remote`, `klet_kick_ipi`.*
+*Simplified from `prototype/linux/endovisor/sched.c`: `klet_kick_remote`, `klet_kick_ipi`.*
 
 ```c
 void klet_kick_remote(struct klet_carrier *c)

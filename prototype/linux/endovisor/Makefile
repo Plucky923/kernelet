@@ -1,6 +1,6 @@
 # Kbuild file for the endovisor.
 #
-# Built from the parent directory: make module DIR=endovisor
+# Built from the parent directory: make module DIR=linux/endovisor
 #
 # image.o is the kernelet image: the Rust staticlib of vostd and one kernel
 # proper, pre-linked with `ld -r --whole-archive --gc-sections` and dropped in

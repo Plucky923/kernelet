@@ -10,11 +10,11 @@ Linux will take a processor away from a carrier whenever its own policy says so:
 
 </div>
 
-Kernelet code contains no call to `cond_resched()`, because it cannot call Linux. On a kernel booted with `preempt=none`, a kernelet task that computes for a few seconds would hold its processor for those seconds, against every other task that wants it. The test kernel in `prototype/yield/src/lib.rs` does exactly that, and `make yield` runs it twice on such a kernel, once with the mechanism below turned off and once with it on, with a competing host process pinned to the same processor. Without it, the competitor stalls for the kernelet's whole computation, long enough for Linux's own stall detector to complain; with it, the competitor's progress reports never pause for as long as a second, which is what the test asserts.
+Kernelet code contains no call to `cond_resched()`, because it cannot call Linux. On a kernel booted with `preempt=none`, a kernelet task that computes for a few seconds would hold its processor for those seconds, against every other task that wants it. The test kernel in `prototype/kernels/yield/src/lib.rs` does exactly that, and `make yield` runs it twice on such a kernel, once with the mechanism below turned off and once with it on, with a competing host process pinned to the same processor. Without it, the competitor stalls for the kernelet's whole computation, long enough for Linux's own stall detector to complain; with it, the competitor's progress reports never pause for as long as a second, which is what the test asserts.
 
 The mechanism is the watch timer volunteering on the kernelet's behalf, and it has two forms. Usually the upcall of chapter 9 does it: on its way out, if Linux has set `need_resched` meanwhile, vOSTD calls `vcpu_yield`, which reschedules in Linux (how vOSTD notices is the mirror of Problem 2, below). When the upcall cannot be taken, because the interrupted task's stack has too little room left for the handlers, the timer points the interrupted frame at a **yield stub** in the endovisor instead, by the same means:
 
-*Simplified from `prototype/endovisor/watch.c`: `klet_watch_fn`.*
+*Simplified from `prototype/linux/endovisor/watch.c`: `klet_watch_fn`.*
 
 ```c
 	if (!klet_critical(c)) {
@@ -31,7 +31,7 @@ The mechanism is the watch timer volunteering on the kernelet's behalf, and it h
 
 The stub saves every register and the flags on the kernelet stack, as the upcall does, then hops to the Linux stack exactly like a service call and reschedules there:
 
-*Simplified from `prototype/endovisor/switch.S` and `prototype/endovisor/carrier.c`: `klet_yield_stub`, `klet_yield_body`, `klet_do_yield`.*
+*Simplified from `prototype/linux/endovisor/switch.S` and `prototype/linux/endovisor/carrier.c`: `klet_yield_stub`, `klet_yield_body`, `klet_do_yield`.*
 
 ```asm
 klet_yield_stub:
@@ -126,7 +126,7 @@ The effect is that Linux defers an involuntary preemption of a virtual CPU until
 
 **The mirror exists only while kernelet code runs.** A service may sleep, and Linux forbids sleeping with the preemption count raised. OSTD calls services under a guard all the time: every page-table cursor holds a preemption guard, and a `vm_map` under one may have Linux allocate memory. So every service stub, on its way to the Linux stack, takes out of Linux's count what the kernelet's guards added, and puts it back on return. It does not ask the kernelet how much that is: the endovisor recorded Linux's count when the carrier entered kernelet code, and the excess over that is the kernelet's.
 
-*Simplified from `prototype/endovisor/carrier.c`: `klet_mirror_in`, `klet_mirror_out`, `klet_svc_body`.*
+*Simplified from `prototype/linux/endovisor/carrier.c`: `klet_mirror_in`, `klet_mirror_out`, `klet_svc_body`.*
 
 ```c
 static void klet_mirror_in(struct klet_carrier *c)     /* on the way into kernelet code */
@@ -165,7 +165,7 @@ A kernelet in a critical section is therefore *not* in Linux's **atomic mode**, 
 
 The mirror lets a kernelet defer Linux's preemption, and "must not defer it for long" has to be enforced against a kernel proper whose logic the tenant may control. The watch timer fires in interrupt context whatever the count, and it enforces a bound of two of its own periods: when a tick finds a carrier in kernelet code in a critical section with `need_resched` set, it notes the time; if the next tick a millisecond later finds the same, it **forces** the yield, through the same stub, with one difference: the forced stub also takes the kernelet's increment out of Linux's count before it calls `schedule()`, and puts it back after, which the service prologue above already knows how to do.
 
-*Simplified from `prototype/endovisor/watch.c`: `klet_watch_fn`.*
+*Simplified from `prototype/linux/endovisor/watch.c`: `klet_watch_fn`.*
 
 ```c
 	/* a critical section, and Linux wants the processor */

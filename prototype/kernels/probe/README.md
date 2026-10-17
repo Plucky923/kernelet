@@ -31,7 +31,7 @@ The book uses it in chapter 4 (seccomp before the gate), chapter 7
 
 ## How it is built and run
 
-`make probe`: `KLET_KERNEL=probe`, the image, the module, `runtime/run-probe.c`
+`make probe`: `KLET_KERNEL=probe`, the image, the module, `host/runtime/run-probe.c`
 as the test, and two boots. The first is the probe, checked by
 `check-probe-log`. The second runs the same image and tenant with a seccomp
 filter, installed by the runtime before the exec, that kills the process on

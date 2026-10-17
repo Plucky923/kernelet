@@ -20,7 +20,7 @@ The other way to give a task a fresh address space is [`execve`](https://elixir.
 
 The endovisor registers a binary-format handler for files that begin with the four bytes `KLET`. A **sandbox file** is such a file: the magic, an ABI version, the number of virtual CPUs, and a command line for the kernel. The *kernelet runtime*, the host program that creates sandboxes, is in this prototype a tiny C program that forks a child, drops the child's ability to gain privileges, and executes the sandbox file:
 
-*Simplified from `prototype/runtime/run-hello.c`: `main`.*
+*Simplified from `prototype/host/runtime/run-hello.c`: `main`.*
 
 ```c
 pid = fork();
@@ -48,7 +48,7 @@ Everything the runtime set up on that child before the `execve`, such as its con
 
 The handler is where the child becomes the root carrier:
 
-*Simplified from `prototype/endovisor/main.c`: `klet_load_binary`, `klet_empty_mm`.*
+*Simplified from `prototype/linux/endovisor/main.c`: `klet_load_binary`, `klet_empty_mm`.*
 
 ```c
 static int klet_load_binary(struct linux_binprm *bprm)
@@ -84,7 +84,7 @@ The last line is the handoff. The root carrier returns from the handler and head
 
 ## The root carrier starts the others
 
-*Simplified from `prototype/endovisor/carrier.c`: `klet_root_loop`, `klet_spawn_vcpu`.*
+*Simplified from `prototype/linux/endovisor/carrier.c`: `klet_root_loop`, `klet_spawn_vcpu`.*
 
 ```c
 static void klet_root_loop(struct klet_carrier *root)
@@ -141,7 +141,7 @@ flowchart TB
 
 The child's start function builds the carrier's record and enters the kernelet:
 
-*Simplified from `prototype/endovisor/carrier.c`: `klet_carrier_main`.*
+*Simplified from `prototype/linux/endovisor/carrier.c`: `klet_carrier_main`.*
 
 ```c
 static int klet_carrier_main(void *arg)
@@ -189,7 +189,7 @@ A carrier can die without the endovisor's involvement: the operator kills it, or
 
 So each carrier holds, in its descriptor table, one open file of the endovisor's that nothing ever reads or writes: its **lifeline**. Its `release` is the death notice.
 
-*Simplified from `prototype/endovisor/carrier.c` and `prototype/endovisor/main.c`: `klet_carrier_attach`, `klet_lifeline_release`.*
+*Simplified from `prototype/linux/endovisor/carrier.c` and `prototype/linux/endovisor/main.c`: `klet_carrier_attach`, `klet_lifeline_release`.*
 
 ```c
 int klet_carrier_attach(struct klet_carrier *c)

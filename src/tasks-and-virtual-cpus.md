@@ -56,13 +56,13 @@ impl KernelStack {
 
 The context switch is OSTD's `switch.S`, byte for byte: save eight words (the stack pointer, six callee-saved registers and the return address), load eight, return on the other stack. It is the same idea as the endovisor's `klet_switch`, written on the Rust side, and it switches between two *kernelet* stacks, which is why the endovisor neither sees nor cares which of the kernelet's tasks is current. The endovisor remembers only where the kernelet was when it last left, and resumes there.
 
-The kernel proper chooses the policy. It implements OSTD's `Scheduler` trait, a run queue per CPU with `enqueue`, `pick_next` and `update_current`, and registers it with `inject_scheduler` before it creates any task; OSTD calls those functions without knowing the type, which is how a scheduler written for a bare-metal kernel runs unchanged in a kernelet. If the kernel proper registers none, OSTD's own first-in-first-out scheduler is used, which is what the hundred-line kernel gets. The test kernel in `prototype/sched/src/lib.rs` injects a strict-priority scheduler with round-robin inside each level, a policy that Linux's fair scheduler, under which every carrier runs, would never produce, and the test `make sched-policy` checks every one of its switches against a model of the policy.
+The kernel proper chooses the policy. It implements OSTD's `Scheduler` trait, a run queue per CPU with `enqueue`, `pick_next` and `update_current`, and registers it with `inject_scheduler` before it creates any task; OSTD calls those functions without knowing the type, which is how a scheduler written for a bare-metal kernel runs unchanged in a kernelet. If the kernel proper registers none, OSTD's own first-in-first-out scheduler is used, which is what the hundred-line kernel gets. The test kernel in `prototype/kernels/sched/src/lib.rs` injects a strict-priority scheduler with round-robin inside each level, a policy that Linux's fair scheduler, under which every carrier runs, would never produce, and the test `make sched-policy` checks every one of its switches against a model of the policy.
 
 ## The virtual CPU record
 
 A carrier and the kernelet need a small amount of shared state per virtual CPU, and they need the kernelet to find it fast, since "which CPU am I on" is on the hottest path a kernel has. The **virtual CPU record** is that state: a C-layout structure the endovisor owns and both sides write.
 
-*Simplified from `prototype/endovisor/kernelet.h`: `klet_vcpu_rec`.*
+*Simplified from `prototype/linux/endovisor/kernelet.h`: `klet_vcpu_rec`.*
 
 ```c
 struct klet_vcpu_rec {
@@ -112,7 +112,7 @@ A machine's processors are started at boot, halted when idle, and interrupted wh
 
 **Idling.** When a virtual CPU's run queue is empty, the kernelet must not spin: that would burn the sandbox's share of a real processor for nothing. It calls `vcpu_idle`, and the carrier sleeps in Linux until something is pending.
 
-*Simplified from `prototype/endovisor/carrier.c`: `klet_do_vcpu_idle`.*
+*Simplified from `prototype/linux/endovisor/carrier.c`: `klet_do_vcpu_idle`.*
 
 ```c
 static void klet_do_vcpu_idle(struct klet_carrier *c, u64 deadline_ns)
