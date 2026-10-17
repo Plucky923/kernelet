@@ -2,7 +2,7 @@
 
 A kernelet's user program runs in user mode on a real processor. When it executes `syscall`, the processor jumps into whatever the hardware's system-call entry register points at, and on a Linux machine that is Linux's entry code. Linux would then look the call number up in its own table and run `write`. Nothing in the hundred-line kernel would ever hear of it.
 
-So the first thing the design needs from Linux is a way to **hand a system call to a kernelet before Linux handles it**. Linux has no such interface, and this chapter adds one. It is the only change the design makes to Linux's own code, and it is small: a pointer in the task structure, one bit, two calls in the entry path, two helper functions and two exports. The patch is `prototype/linux/patches/0001-kernelet-gate.patch`, applied to Linux 6.12.
+So the first thing the design needs from Linux is a way to **hand a system call to a kernelet before Linux handles it**. The second, which the next section builds up to, is a way to **run kernelet code just before one of its tasks enters user mode**, whatever brought the task into the kernel. Linux has no such interface, and this chapter adds one that does both. It is the only change the design makes to Linux's own code, and it is small: a pointer in the task structure, one bit, two calls in the entry path, two helper functions and two exports. The patch is `prototype/linux/patches/0001-kernelet-gate.patch`, applied to Linux 6.12.
 
 ## The entry path
 
@@ -15,6 +15,14 @@ On x86-64 every system-call instruction, after a few lines of assembly and one a
 </div>
 
 The three interceptors are all controlled from user space, and none lets kernel code *answer* a call. The gate is a fourth stage that does.
+
+**Two hooks, one for each direction.** On the way in, the gate's hook answers the question the chapter opened with: the tenant made a system call, so give it to the kernelet. The hook on the way out is the one that is not obvious. A system call is the only reason a tenant *asks* for its kernel, but it is not the only reason the kernel must run before the tenant does. Three more appear in later chapters:
+
+- *A carrier has just been created* (chapter 5). It is a fresh Linux task heading for user mode, and nothing of the kernelet has run on it yet. The kernelet must boot, build the tenant's address space and choose the registers the task will enter user mode with, all before that first entry, and there has been no system call to hook.
+- *The tenant has faulted* (chapters 7 and 12). It executed an instruction it may not, or touched a page that is not mapped. Linux handles the exception and, as for every process, turns it into a signal to deliver on the way back to user mode. The kernelet must take that exception for itself before Linux delivers the signal.
+- *Someone else wants the kernelet* (chapter 9). A timer fired, or another virtual CPU has a task for this one, while the carrier is in user mode. It must be brought into the kernel and then into kernelet code before it continues.
+
+In every case the task is inside the kernel, on its way back to user mode, and someone has set a flag saying there is work to do before it gets there. Linux already has exactly that moment: the exit loop, which runs whenever a task with pending work is about to return to user mode. The way-out hook is placed at its top, and the job it gives the kernelet is the same every time: *the tenant is about to run; find out why you were called, and run kernelet code first if there is any to run.* It is named `resume` after the moment it runs at, which is Linux's word for a task resuming user mode (`TIF_NOTIFY_RESUME`, `resume_user_mode_work()`); what is resumed is the tenant's user mode, not anything of the kernelet's. The book calls it the resume hook.
 
 **On the way in:**
 
@@ -106,7 +114,7 @@ The hook, with Linux's own work for that flag placed before it:
 		}
 ```
 
-This runs whenever a task with pending work is about to return to user mode. Linux's own notify-resume work goes first because its first act is to clear the flag that requested it; run after the hook, it would clear a request the endovisor made from another processor while the hook was looking elsewhere, and the carrier would enter user mode with that request pending (chapter 9). It is what lets the kernelet run code at moments that are *not* a system call: when the task was just created, when an exception has been turned into a signal, when a timer wants the kernelet's attention. Placing it before signal delivery is what lets the kernelet take a tenant's exceptions away from Linux, as chapter 7 shows.
+This runs whenever a task with pending work is about to return to user mode. Linux's own notify-resume work goes first because its first act is to clear the flag that requested it; run after the hook, it would clear a request the endovisor made from another processor while the hook was looking elsewhere, and the carrier would enter user mode with that request pending (chapter 9). Placing it before signal delivery is what lets the kernelet take a tenant's exceptions away from Linux, as chapter 7 shows.
 
 **The gate is inherited.** Nothing in the patch copies the pointer into child tasks, and nothing needs to: Linux creates a task by copying the parent's whole `task_struct` ([`dup_task_struct()`](https://elixir.bootlin.com/linux/v6.12/source/kernel/fork.c#L1101)), the new field included, and the syscall-work bits are inherited the same way. A child of a kernelet's task is therefore attached to the gate before it executes its first instruction, and there is no moment at which it could make a system call that Linux would answer. This is the difference between a field Linux does not know about, which it copies, and a setting Linux knows about, such as Syscall User Dispatch, which it deliberately resets at `fork` and `exec`.
 
@@ -124,6 +132,6 @@ It adds no new system call, no boot parameter, and no change to Linux's schedule
 
 <div class="recap">
 
-**Recap.** The gate is two hooks in Linux's generic entry layer, selected by a pointer in `task_struct` and a syscall-work bit: `syscall` runs after seccomp and can answer the call so that Linux's table is skipped; `resume` runs on the way back to user mode, before signals are delivered. A child inherits the attachment because Linux copies the task structure. The rest of the patch is two helpers and two exports for later chapters.
+**Recap.** The gate is two hooks in Linux's generic entry layer, selected by a pointer in `task_struct` and a syscall-work bit: `syscall` runs after seccomp and can answer the call so that Linux's table is skipped; `resume` runs on the way back to user mode, before signals are delivered, and gives the kernelet the last word before the tenant runs, for everything that is not a system call: a carrier's first entry, a tenant's fault, a timer or another virtual CPU wanting it. A child inherits the attachment because Linux copies the task structure. The rest of the patch is two helpers and two exports for later chapters.
 
 </div>
