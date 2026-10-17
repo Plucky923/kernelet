@@ -13,8 +13,3 @@
 .content .linux { border-left: 4px solid #d99; padding: 0.4em 1em; margin: 1.2em 0; background: var(--quote-bg); }
 .content .linux p:first-child { margin-top: 0; }
 .content .linux p:last-child { margin-bottom: 0; }
-/* The class is rust-box, not rust: mdBook's own "Rust" color theme styles `.rust`, and a
-   div of that class would take the theme's light background under a dark page. */
-.content .rust-box { border-left: 4px solid #9d9; padding: 0.4em 1em; margin: 1.2em 0; background: var(--quote-bg); }
-.content .rust-box p:first-child { margin-top: 0; }
-.content .rust-box p:last-child { margin-bottom: 0; }

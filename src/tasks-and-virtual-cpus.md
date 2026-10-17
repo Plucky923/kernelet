@@ -56,7 +56,7 @@ impl KernelStack {
 
 The context switch is OSTD's `switch.S`, byte for byte: save eight words (the stack pointer, six callee-saved registers and the return address), load eight, return on the other stack. It is the same idea as the endovisor's `klet_switch`, written on the Rust side, and it switches between two *kernelet* stacks, which is why the endovisor neither sees nor cares which of the kernelet's tasks is current. The endovisor remembers only where the kernelet was when it last left, and resumes there.
 
-The kernel proper chooses the policy. It implements OSTD's `Scheduler` trait (chapter 3's box), a run queue per CPU with `enqueue`, `pick_next` and `update_current`, and registers it with `inject_scheduler` before it creates any task; OSTD calls those functions without knowing the type, which is how a scheduler written for a bare-metal kernel runs unchanged in a kernelet. If the kernel proper registers none, OSTD's own first-in-first-out scheduler is used, which is what the hundred-line kernel gets. The test kernel in `prototype/sched/src/lib.rs` injects a strict-priority scheduler with round-robin inside each level, a policy that Linux's fair scheduler, under which every carrier runs, would never produce, and the test `make sched-policy` checks every one of its switches against a model of the policy.
+The kernel proper chooses the policy. It implements OSTD's `Scheduler` trait, a run queue per CPU with `enqueue`, `pick_next` and `update_current`, and registers it with `inject_scheduler` before it creates any task; OSTD calls those functions without knowing the type, which is how a scheduler written for a bare-metal kernel runs unchanged in a kernelet. If the kernel proper registers none, OSTD's own first-in-first-out scheduler is used, which is what the hundred-line kernel gets. The test kernel in `prototype/sched/src/lib.rs` injects a strict-priority scheduler with round-robin inside each level, a policy that Linux's fair scheduler, under which every carrier runs, would never produce, and the test `make sched-policy` checks every one of its switches against a model of the policy.
 
 ## The virtual CPU record
 
@@ -132,11 +132,7 @@ The order of the first three lines is the one every Linux sleep uses so that no 
 
 **Kicking.** When the kernelet's scheduler puts a task on another virtual CPU's run queue, that virtual CPU should notice soon, as a machine would be told by an inter-processor interrupt. vOSTD calls `vcpu_kick(i)`, which sets a KICK bit in the target's record and does whichever of three things gets it seen: wakes the carrier if it is asleep in `vcpu_idle`, flags it if it is in user mode, or, if it is running kernelet code on another processor right now, sends that processor an interrupt that makes the kick be delivered at once instead of at the next tick (chapter 9).
 
-<div class="rust-box">
-
-**Rust: closures.** `|x, y| expr` is a closure: a function without a name, written where it is used, which may use the variables around it. A function that takes `f: F` where `F: FnMut(...)` accepts one, and calls it as `f(args)`; `f: impl FnMut(...)` in an argument's type says the same more briefly. `reschedule` below takes the scheduling decision as a closure, so that `yield_now`, `park_current` and the others share its loop and differ only in the decision.
-
-</div>
+`reschedule` below takes the scheduling decision as a closure, so that `yield_now`, `park_current` and the others share its loop and differ only in the decision.
 
 *Simplified from `prototype/vostd/src/task/scheduler/mod.rs`: `reschedule`, `set_need_preempt`.*
 

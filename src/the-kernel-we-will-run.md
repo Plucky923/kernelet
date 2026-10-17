@@ -34,12 +34,6 @@ It makes two system calls with the `syscall` instruction, using Linux's numbers:
 
 ## Piece 1: main
 
-<div class="rust-box">
-
-**Rust: three things in this excerpt.** `Arc<T>` is a reference-counted pointer to a `T` that several owners may share; it is freed when the last owner drops it. `let x = f();` declares a variable, and types are inferred, so they are rarely written. `#[ostd::main]` is an *attribute*, a marker the framework reads: it names the function that runs once the framework has set itself up, like `main` in C.
-
-</div>
-
 *Unchanged: `prototype/hello/src/lib.rs`.*
 
 ```rust
@@ -58,18 +52,6 @@ The program's bytes are compiled into the kernel with `include_bytes!`. `main` b
 **What it asks of the machine:** a notion of *current address space*, and a way to start a task.
 
 ## Piece 2: building the address space
-
-<div class="rust-box">
-
-**Rust: the small syntax, once.** `&T` is a reference to a `T`, a pointer the compiler has checked; `&mut T` is one that may change the `T`; `&[u8]` is a reference to a run of bytes with its length. A method written `fn f(&self)` takes a reference to the value it is called on, as `x.f()`. `*const T` and `*mut T` are raw pointers, C's pointers, which only `unsafe` code may dereference. `'static` on a reference says it lives for the whole program. `as` converts between numeric types and between pointers and integers. On integers `!x` is bitwise NOT, C's `~x`, so `addr & !(PAGE_SIZE - 1)` rounds down to a page. `x.store(v, Ordering::Relaxed)` and `x.load(...)` are atomic accesses, and the `Ordering` says what other memory accesses they order, as the C11 atomics do. An `asm!` block is inline assembly in Intel syntax, destination first; `in("rdi") x` puts `x` in a register before it runs, `out("rax") y` reads one afterwards, and `options(nostack)` and its siblings promise what the block does not touch; `inout("rcx") n => _` gives a register an input and says the block clobbers it. A name ending in `!`, such as `vec![...]`, `panic!(...)` or `include_bytes!(...)`, is a macro: code the compiler expands in place. `a..b` is the half-open range from `a` to `b`, `a..=b` includes `b`, and `.rev()` runs one backwards. `Vec<T>` is a growable array and `Box<T>` a pointer to one heap object, both freed by `Drop`. `f::<T>()` names the type a generic function should work with, and `x.downcast_ref::<T>()` asks a value of unknown type whether it is a `T`.
-
-</div>
-
-<div class="rust-box">
-
-**Rust: `Result`, `Option`, `match`, `?` and `drop`.** A function that can fail returns a `Result`, which is either `Ok(value)` or `Err(error)`. Calling `.unwrap()` on it takes the value and panics (stops the kernel with a message) if it was an error. The teaching kernel unwraps everything; a real kernel would handle the errors. An `Option<T>` is either `Some(value)` or `None`, a value that may be absent. `match x { A => …, B(v) => … }` is a `switch` over such alternatives that can also pull out the value a case carries; `if let Some(v) = x { … }` runs its block only when `x` is `Some`, and `let Some(v) = x else { … }` leaves through the `else` block otherwise. A trailing `?` on a `Result` or `Option` returns at once from the enclosing function if the value was `Err` or `None`, and otherwise unwraps it. `loop { … break v; }` is a loop whose `break` hands back a value, so a loop can be the right-hand side of a `let`. Every value has a *life*, which ends at the end of the block that holds it, and a type may say what happens then by implementing `Drop`: a function the compiler runs at that moment, a destructor. `drop(x)` ends the life of `x` now rather than later.
-
-</div>
 
 *Simplified from `prototype/hello/src/lib.rs`: `create_vm_space`.*
 

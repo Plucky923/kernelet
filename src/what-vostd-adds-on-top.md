@@ -67,7 +67,7 @@ impl Region {
 
 fn copy_regions(dst: &mut Region, src: &mut Region) -> (usize, bool) {
     while copied < total {
-        let done = rcu::read(|| {                                      // a closure, run inside a read section (below); a `?` in it returns from the closure
+        let done = rcu::read(|| {                                      // run inside a read section (below)
             let (dptr, dlen) = dst.resolve(true)?;
             let (sptr, slen) = src.resolve(false)?;
             let n = dlen.min(slen).min(total - copied);
@@ -90,12 +90,6 @@ The copy is one `rep movsb` in assembly rather than a Rust copy, and that is not
 ## Who holds the frame
 
 On a machine, OSTD's page table holds a counted reference on every mapped frame, and the kernel proper relies on the count: its copy-on-write path reuses a frame in place when the count is one. Here the *Linux entry* holds that reference. `map` turns the handle into a raw address after the service succeeds, so the reference passes to the entry only once the entry exists; `unmap` reads the entries back before the service clears them, and turns each address into a handle again, which is dropped.
-
-<div class="rust-box">
-
-**Rust: destructors, and forgetting.** A frame handle's `Drop` (chapter 2's box) decrements the frame's count, and frees the frame when the count reaches zero. `core::mem::forget(x)` ends the life of `x` *without* running its destructor, so the count stays as it was: that is how a reference is handed to something Rust cannot see, such as a page-table entry. `from_raw` is the reverse: it makes a handle out of an address without incrementing, taking the reference back; `Box::from_raw(p)` does the same for a heap object. `core::mem::take(&mut x)` moves the value out of `x` and leaves an empty one in its place; `x.take()` on an `Option` does the same and leaves `None`. `let _ = e` evaluates `e` and discards the result at once, destructor included, while a named `_guard` keeps its value alive to the end of the block.
-
-</div>
 
 *Simplified from `prototype/vostd/src/mm/vm_space.rs` and `prototype/vostd/src/mm/frame.rs`: `CursorMut::map`, `CursorMut::unmap`, `Frame::into_raw`, `Frame::from_raw`.*
 

@@ -44,14 +44,8 @@ Put that way it sounds reckless. Code in kernel mode can do anything: read any m
 
 Asterinas is a kernel written in Rust that runs the same programs Linux runs: it accepts Linux's system calls and executes Linux binaries. What matters here is not its compatibility but its shape. It is built as a *framekernel*, which means it is split into two layers with a hard rule between them.
 
-- **OSTD**, the *framework*, is small. It is the only part of the kernel allowed to use Rust's `unsafe`, the keyword that permits raw memory access and machine instructions. OSTD wraps the machine, meaning page tables, tasks, interrupts, entry to user mode, in an interface that cannot be misused to corrupt memory.
+- **OSTD**, the *framework*, is small. It is the only part of the kernel allowed to use Rust's `unsafe`. OSTD wraps the machine, meaning page tables, tasks, interrupts, entry to user mode, in an interface that cannot be misused to corrupt memory.
 - **The kernel proper** is everything else: system calls, file systems, the network stack, process and memory management. It is written entirely in *safe* Rust against OSTD's interface.
-
-<div class="rust-box">
-
-**Rust: what "safe" promises.** Rust programs are checked by the compiler for memory safety: a safe program cannot read freed memory, write past the end of an array, or turn an integer into a pointer and follow it. The escape hatch is the keyword `unsafe`, which marks a block in which the programmer takes that responsibility back. A crate (Rust's word for a library or program) can forbid the keyword outright with the attribute `#![deny(unsafe_code)]` at its top and no `#[allow(unsafe_code)]` inside (`deny` can be overridden that way, `forbid` cannot), and then the compiler guarantees that nothing in it can corrupt memory, however wrong its logic is.
-
-</div>
 
 So the kernel proper can do only what OSTD's interface lets it do. It cannot forge a pointer to another tenant's memory, because safe Rust has no way to express that. It cannot execute a privileged instruction, because none of OSTD's functions do that for it. It can still have bugs, and a hostile tenant will look for them, but a bug in safe Rust can produce a wrong answer, never a corrupted page table.
 

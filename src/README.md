@@ -8,19 +8,13 @@ By the end you will know how every part of that prototype works, down to the C a
 
 ## Who this is for
 
-You have taken one course on operating systems. You know what a process is, what virtual memory and a page table are, what a system call does, and what an interrupt and a context switch are, in the abstract. You can read C. You have not read the Linux source, and you do not know Rust.
+You have taken one course on operating systems. You know what a process is, what virtual memory and a page table are, what a system call does, and what an interrupt and a context switch are, in the abstract. You can read C, and you know Rust fairly well. You have not read the Linux source.
 
-Everything beyond that is explained the first time it is needed, in boxes like these:
+Everything beyond that is explained the first time it is needed, in a box like this:
 
 <div class="linux">
 
 **Linux.** A box like this explains a Linux mechanism that the chapter is about to use: what it is, what it is called in the source, and why the design cares.
-
-</div>
-
-<div class="rust-box">
-
-**Rust.** A box like this explains a Rust construct the next code excerpt relies on, and nothing more than that.
 
 </div>
 
