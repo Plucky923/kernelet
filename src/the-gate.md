@@ -20,23 +20,23 @@ The three interceptors are all controlled from user space, and none lets kernel 
 
 ```mermaid
 flowchart TB
-    u[user program executes syscall] --> e[entry assembly saves pt_regs]
-    e --> w{syscall work bits set?}
-    w -- no --> t[Linux's system-call table]
-    w -- yes --> s[syscall_trace_enter: dispatch, ptrace, seccomp]
-    s --> g{"the gate: the KERNELET work bit?"}
+    u["user program<br/>executes syscall"] --> e["entry assembly<br/>saves pt_regs"]
+    e --> w{"any syscall<br/>work bit set?"}
+    w -- no --> t["Linux's<br/>system-call table"]
+    w -- yes --> s["syscall_trace_enter:<br/>dispatch, ptrace, seccomp"]
+    s --> g{"the gate:<br/>the KERNELET bit?"}
     g -- no --> t
-    g -- "yes, but ops->syscall(regs) returned false" --> t
-    g -- "yes, and it returned true" --> x[the table is skipped]
+    g -- "yes, but<br/>ops->syscall(regs)<br/>returned false" --> t
+    g -- "yes, and<br/>it returned true" --> x["the table<br/>is skipped"]
 ```
 
 **On the way out:**
 
 ```mermaid
 flowchart TB
-    p{"work pending? (a signal, a flag, a reschedule)"} -- no --> back[restore pt_regs, return to user mode]
+    p{"work pending?<br/>(a signal, a flag,<br/>a reschedule)"} -- no --> back["restore pt_regs,<br/>return to user mode"]
     p -- yes --> loop[exit_to_user_mode_loop]
-    loop --> r{"the gate: current->kernelet?"}
+    loop --> r{"the gate:<br/>current->kernelet?"}
     r -- yes --> h["ops->resume(regs)"]
     h --> sig[signals, reschedule]
     r -- no --> sig
