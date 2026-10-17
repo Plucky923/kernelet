@@ -83,7 +83,7 @@ pub struct EntryTable {
 }
 ```
 
-<div class="rust">
+<div class="rust-box">
 
 **Rust: C-shaped structs and function pointers.** `#[repr(C)]` lays a struct out in memory exactly as C would, so a C program can read it. `unsafe extern "C" fn(...)` is a pointer to a function with the C calling convention; calling one is `unsafe`, because the compiler cannot check what is on the other side. vOSTD is the only crate in the image allowed to write `unsafe`, so only vOSTD can call a service.
 
@@ -134,7 +134,7 @@ static int klet_grant_alloc(struct klet_inst *inst)
 
 vOSTD's frame allocator runs over the grant exactly as OSTD's runs over a machine's RAM: a bitmap with one bit per 4 KiB frame, a first-fit search for `n` contiguous free frames, and a reference count per frame (the count matters in chapter 13). When the kernel proper's `FrameAllocOptions` asks for a segment, this is what answers.
 
-<div class="rust">
+<div class="rust-box">
 
 **Rust: loop labels.** A label such as `'outer:` before a loop names it, so that `continue 'outer` or `break 'outer` inside a nested loop applies to the outer one; the apostrophe is the one lifetimes use, but a label always precedes a loop.
 
@@ -177,7 +177,7 @@ This is how the hundred-line kernel's `segment.write_bytes(0, program)` lands in
 
 Three of the services need no more than a sentence each, and the hundred-line kernel uses all three.
 
-<div class="rust">
+<div class="rust-box">
 
 **Rust: traits.** A trait is an interface: a list of functions a type must provide. `impl GlobalAlloc for HostHeap` says that the type `HostHeap` provides the two functions the `GlobalAlloc` trait names, and the attribute `#[global_allocator]` tells Rust to use it for every heap allocation. A function written `fn f<T: SomeTrait>(x: &T)` accepts any type that provides the trait's functions. Implementing a trait is `unsafe` when the trait's contract is one the compiler cannot check, as an allocator's is.
 

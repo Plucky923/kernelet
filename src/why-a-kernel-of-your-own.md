@@ -47,7 +47,7 @@ Asterinas is a kernel written in Rust that runs the same programs Linux runs: it
 - **OSTD**, the *framework*, is small. It is the only part of the kernel allowed to use Rust's `unsafe`, the keyword that permits raw memory access and machine instructions. OSTD wraps the machine, meaning page tables, tasks, interrupts, entry to user mode, in an interface that cannot be misused to corrupt memory.
 - **The kernel proper** is everything else: system calls, file systems, the network stack, process and memory management. It is written entirely in *safe* Rust against OSTD's interface.
 
-<div class="rust">
+<div class="rust-box">
 
 **Rust: what "safe" promises.** Rust programs are checked by the compiler for memory safety: a safe program cannot read freed memory, write past the end of an array, or turn an integer into a pointer and follow it. The escape hatch is the keyword `unsafe`, which marks a block in which the programmer takes that responsibility back. A crate (Rust's word for a library or program) can forbid the keyword outright with the attribute `#![deny(unsafe_code)]` at its top and no `#[allow(unsafe_code)]` inside (`deny` can be overridden that way, `forbid` cannot), and then the compiler guarantees that nothing in it can corrupt memory, however wrong its logic is.
 

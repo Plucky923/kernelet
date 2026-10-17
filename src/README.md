@@ -18,7 +18,7 @@ Everything beyond that is explained the first time it is needed, in boxes like t
 
 </div>
 
-<div class="rust">
+<div class="rust-box">
 
 **Rust.** A box like this explains a Rust construct the next code excerpt relies on, and nothing more than that.
 

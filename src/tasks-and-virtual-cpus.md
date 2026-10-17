@@ -132,7 +132,7 @@ The order of the first three lines is the one every Linux sleep uses so that no 
 
 **Kicking.** When the kernelet's scheduler puts a task on another virtual CPU's run queue, that virtual CPU should notice soon, as a machine would be told by an inter-processor interrupt. vOSTD calls `vcpu_kick(i)`, which sets a KICK bit in the target's record and does whichever of three things gets it seen: wakes the carrier if it is asleep in `vcpu_idle`, flags it if it is in user mode, or, if it is running kernelet code on another processor right now, sends that processor an interrupt that makes the kick be delivered at once instead of at the next tick (chapter 9).
 
-<div class="rust">
+<div class="rust-box">
 
 **Rust: closures.** `|x, y| expr` is a closure: a function without a name, written where it is used, which may use the variables around it. A function that takes `f: F` where `F: FnMut(...)` accepts one, and calls it as `f(args)`; `f: impl FnMut(...)` in an argument's type says the same more briefly. `reschedule` below takes the scheduling decision as a closure, so that `yield_now`, `park_current` and the others share its loop and differ only in the decision.
 
