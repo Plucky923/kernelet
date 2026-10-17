@@ -27,19 +27,19 @@ Signed-off-by: kernelet-in-Linux prototype <none@example.com>
 +
 +struct kernelet_gate_ops {
 +	/*
-+	 * A system call was issued by a carrier's user mode.  Returns true if
++	 * A system call was issued by a tenant's user mode.  Returns true if
 +	 * the kernelet serviced it, in which case Linux's own dispatch is
 +	 * skipped entirely.
 +	 */
-+	bool (*syscall)(struct pt_regs *regs);
++	bool (*on_syscall)(struct pt_regs *regs);
 +
 +	/*
-+	 * Called on the way out to user mode while any exit work is pending.
-+	 * This is where kernelet code runs when it is not entered by a system
-+	 * call: the root carrier's service loop, a pending exception, the
-+	 * first entry of a freshly cloned carrier.
++	 * Called just before Linux resumes a tenant's user mode, while any
++	 * exit work is pending.  The kernelet takes the opportunity to run
++	 * what must run before the tenant does: the root carrier's service
++	 * loop, a pending exception, a cloned carrier's first entry.
 +	 */
-+	void (*resume)(struct pt_regs *regs);
++	void (*on_resume)(struct pt_regs *regs);
 +};
 +
 +struct kernelet_gate {
@@ -148,7 +148,7 @@ Signed-off-by: kernelet-in-Linux prototype <none@example.com>
 +	 * call never becomes a Linux system call at all.
 +	 */
 +	if (work & SYSCALL_WORK_KERNELET) {
-+		if (current->kernelet->ops->syscall(regs))
++		if (current->kernelet->ops->on_syscall(regs))
 +			return -1L;
 +	}
 +#endif
@@ -180,7 +180,7 @@ Signed-off-by: kernelet-in-Linux prototype <none@example.com>
 +				resume_user_mode_work(regs);
 +				ti_work &= ~_TIF_NOTIFY_RESUME;
 +			}
-+			current->kernelet->ops->resume(regs);
++			current->kernelet->ops->on_resume(regs);
 +		}
 +#endif
 +

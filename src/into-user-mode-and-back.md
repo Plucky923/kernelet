@@ -134,7 +134,7 @@ sequenceDiagram
     participant E as endovisor
     participant K as kernelet
     U->>L: syscall
-    L->>E: ops->syscall(regs)
+    L->>E: ops->on_syscall(regs)
     E->>E: pt_regs -> ctx
     E->>K: klet_enter
     Note over K: user_run returns 0

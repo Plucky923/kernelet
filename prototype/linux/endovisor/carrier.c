@@ -1451,8 +1451,8 @@ static void klet_gate_resume(struct pt_regs *regs)
 }
 
 const struct kernelet_gate_ops klet_gate_ops = {
-	.syscall = klet_gate_syscall,
-	.resume = klet_gate_resume,
+	.on_syscall = klet_gate_syscall,
+	.on_resume = klet_gate_resume,
 };
 
 /* ------------------------------------------------------------------ */
