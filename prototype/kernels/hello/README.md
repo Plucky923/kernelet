@@ -9,7 +9,7 @@ prototype rests on, and the build checks it: `make kernel-proper-check`, run
 before every `make hello`, `cmp`s `src/lib.rs` and `hello.S` against
 `upstream/`.
 
-The book walks through this kernel and the OSTD API it uses in chapter 2 (the
+The book walks through this kernel and the OSTD API it uses in chapter 3 (the
 kernel we will run); the rest of the book is what it takes for this file to
 run on Linux.
 

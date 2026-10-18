@@ -108,7 +108,7 @@ Everything OSTD keeps per CPU, such as the scheduler's run-queue locks and the t
 
 A machine's processors are started at boot, halted when idle, and interrupted when another processor wants their attention. A virtual CPU does the same three things through three services.
 
-**Starting.** The carrier of virtual CPU 0 enters the image at `kernelet_entry`. The others wait in their start function (chapter 5) until the kernel proper, as it would on a machine, registers an entry function for the secondary processors with `register_ap_entry`. vOSTD then calls `vcpu_boot(i)` for each, the endovisor wakes the waiting carrier, and it enters the image at `vcpu_entry`, runs the registered function, and falls into the idle loop below.
+**Starting.** The carrier of virtual CPU 0 enters the image at `kernelet_entry`. The others wait in their start function (chapter 6) until the kernel proper, as it would on a machine, registers an entry function for the secondary processors with `register_ap_entry`. vOSTD then calls `vcpu_boot(i)` for each, the endovisor wakes the waiting carrier, and it enters the image at `vcpu_entry`, runs the registered function, and falls into the idle loop below.
 
 **Idling.** When a virtual CPU's run queue is empty, the kernelet must not spin: that would burn the sandbox's share of a real processor for nothing. It calls `vcpu_idle`, and the carrier sleeps in Linux until something is pending.
 

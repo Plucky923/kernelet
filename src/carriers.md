@@ -1,6 +1,8 @@
 # Carriers
 
-Chapter 4 attached two hooks to a Linux task. This chapter is about those tasks: where they come from, what they inherit, and how the endovisor learns when one dies.
+Chapter 5 attached two hooks to a Linux task. This chapter is about those tasks: where they come from, what they inherit, and how the endovisor learns when one dies.
+
+The prototype's runtime does not yet use the interface of chapter 2. It starts a sandbox with one file and one `execve`, and a *root carrier* clones the others inside the kernel. This chapter describes the prototype as it is, and is revised with it.
 
 A **carrier** is a Linux task that belongs to a sandbox. Linux schedules carriers like any tasks; it does not know what they carry. A sandbox has a fixed number of carriers, chosen when it is created: one **root carrier**, which holds the sandbox together and never runs kernelet code, and one carrier per **virtual CPU**, which runs the kernelet's code and enters user mode on the kernelet's behalf; a virtual CPU is one of the processors the kernelet believes it has. Chapter 9 says what a virtual CPU is in full; for now, a sandbox with one virtual CPU, like the hundred-line kernel's, has a root carrier and one other.
 
@@ -42,7 +44,7 @@ Everything the runtime set up on that child before the `execve`, such as its con
 
 <div class="linux">
 
-**Linux: `TIF_NOTIFY_RESUME`.** Linux enters the exit loop of chapter 4, and so runs the resume hook, only if the task has a work flag set (chapter 4's box). So the hook runs for every kind of exit work, not only the kernelet's, and must be written to find nothing of its own to do. Kernel code that wants the loop to run sets the flag [`TIF_NOTIFY_RESUME`](https://elixir.bootlin.com/linux/v6.12/source/arch/x86/include/asm/thread_info.h#L87) on the task: a plain flag-set on the current task, or `set_notify_resume()` on another, which also nudges the processor that task is on. The book says the endovisor *flags the carrier* when it means this.
+**Linux: `TIF_NOTIFY_RESUME`.** Linux enters the exit loop of chapter 5, and so runs the resume hook, only if the task has a work flag set (chapter 5's box). So the hook runs for every kind of exit work, not only the kernelet's, and must be written to find nothing of its own to do. Kernel code that wants the loop to run sets the flag [`TIF_NOTIFY_RESUME`](https://elixir.bootlin.com/linux/v6.12/source/arch/x86/include/asm/thread_info.h#L87) on the task: a plain flag-set on the current task, or `set_notify_resume()` on another, which also nudges the processor that task is on. The book says the endovisor *flags the carrier* when it means this.
 
 </div>
 
@@ -175,7 +177,7 @@ static int klet_carrier_main(void *arg)
 }
 ```
 
-`klet_enter` is the subject of the next chapter. For virtual CPU 0 it leads to `kernelet_entry` from chapter 3, and so to the kernel proper's `main`. The carrier returns from `klet_enter` only when the kernelet has asked to run a user program, and then the function returns, Linux's fork-return path takes the task to user mode, and the resume hook, requested by the flag, puts the right registers in place first.
+`klet_enter` is the subject of the next chapter. For virtual CPU 0 it leads to `kernelet_entry` from chapter 4, and so to the kernel proper's `main`. The carrier returns from `klet_enter` only when the kernelet has asked to run a user program, and then the function returns, Linux's fork-return path takes the task to user mode, and the resume hook, requested by the flag, puts the right registers in place first.
 
 ## Lifelines
 

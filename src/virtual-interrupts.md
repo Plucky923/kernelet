@@ -79,7 +79,7 @@ static enum hrtimer_restart klet_watch_fn(struct hrtimer *timer)
 }
 ```
 
-`klet_virq_raise` sets the bit and does the two cheap things that get it noticed: wakes the carrier if it is asleep in `vcpu_idle`, and flags it (chapter 5) if it is in user mode, so that it comes back through the resume hook, `user_run` returns 2, and `execute`'s loop runs the handler before it re-enters user mode. A flag set while the hook is already running is not lost either: the patch runs Linux's own notify-resume work, which clears the flag, *before* the hook (chapter 4), so the exit loop finds the new request on its next look and runs the hook again.
+`klet_virq_raise` sets the bit and does the two cheap things that get it noticed: wakes the carrier if it is asleep in `vcpu_idle`, and flags it (chapter 6) if it is in user mode, so that it comes back through the resume hook, `user_run` returns 2, and `execute`'s loop runs the handler before it re-enters user mode. A flag set while the hook is already running is not lost either: the patch runs Linux's own notify-resume work, which clears the flag, *before* the hook (chapter 5), so the exit loop finds the new request on its next look and runs the hook again.
 
 The interesting case is the middle one: the carrier is executing kernelet code, at an arbitrary instruction, and is not in a critical section. A machine would push the interrupted instruction pointer and jump to the handler. The endovisor does the same, by changing one saved register:
 

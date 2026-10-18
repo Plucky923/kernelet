@@ -14,7 +14,7 @@ A service call is an indirect function call plus two stack switches (chapter 7).
 | the same through the service stub, both stack switches included | 39 |
 | a 64-byte heap allocation and its free, `mem_alloc` and `mem_free` together | 411 |
 
-So the stack switches cost about ten cycles a call, a few nanoseconds; the two figures move by several cycles from boot to boot, and their difference with them. The heap pair, timed by vOSTD with interrupts on in seven rounds of 1,000 pairs, the cheapest kept, is two crossings, Linux's `kmalloc` and `kfree`, and the endovisor's table of blocks (chapter 3), which costs some tens of those cycles: without the table, in one boot, the pair took 328.
+So the stack switches cost about ten cycles a call, a few nanoseconds; the two figures move by several cycles from boot to boot, and their difference with them. The heap pair, timed by vOSTD with interrupts on in seven rounds of 1,000 pairs, the cheapest kept, is two crossings, Linux's `kmalloc` and `kfree`, and the endovisor's table of blocks (chapter 4), which costs some tens of those cycles: without the table, in one boot, the pair took 328.
 
 ## Tasks
 

@@ -21,13 +21,13 @@ each layer and the chapter of the book that explains it:
 ```text
   tenant program       kernels/hello/hello.S, probe.S, ...        user mode
  ------------------------------------------------------------------------------
-  kernel proper        kernels/hello/src/lib.rs (never edited),   ch. 2
+  kernel proper        kernels/hello/src/lib.rs (never edited),   ch. 3
                        kernels/probe/ yield/ sched/ mem/
-  vOSTD                vostd/  (with libs/, two Asterinas crates) ch. 3, 9, 10, 11, 14
+  vOSTD                vostd/  (with libs/, two Asterinas crates) ch. 4, 9, 10, 11, 14
  ----------- the image ABI: services, entry table, boot arguments, ------------
-             vCPU records   vostd/src/abi.rs = linux/endovisor/kernelet.h  ch. 3
-  endovisor            linux/endovisor/  (kernelet.ko)            ch. 3, 5-13
-  the carrier hooks    linux/patches/0001-carrier-hooks.patch     ch. 4
+             vCPU records   vostd/src/abi.rs = linux/endovisor/kernelet.h  ch. 4
+  endovisor            linux/endovisor/  (kernelet.ko)            ch. 4, 6-13
+  the carrier hooks    linux/patches/0001-carrier-hooks.patch     ch. 5
   Linux 6.12           .build/linux-6.12, configured by linux/config.fragment
  ------------------------------------------------------------------------------
   kernelet runtime     host/runtime/run-*.c                       user mode on the host

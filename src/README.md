@@ -31,11 +31,11 @@ The code is in the `prototype/` directory of this repository. Every code excerpt
 The book follows the order in which a kernelet comes to life, so each chapter uses only what the ones before it have built.
 
 1. **Why a kernel of your own** says what a kernelet is and why it can be safe.
-2. **The kernel we will run** reads the hundred-line kernel that runs throughout the book, and lists what it needs from a machine.
-3. **What a kernelet is made of** is the shape of the thing: the image, the framework beneath the kernel, and the table of functions through which it talks to Linux.
-4. **Carrier hooks and patch overview** adds the two hooks through which a tenant's system calls reach its kernelet, and lists the rest of the one small patch to Linux.
-5. **Carriers** are the Linux tasks on which a kernelet runs.
-6. **The kernelet UAPI** is what a program on the host may ask of a kernel that runs kernelets, and how user space creates the carriers.
+2. **The kernelet UAPI** is what a program on the host may ask of a kernel that runs kernelets: the image as a file, the device node and its descriptors, and how user space creates the carriers.
+3. **The kernel we will run** reads the hundred-line kernel that runs throughout the book, and lists what it needs from a machine.
+4. **The kernelet ABI** is how a kernelet talks to its host from the inside: the three tables, the grant, and the first services.
+5. **Carrier hooks and patch overview** adds the two hooks through which a tenant's system calls reach its kernelet, and lists the rest of the one small patch to Linux.
+6. **Carriers** are the Linux tasks on which a kernelet runs.
 7. **Two stacks** is how a kernelet keeps its own stacks on a Linux task.
 8. **Into user mode and back** is the round trip of a system call, after which the hundred-line kernel prints its greeting.
 9. **Tasks and virtual CPUs** gives the kernelet its own tasks and its own scheduler.

@@ -25,7 +25,7 @@ prototype against the same API, that drives:
    so that the only way the host gets that processor back is to evict the
    kernelet when the runtime kills the sandbox.
 
-The book uses it in chapter 4 (seccomp before the syscall hook), chapter 8
+The book uses it in chapter 5 (seccomp before the syscall hook), chapter 8
 (exceptions), chapter 12 (stopping a kernelet: kill and eviction) and chapter
 13 (faults on tenant memory).
 

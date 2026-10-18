@@ -1,37 +1,6 @@
-# What a kernelet is made of
+# The kernelet ABI
 
-The previous chapter was the view from above the framework: a kernel that allocates frames, maps pages and enters user mode. This chapter is the view from below. It says what a kernelet is as a thing in memory, how it is built, and how it talks to the host. Nothing in it runs yet; it is the shape that the next chapters fill in.
-
-## Three layers and one file
-
-A kernelet is three layers of code compiled into one file.
-
-1. **The kernel proper**, the hundred-line kernel of the last chapter: safe Rust, never edited.
-2. **vOSTD**, a Rust crate whose library name is `ostd`, so that the kernel proper's `use ostd::...` lines resolve to it. It offers every type and function the kernel proper uses, with the same names and signatures as the real OSTD. It is in `prototype/vostd/`.
-3. **The image ABI** (an *application binary interface* is the exact layout of what two separately compiled pieces of code pass each other), a few C-layout structures that both vOSTD and the endovisor know: what the host tells the kernelet at start, which functions the kernelet may call, and which functions the host may call. It is in `prototype/vostd/src/abi.rs` on the Rust side and `prototype/linux/endovisor/kernelet.h` on the C side, and the two must agree byte for byte.
-
-The build compiles the kernel proper and vOSTD together into one static library, links it with `ld -r` into a single relocatable object, `image.o`, and checks two things about that object: that it has **no undefined symbols**, and that its *relocations*, the places in the code that the loader must patch with final addresses, are of kinds Linux's module loader accepts. Then it links `image.o` into the endovisor's kernel module, `kernelet.ko`, together with the endovisor's own C files.
-
-```mermaid
-flowchart TB
-    hello["kernels/hello/src/lib.rs<br/>(kernel proper, safe Rust)"] --> cargo
-    vostd["vostd/<br/>(the framework, Rust)"] --> cargo
-    cargo["cargo build<br/>one static library"] --> ld["ld -r<br/>image.o"]
-    ld --> check{"nm -u image.o empty?<br/>relocations of accepted kinds?"}
-    check -- yes --> kbuild["kbuild<br/>kernelet.ko"]
-    endo["linux/endovisor/*.c<br/>(the endovisor, C)"] --> kbuild
-    kbuild --> insmod["insmod kernelet.ko"]
-```
-
-"No undefined symbols" is the whole security story of the build, so it deserves a sentence. A symbol is undefined in an object when the code calls a function the object does not contain; the linker fills it in later. An image with none cannot call anything outside itself. It *calls* Linux in exactly one way: through a table of function pointers the endovisor hands it when it starts. That is the service table, and the kernelet cannot call what is not in it, because it cannot name anything else. (It also reads two words of Linux's and writes one, at offsets the endovisor publishes, for reasons chapters 9 and 11 give; those are the whole of its contact with Linux's own variables. It shares small records with the endovisor, one per virtual CPU and one per address space (chapters 9 and 14), and it reads the tenant's page tables through Linux's direct map (chapter 14); every one of those is memory the endovisor chose to show it.)
-
-In this prototype the image is linked statically into the module, so there is one kernelet per module load. A full endovisor would load images at run time, sharing one copy of the code among many kernelets; the prototype's shortcut changes nothing below this chapter.
-
-<div class="linux">
-
-**Linux: modules and exported symbols.** A kernel module is code loaded into the running kernel with `insmod`. It may call only kernel functions that the kernel marks as **exported** (`EXPORT_SYMBOL` in the source); the rest are private to the kernel even though they are in the same address space. The endovisor is a module. A few functions it needs are not exported in a stock kernel, which is one of the two reasons for the patch in the next chapter.
-
-</div>
+The previous chapter was the view from above the framework: a kernel that allocates frames, maps pages and enters user mode. This chapter is the view from below. Chapter 3 said what an image is, three layers in one file, and named the third of them, the image ABI, without opening it. This chapter opens it: what the host tells a kernelet at start, what the kernelet may call, and what the host calls, down to the three structures that say so. Nothing in it runs yet; it is the shape that the next chapters fill in.
 
 ## The three tables
 
@@ -102,6 +71,8 @@ pub static kernelet_entry_table: EntryTable = EntryTable {
 ```
 
 The endovisor checks `abi_version` against its own when the module loads, and refuses to load if the two halves were built from different ABIs.
+
+In this prototype the image is linked statically into the endovisor's module, so there is one kernelet per module load; registering kinds, as chapter 3 describes, is what a full endovisor does instead, and the shortcut changes nothing below this chapter.
 
 ## The grant and the direct map
 
@@ -216,6 +187,6 @@ What remains unexplained is where `kernelet_entry` is *called from*: on which Li
 
 <div class="recap">
 
-**Recap.** A kernelet is one object file holding the kernel proper and vOSTD, with no undefined symbols, linked into the endovisor's module. It talks to the host through three C-layout tables: boot arguments in, a service table of function pointers out, and an entry table the host calls. Its memory is a grant of 4 MiB whose frames it reaches through Linux's direct map, its heap is `kmalloc` behind a service, and its console is `printk`. The endovisor starts it by calling `kernelet_entry`, which ends in the kernel proper's `main`.
+**Recap.** A kernelet talks to the host through three C-layout tables: boot arguments in, a service table of function pointers out, and an entry table the host calls. Its memory is a grant of 4 MiB whose frames it reaches through Linux's direct map, its heap is `kmalloc` behind a service, and its console is `printk`. The endovisor starts it by calling `kernelet_entry`, which ends in the kernel proper's `main`.
 
 </div>

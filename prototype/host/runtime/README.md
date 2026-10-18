@@ -21,7 +21,7 @@ A `.klet` file is the sandbox's configuration, written by the Makefile's
 `stage-*` targets: the magic `KLET`, a version (2), the number of virtual CPUs,
 and a command line that the kernel proper reads as its kernel command line.
 
-The book explains creating a sandbox and the root carrier in chapter 5
+The book explains creating a sandbox and the root carrier in chapter 6
 (carriers); the runtimes' measurements of native Linux appear in chapter 15.
 
 ## How they are built

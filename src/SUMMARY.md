@@ -3,11 +3,11 @@
 [How to read this book](README.md)
 
 - [Why a kernel of your own](why-a-kernel-of-your-own.md)
+- [The kernelet UAPI](the-kernelet-uapi.md)
 - [The kernel we will run](the-kernel-we-will-run.md)
-- [What a kernelet is made of](what-a-kernelet-is-made-of.md)
+- [The kernelet ABI](the-kernelet-abi.md)
 - [Carrier hooks and patch overview](carrier-hooks.md)
 - [Carriers](carriers.md)
-- [The kernelet UAPI](the-kernelet-uapi.md)
 - [Two stacks](two-stacks.md)
 - [Into user mode and back](into-user-mode-and-back.md)
 - [Tasks and virtual CPUs](tasks-and-virtual-cpus.md)

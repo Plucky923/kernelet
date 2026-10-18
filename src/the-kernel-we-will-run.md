@@ -189,13 +189,13 @@ Here is everything the hundred-line kernel needs, with what OSTD does on a machi
 
 | the kernel uses | on a machine, OSTD | inside Linux, vOSTD must |
 |---|---|---|
-| `FrameAllocOptions`, `Segment` | allocates from the machine's RAM | allocate from a grant of memory Linux hands it (chapter 3) |
+| `FrameAllocOptions`, `Segment` | allocates from the machine's RAM | allocate from a grant of memory Linux hands it (chapter 4) |
 | `VmSpace::new`, `cursor_mut`, `map` | writes a hardware page table the processor walks | ask Linux to put the page in a Linux page table (chapter 13) |
 | `VmSpace::activate` | loads the page-table register | remember which address space this virtual CPU is in, and switch the carrier to it (chapter 13) |
 | `TaskOptions`, `Task::run`, `disable_preempt` | its own tasks, stacks and scheduler | the same code, on stacks Linux lends it (chapters 7 and 9) |
-| `UserMode::execute` | the processor's instruction for entering user mode, and its trap handlers | a Linux task that enters user mode on the kernelet's behalf, with a patch to Linux that routes the system call back (chapters 4 to 8) |
+| `UserMode::execute` | the processor's instruction for entering user mode, and its trap handlers | a Linux task that enters user mode on the kernelet's behalf, with a patch to Linux that routes the system call back (chapters 5 to 8) |
 | `VmSpace::reader`, `read_fallible` | reads the user address, with a fault handler as the safety net | walk the page table itself and copy through the kernel's own map of memory (chapter 14) |
-| `println!`, `poweroff` | the serial port; the power controller | two calls into the host (chapter 3) |
+| `println!`, `poweroff` | the serial port; the power controller | two calls into the host (chapter 4) |
 
 <div class="recap">
 

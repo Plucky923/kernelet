@@ -27,7 +27,7 @@ fn execute<T: UserModeHooks>(&mut self, hooks: &T) -> ReturnReason {
 }
 ```
 
-So `user_run` returns `0` for a system call, `1` for an exception and `2` for "an event happened; the kernel may want to know, then call me again". The third case is for chapter 10. The context it is given is a `RawUserContext`: the eighteen registers of chapter 2, in a fixed order, followed by three fields for exceptions.
+So `user_run` returns `0` for a system call, `1` for an exception and `2` for "an event happened; the kernel may want to know, then call me again". The third case is for chapter 10. The context it is given is a `RawUserContext`: the eighteen registers of chapter 3, in a fixed order, followed by three fields for exceptions.
 
 On the endovisor's side, `user_run` is the one service that does not use the stub of the last chapter. It records the context, switches to the Linux stack, and does not come back until a hook brings the carrier into the kernelet again:
 
@@ -51,7 +51,7 @@ static u64 klet_svc_user_run(struct klet_user_ctx *ctx)
 }
 ```
 
-The switch lands inside the `klet_enter` that last entered the kernelet on this carrier, which returns into its caller. On the very first trip that caller is `klet_carrier_main`, the carrier's start function from chapter 5, which returns into Linux's fork-return path. On every later trip it is one of the two hooks.
+The switch lands inside the `klet_enter` that last entered the kernelet on this carrier, which returns into its caller. On the very first trip that caller is `klet_carrier_main`, the carrier's start function from chapter 6, which returns into Linux's fork-return path. On every later trip it is one of the two hooks.
 
 ## Putting the registers where Linux will find them
 
@@ -198,7 +198,7 @@ A fault signal is recognized by its number and its `si_code` together. The numbe
 
 The root carrier is the exception for `SIGSTOP`, and drops it with the rest. It never returns to user mode, so a stop could never act on it; and `kernel_clone` refuses to run while its caller has a signal pending, so a `SIGSTOP` left in the root's queue would make every clone it attempts fail.
 
-Most signals never reach the queue at all, and that is arranged earlier. The binary-format handler of chapter 5 sets every signal but `SIGKILL` and `SIGSTOP`, which cannot be, to be *ignored*, and clears the signal mask; the clones inherit both, since `fork` copies the parent's dispositions. An ignored signal is discarded the moment it is sent, so an operator's `SIGTERM`, `SIGQUIT` or `SIGTSTP` to a carrier does nothing. The drain alone would not do, for two reasons. A signal whose default action is to end the task without a core dump, `SIGTERM`, `SIGINT`, `SIGPIPE` and their kind, is fatal at the moment it is sent: the sender sees that nothing will catch it and turns it into a `SIGKILL` on the spot ([`complete_signal()`](https://elixir.bootlin.com/linux/v6.12/source/kernel/signal.c#L994)), before any drain. And the drain runs at the top of one pass of the exit loop, while Linux delivers signals later in the same pass if one was pending when the pass began, so a `SIGQUIT` that arrived between the two would dump core and end the carrier. The fault signals are ignored too, and still arrive: Linux sends a fault with `force_sig_info_to_task()`, which first sets an ignored signal back to its default action, so the signal is queued and the drain sees it. The drain then ignores it again, so that the next fault is forced the same way and a `SIGSEGV` a process sends in between is discarded.
+Most signals never reach the queue at all, and that is arranged earlier. The binary-format handler of chapter 6 sets every signal but `SIGKILL` and `SIGSTOP`, which cannot be, to be *ignored*, and clears the signal mask; the clones inherit both, since `fork` copies the parent's dispositions. An ignored signal is discarded the moment it is sent, so an operator's `SIGTERM`, `SIGQUIT` or `SIGTSTP` to a carrier does nothing. The drain alone would not do, for two reasons. A signal whose default action is to end the task without a core dump, `SIGTERM`, `SIGINT`, `SIGPIPE` and their kind, is fatal at the moment it is sent: the sender sees that nothing will catch it and turns it into a `SIGKILL` on the spot ([`complete_signal()`](https://elixir.bootlin.com/linux/v6.12/source/kernel/signal.c#L994)), before any drain. And the drain runs at the top of one pass of the exit loop, while Linux delivers signals later in the same pass if one was pending when the pass began, so a `SIGQUIT` that arrived between the two would dump core and end the carrier. The fault signals are ignored too, and still arrive: Linux sends a fault with `force_sig_info_to_task()`, which first sets an ignored signal back to its default action, so the signal is queued and the drain sees it. The drain then ignores it again, so that the next fault is forced the same way and a `SIGSEGV` a process sends in between is discarded.
 
 The resume hook brings the exception into the kernelet:
 
@@ -209,7 +209,7 @@ static void klet_on_resume(struct pt_regs *regs)
 {
 	struct klet_carrier *c = klet_current_carrier();
 
-	if (c->kind == KLET_ROOT) { klet_root_loop(c); return; }   /* chapter 5 */
+	if (c->kind == KLET_ROOT) { klet_root_loop(c); return; }   /* chapter 6 */
 
 	for (;;) {
 		if (c->state == KLET_DEAD || c->inst->stopped || c->inst->dying) {
@@ -261,7 +261,7 @@ Page faults on tenant memory take a shorter path through the endovisor's own fau
 
 ## Hello, world
 
-With chapters 3 to 8 built, `make hello` boots Linux in QEMU, loads the module, runs the runtime, and this appears in the serial log (one line of Linux's own about an out-of-tree module, and eight lines of counters at unload, are left out):
+With chapters 4 to 8 built, `make hello` boots Linux in QEMU, loads the module, runs the runtime, and this appears in the serial log (one line of Linux's own about an out-of-tree module, and eight lines of counters at unload, are left out):
 
 ```
 INIT: loading kernelet.ko
@@ -293,7 +293,7 @@ kernelet: endovisor unloaded
 INIT: done
 ```
 
-Line by line: the endovisor publishes the offsets by which vOSTD will find its way around Linux (chapter 9); the root carrier is made by the handler (chapter 5); it clones the carrier of virtual CPU 0, which enters the image (chapter 3) and, before anything else, times a heap allocation and its free and then, at its first log line, a service call that does nothing (chapter 15); the kernel proper creates its address space (chapter 13); the program's `write` arrives by the syscall hook and the kernel proper prints the message through `log_write`, followed by the message's own newline as an empty line; its `exit` becomes the `stop` service (chapter 12); both carriers die and their lifelines close, and the last release returns what the kernelet held, the stack the stopping carrier was still standing on included (chapter 12); the module's reference count reaches zero and it unloads. The build checks that the log contains the greeting, the exit code, a clean unload, and no Linux error report.
+Line by line: the endovisor publishes the offsets by which vOSTD will find its way around Linux (chapter 9); the root carrier is made by the handler (chapter 6); it clones the carrier of virtual CPU 0, which enters the image (chapter 4) and, before anything else, times a heap allocation and its free and then, at its first log line, a service call that does nothing (chapter 15); the kernel proper creates its address space (chapter 13); the program's `write` arrives by the syscall hook and the kernel proper prints the message through `log_write`, followed by the message's own newline as an empty line; its `exit` becomes the `stop` service (chapter 12); both carriers die and their lifelines close, and the last release returns what the kernelet held, the stack the stopping carrier was still standing on included (chapter 12); the module's reference count reaches zero and it unloads. The build checks that the log contains the greeting, the exit code, a clean unload, and no Linux error report.
 
 <div class="recap">
 

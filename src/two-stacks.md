@@ -1,6 +1,6 @@
 # Two stacks
 
-Chapter 2 ended on a picture: the kernel proper's handler for a user program is a loop inside a function, and its local variables live on a kernel stack across every trip to user mode. This chapter is about why Linux cannot give a carrier such a stack, and how the endovisor gives it one anyway.
+Chapter 3 ended on a picture: the kernel proper's handler for a user program is a loop inside a function, and its local variables live on a kernel stack across every trip to user mode. This chapter is about why Linux cannot give a carrier such a stack, and how the endovisor gives it one anyway.
 
 ## Two kernels, two opinions about the stack
 
@@ -91,7 +91,7 @@ static void klet_coro_prepare(struct klet_carrier *c)
 }
 ```
 
-The trampoline moves the carrier pointer from `r12` into the first-argument register and calls `klet_coro_main`, which for virtual CPU 0 is the call to `kernelet_entry` from chapter 3. So the first `klet_switch` into a new stack lands in the kernelet's entry point, on a stack the kernelet owns.
+The trampoline moves the carrier pointer from `r12` into the first-argument register and calls `klet_coro_main`, which for virtual CPU 0 is the call to `kernelet_entry` from chapter 4. So the first `klet_switch` into a new stack lands in the kernelet's entry point, on a stack the kernelet owns.
 
 The endovisor wraps the switch in two functions, one for each direction:
 
@@ -118,7 +118,7 @@ static void klet_leave(struct klet_carrier *c, enum klet_state state)
 }
 ```
 
-Where does `klet_enter` get called? From exactly three places: the carrier's start function (chapter 5), the syscall hook, and the resume hook (chapter 8). Each of those is a frame on the Linux stack, and `klet_switch` parks that frame until the kernelet leaves.
+Where does `klet_enter` get called? From exactly three places: the carrier's start function (chapter 6), the syscall hook, and the resume hook (chapter 8). Each of those is a frame on the Linux stack, and `klet_switch` parks that frame until the kernelet leaves.
 
 ## Where the stacks come from
 
@@ -145,7 +145,7 @@ u64 klet_kstack_alloc(struct klet_inst *inst)
 	if (inst->kstack_made >= KLET_MAX_KSTACKS)          /* the pool is bounded: 512 stacks, 128 MiB */
 		return 0;                                       /* vOSTD turns 0 into an out-of-memory error */
 	inst->kstack_made++;
-	base = __vmalloc(KLET_STACK_SIZE, GFP_KERNEL_ACCOUNT);   /* else grow the pool; charged to the sandbox (chapter 5) */
+	base = __vmalloc(KLET_STACK_SIZE, GFP_KERNEL_ACCOUNT);   /* else grow the pool; charged to the sandbox (chapter 6) */
 	k = kzalloc(sizeof(*k), GFP_KERNEL);
 	k->base = base; k->busy = true;
 	list_add_tail(&k->link, &inst->kstack_all);
