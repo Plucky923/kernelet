@@ -8,7 +8,7 @@ Signed-off-by: kernelet-in-Linux prototype <none@example.com>
 ---
 --- /dev/null
 +++ b/include/linux/kernelet.h
-@@ -0,0 +1,55 @@
+@@ -0,0 +1,68 @@
 +/* SPDX-License-Identifier: GPL-2.0 */
 +/*
 + * The kernelet gate: the two places where a Linux task that carries a
@@ -27,17 +27,30 @@ Signed-off-by: kernelet-in-Linux prototype <none@example.com>
 +
 +struct kernelet_gate_ops {
 +	/*
-+	 * A system call was issued by a tenant's user mode.  Returns true if
-+	 * the kernelet serviced it, in which case Linux's own dispatch is
-+	 * skipped entirely.
++	 * Called from syscall_trace_enter(), after seccomp, for a system call
++	 * issued by a carrier's user mode; regs hold the number and the
++	 * arguments.  Returns true if the kernelet serviced the call: regs
++	 * then hold what the task returns to user mode with, return value
++	 * included, and Linux's own dispatch is skipped entirely.  Returns
++	 * false to let Linux dispatch the call as for any other task.
 +	 */
 +	bool (*on_syscall)(struct pt_regs *regs);
 +
 +	/*
-+	 * Called just before Linux resumes a tenant's user mode, while any
-+	 * exit work is pending.  The kernelet takes the opportunity to run
-+	 * what must run before the tenant does: the root carrier's service
-+	 * loop, a pending exception, a cloned carrier's first entry.
++	 * Called from exit_to_user_mode_loop(), after the TIF_NOTIFY_RESUME
++	 * work and before signals are delivered, whenever a carrier is about
++	 * to return to user mode with exit work pending: for a reason of the
++	 * kernelet's own (a carrier's first entry, a tenant's fault, a
++	 * virtual interrupt) or for one of Linux's (a reschedule, a signal).
++	 * No reason is passed, and several may be pending at once: whoever
++	 * requested the call recorded why in the endovisor's record for the
++	 * task, and the hook reads it there.  The loop may call it more than
++	 * once on one return.
++	 *
++	 * Runs in process context with no lock held; it may sleep, and may
++	 * run kernelet code for as long as it likes.  It may rewrite regs,
++	 * which are what the task returns to user mode with, and must leave
++	 * them alone when it has nothing to do.
 +	 */
 +	void (*on_resume)(struct pt_regs *regs);
 +};

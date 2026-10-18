@@ -4,7 +4,7 @@ A kernelet's user program runs in user mode on a real processor. When it execute
 
 So the design needs a way to **hand a system call to a kernelet before Linux handles it**. It also needs, for reasons this chapter builds up to, a way to **run kernelet code just before one of its tasks enters user mode**, whatever brought the task into the kernel. Linux has no such interface. This chapter adds one that does both, the **gate**: two hooks in Linux's entry path.
 
-The gate is the only change the design makes to Linux's own code, and it is small: a pointer in the task structure, one bit, two calls in the entry path, two helper functions and two exports. The patch is `prototype/linux/patches/0001-kernelet-gate.patch`, applied to Linux 6.12.
+A **gate** is what the patch lets a Linux task carry: a record, pointed to by a new field of the task structure, that names a table of two hooks. Linux's entry path calls the hooks at the two points every crossing between a task's user mode and the kernel passes through: when the task's user mode makes a system call, and just before the task returns to user mode. Whoever holds a task's gate thus sees every crossing, in and out, and runs first at each; that is what the word means here. The record, the table and the hooks all belong to the endovisor. It implements the one table of hooks, attaches a gate to every carrier it creates (chapter 5), and finds its own state for the carrier from the record whenever a hook is called. Linux itself only defines the types, `struct kernelet_gate` and `struct kernelet_gate_ops`, and makes the two calls; a task whose pointer is null, which is every ordinary task, never reaches either.
 
 ## Where Linux can be hooked
 
@@ -62,11 +62,28 @@ flowchart TB
 ```c
 /* include/linux/kernelet.h (new) */
 struct kernelet_gate_ops {
-	/* A system call was issued by a tenant's user mode. Returns true
-	 * if the kernelet serviced it; Linux's own dispatch is then skipped. */
+	/* Called from syscall_trace_enter(), after seccomp, for a system call
+	 * issued by a carrier's user mode; regs hold the number and the
+	 * arguments. Returns true if the kernelet serviced the call: regs then
+	 * hold what the task returns to user mode with, return value included,
+	 * and Linux's own dispatch is skipped. Returns false to let Linux
+	 * dispatch the call as for any other task. */
 	bool (*on_syscall)(struct pt_regs *regs);
-	/* Called just before Linux resumes a tenant's user mode.
-	 * The kernelet can take this opportunity to do useful work. */
+
+	/* Called from exit_to_user_mode_loop(), after the TIF_NOTIFY_RESUME
+	 * work and before signals are delivered, whenever a carrier is about
+	 * to return to user mode with exit work pending: for a reason of the
+	 * kernelet's own (a carrier's first entry, a tenant's fault, a virtual
+	 * interrupt) or for one of Linux's (a reschedule, a signal). No reason
+	 * is passed, and several may be pending at once: whoever requested the
+	 * call recorded why in the endovisor's record for the task, and the
+	 * hook reads it there. The loop may call it more than once on one
+	 * return.
+	 *
+	 * Runs in process context with no lock held; it may sleep, and may run
+	 * kernelet code for as long as it likes. It may rewrite regs, which are
+	 * what the task returns to user mode with, and must leave them alone
+	 * when it has nothing to do. */
 	void (*on_resume)(struct pt_regs *regs);
 };
 

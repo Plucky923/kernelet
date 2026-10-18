@@ -26,7 +26,7 @@ needs; everything else is the endovisor module. It adds, behind
   flush of `vm_flush`;
 - the Kconfig entry, which selects `PREEMPT_NOTIFIERS` (`init/Kconfig`).
 
-It adds 210 lines (188 of them not blank) and removes none, counted with
+It adds 223 lines (201 of them not blank) and removes none, counted with
 `git apply --numstat`.
 
 The book explains the patch in chapter 4 (the gate), `kernel_clone` in
