@@ -23,7 +23,7 @@ flowchart TB
     kbuild --> insmod["insmod kernelet.ko"]
 ```
 
-"No undefined symbols" is the whole security story of the build, so it deserves a sentence. A symbol is undefined in an object when the code calls a function the object does not contain; the linker fills it in later. An image with none cannot call anything outside itself. It *calls* Linux in exactly one way: through a table of function pointers the endovisor hands it when it starts. That is the service table, and the kernelet cannot call what is not in it, because it cannot name anything else. (It also reads two words of Linux's and writes one, at offsets the endovisor publishes, for reasons chapters 8 and 10 give; those are the whole of its contact with Linux's own variables. It shares small records with the endovisor, one per virtual CPU and one per address space (chapters 8 and 13), and it reads the tenant's page tables through Linux's direct map (chapter 13); every one of those is memory the endovisor chose to show it.)
+"No undefined symbols" is the whole security story of the build, so it deserves a sentence. A symbol is undefined in an object when the code calls a function the object does not contain; the linker fills it in later. An image with none cannot call anything outside itself. It *calls* Linux in exactly one way: through a table of function pointers the endovisor hands it when it starts. That is the service table, and the kernelet cannot call what is not in it, because it cannot name anything else. (It also reads two words of Linux's and writes one, at offsets the endovisor publishes, for reasons chapters 9 and 11 give; those are the whole of its contact with Linux's own variables. It shares small records with the endovisor, one per virtual CPU and one per address space (chapters 9 and 14), and it reads the tenant's page tables through Linux's direct map (chapter 14); every one of those is memory the endovisor chose to show it.)
 
 In this prototype the image is linked statically into the module, so there is one kernelet per module load. A full endovisor would load images at run time, sharing one copy of the code among many kernelets; the prototype's shortcut changes nothing below this chapter.
 
@@ -85,7 +85,7 @@ pub struct EntryTable {
 
 vOSTD is the only crate in the image allowed to write `unsafe`, so only vOSTD can call a service.
 
-Two rules shape every service. Arguments are integers or pointers into the kernelet's own memory: a space number, a virtual address, a physical address, a buffer to log. The one exception is `mem_free`, whose pointer is into host memory that `mem_alloc` returned, below; the endovisor checks it against a table of the blocks it handed out, kept where the kernelet cannot reach, reads the block's number below the pointer with a read that tolerates a fault, and refuses what it does not recognize (a stale pointer to a block that was freed and handed out again at the same address is the one case it cannot tell apart). And the host writes into the kernelet only through the two pointers vOSTD hands it for that purpose, the context of chapter 7 and the floating-point area of chapter 8, and keeps no other. Both keep a buggy vOSTD from steering the endovisor into writing wherever the kernelet says.
+Two rules shape every service. Arguments are integers or pointers into the kernelet's own memory: a space number, a virtual address, a physical address, a buffer to log. The one exception is `mem_free`, whose pointer is into host memory that `mem_alloc` returned, below; the endovisor checks it against a table of the blocks it handed out, kept where the kernelet cannot reach, reads the block's number below the pointer with a read that tolerates a fault, and refuses what it does not recognize (a stale pointer to a block that was freed and handed out again at the same address is the one case it cannot tell apart). And the host writes into the kernelet only through the two pointers vOSTD hands it for that purpose, the context of chapter 8 and the floating-point area of chapter 9, and keeps no other. Both keep a buggy vOSTD from steering the endovisor into writing wherever the kernelet says.
 
 The image's one exported symbol is the entry table:
 
@@ -124,11 +124,11 @@ static int klet_grant_alloc(struct klet_inst *inst)
 
 <div class="linux">
 
-**Linux: the direct map.** Linux maps *all* of physical memory, in order, into one region of the kernel's address space, called the direct map or linear map. Turning a physical address into a pointer the kernel can dereference is therefore one addition: `__va(paddr)` is `paddr + base`. `kmalloc` and the page allocator hand out direct-map memory, so for them a kernel pointer and a physical address are two names for the same bytes; `vmalloc`, which chapter 6 uses, is the exception, because it maps scattered pages into a separate region. The line `__va(0)` above is simply the base.
+**Linux: the direct map.** Linux maps *all* of physical memory, in order, into one region of the kernel's address space, called the direct map or linear map. Turning a physical address into a pointer the kernel can dereference is therefore one addition: `__va(paddr)` is `paddr + base`. `kmalloc` and the page allocator hand out direct-map memory, so for them a kernel pointer and a physical address are two names for the same bytes; `vmalloc`, which chapter 7 uses, is the exception, because it maps scattered pages into a separate region. The line `__va(0)` above is simply the base.
 
 </div>
 
-vOSTD's frame allocator runs over the grant exactly as OSTD's runs over a machine's RAM: a bitmap with one bit per 4 KiB frame, a first-fit search for `n` contiguous free frames, and a reference count per frame (the count matters in chapter 13). When the kernel proper's `FrameAllocOptions` asks for a segment, this is what answers.
+vOSTD's frame allocator runs over the grant exactly as OSTD's runs over a machine's RAM: a bitmap with one bit per 4 KiB frame, a first-fit search for `n` contiguous free frames, and a reference count per frame (the count matters in chapter 14). When the kernel proper's `FrameAllocOptions` asks for a segment, this is what answers.
 
 *Simplified from `prototype/vostd/src/mm/frame.rs`: `alloc`, `FrameAllocOptions`.*
 
@@ -189,7 +189,7 @@ static HEAP: HostHeap = HostHeap;
 
 **The console.** `println!` collects a line and hands it to `log_write`, which the endovisor prints with `printk`, prefixed `kernelet:`. That is why every line the kernelet prints appears in the serial log beside Linux's own messages.
 
-**Power-off.** `poweroff` is the service `stop`, which never returns. What the endovisor does with it is chapter 11.
+**Power-off.** `poweroff` is the service `stop`, which never returns. What the endovisor does with it is chapter 12.
 
 ## How the kernelet starts
 

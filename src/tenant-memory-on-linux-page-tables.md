@@ -18,7 +18,7 @@ flowchart TB
     v -- "service calls:<br/>vm_map · vm_unmap · vm_protect · vm_flush" --> e["endovisor, inside the service:<br/>check the frame against the grant,<br/>then call Linux"]
     e -- "vmf_insert_pfn_prot · zap_vma_ptes ·<br/>apply_to_page_range · flush_tlb_mm_range" --> pt["the tenant process's Linux page table<br/>(the only one)"]
     u["tenant program, user mode"] -- "the processor walks it" --> pt
-    v -. "reads it through the direct map (chapter 13)" .-> pt
+    v -. "reads it through the direct map (chapter 14)" .-> pt
 ```
 
 That is a stronger position than the one a kernel has on a machine, where a bug in the framework could map any frame into a tenant. Here, no translation reaches the hardware without trusted host code having checked the frame.
@@ -83,7 +83,7 @@ Three choices in this code each close a hole.
 
 ## The address-space switch
 
-Two of the lines above call `kernelet_switch_mm()`, the first of the patch's two helpers, and both hooks call it, through `klet_space_adopt` below, before they apply the registers on a trip to user mode in which the virtual CPU has activated a different process than the carrier is in (chapter 8). A carrier is born with an empty address space of its own; to run a tenant thread it must run in *that process's* space.
+Two of the lines above call `kernelet_switch_mm()`, the first of the patch's two helpers, and both hooks call it, through `klet_space_adopt` below, before they apply the registers on a trip to user mode in which the virtual CPU has activated a different process than the carrier is in (chapter 9). A carrier is born with an empty address space of its own; to run a tenant thread it must run in *that process's* space.
 
 <div class="linux">
 
@@ -160,7 +160,7 @@ Everything the kernel proper's cursor does to a space is one of four services. E
 static int klet_prot_to_pgprot(u32 prot, pgprot_t *out)
 {
 	unsigned long vm_flags = VM_SHARED | VM_READ;
-	if (!(prot & KLET_PROT_READ)) return -KLET_INVALID;     /* a page without read permission has no entry: chapter 13 */
+	if (!(prot & KLET_PROT_READ)) return -KLET_INVALID;     /* a page without read permission has no entry: chapter 14 */
 	if (prot & KLET_PROT_WRITE) vm_flags |= VM_WRITE;
 	if (prot & KLET_PROT_EXEC)  vm_flags |= VM_EXEC;
 	*out = vm_get_page_prot(vm_flags);                         /* Linux's own idea of a user page with these rights */
@@ -192,7 +192,7 @@ s64 klet_do_vm_map(struct klet_carrier *c, u64 id, u64 va, u64 paddr, u32 prot)
 }
 ```
 
-`vmf_insert_pfn_prot()` may sleep, when a page-table page must be allocated; chapter 13 says why that is allowed although the kernel proper calls `map` under a preemption guard.
+`vmf_insert_pfn_prot()` may sleep, when a page-table page must be allocated; chapter 14 says why that is allowed although the kernel proper calls `map` under a preemption guard.
 
 **`vm_unmap(space, va, len)`** clips the range to the area and calls `zap_vma_ptes()`, which clears every present entry and **flushes the TLB** before it returns, through Linux's own gather-and-finish. It reports no count; the number of pages that were mapped is vOSTD's own, from a walk it makes before the call.
 
@@ -217,7 +217,7 @@ static int klet_pte_protect(pte_t *pte, unsigned long addr, void *data)
 
 **`vm_flush(space, va, len)`** is [`flush_tlb_mm_range()`](https://elixir.bootlin.com/linux/v6.12/source/arch/x86/mm/tlb.c#L995) over the range, or over the whole space, on every processor where the address space is loaded, which `switch_mm_irqs_off()` keeps track of. It is not exported in a stock kernel, which is why the patch exports it. It never sleeps, and so may be called while the kernel proper still holds a cursor.
 
-Two more services complete the set: `vm_activate(space)` only records the space in the virtual CPU's record, where the hooks of chapter 7 find it, and never sleeps, because a full kernel proper, such as Asterinas's, calls `activate` from the handler it runs right after a task switch, with interrupts off, and vOSTD must allow for that; and `vm_destroy(space)` clears the whole area, waits for calls in flight, and drops the endovisor's reference on the address space.
+Two more services complete the set: `vm_activate(space)` only records the space in the virtual CPU's record, where the hooks of chapter 8 find it, and never sleeps, because a full kernel proper, such as Asterinas's, calls `activate` from the handler it runs right after a task switch, with interrupts off, and vOSTD must allow for that; and `vm_destroy(space)` clears the whole area, waits for calls in flight, and drops the endovisor's reference on the address space.
 
 ## Faults
 
@@ -243,7 +243,7 @@ static vm_fault_t klet_space_report(struct vm_fault *vmf, bool mkwrite)
 }
 ```
 
-The handler cannot run the kernel proper where it stands, inside Linux's fault path with Linux's lock held. So it records the fault, flags the carrier, and tells Linux the fault is handled. Linux heads back to user mode to retry the instruction, passes through the exit loop, and the resume hook of chapter 7 enters the kernelet with `user_run` returning an exception. The kernel proper's own fault handler runs as a normal task, free to sleep, maps the page with its ordinary cursor, which is a `vm_map`, and calls `execute` again. The retried instruction finds the entry where the processor looks and does not fault a second time.
+The handler cannot run the kernel proper where it stands, inside Linux's fault path with Linux's lock held. So it records the fault, flags the carrier, and tells Linux the fault is handled. Linux heads back to user mode to retry the instruction, passes through the exit loop, and the resume hook of chapter 8 enters the kernelet with `user_run` returning an exception. The kernel proper's own fault handler runs as a normal task, free to sleep, maps the page with its ordinary cursor, which is a `vm_map`, and calls `execute` again. The retried instruction finds the entry where the processor looks and does not fault a second time.
 
 ```mermaid
 sequenceDiagram
@@ -264,7 +264,7 @@ sequenceDiagram
     L->>U: retry, no fault
 ```
 
-One case never reaches the handler. An instruction fetch from a *present* entry marked no-execute raises `SIGSEGV` inside Linux directly (short of protection keys, which the design never sets, a present x86-64 entry cannot forbid a read), and the resume hook turns that signal into an exception as it does for any other (chapter 7). A write to a present read-only entry reaches the handler only because the area supplies `pfn_mkwrite`; without it, Linux would make the entry writable on its own authority.
+One case never reaches the handler. An instruction fetch from a *present* entry marked no-execute raises `SIGSEGV` inside Linux directly (short of protection keys, which the design never sets, a present x86-64 entry cannot forbid a read), and the resume hook turns that signal into an exception as it does for any other (chapter 8). A write to a present read-only entry reaches the handler only because the area supplies `pfn_mkwrite`; without it, Linux would make the entry writable on its own authority.
 
 The rule that a kernel-mode access is answered with an error and never reported deserves a sentence. Linux itself sometimes reads a task's user memory from kernel mode, for instance on a 32-bit system-call entry. A handler that reported such a fault and waited for the return to user mode would wait forever, since the access is not in user mode; failing it cleanly lets Linux's own error handling turn it into `-EFAULT`, which that code is written to expect.
 
@@ -274,12 +274,12 @@ The rule that a kernel-mode access is answered with an error and never reported 
 |---|---|---|
 | `VmSpace::new()` | `vm_create` | an address space, a file, the area; publishes the table's root |
 | `cursor.map(frame, prop)` | `vm_map`; the frame's reference passes to the entry | grant check, `vmf_insert_pfn_prot()` |
-| `cursor.unmap(len)` | reads the entries first (chapter 13); `vm_unmap` | `zap_vma_ptes()`, which flushes |
+| `cursor.unmap(len)` | reads the entries first (chapter 14); `vm_unmap` | `zap_vma_ptes()`, which flushes |
 | `cursor.protect_next(len, op)` | `vm_protect` for the one page, if the bits changed | `apply_to_page_range()` with `pte_modify()`; no flush |
 | `flusher.dispatch_tlb_flush()` | `vm_flush` per range | `flush_tlb_mm_range()` |
 | `vm_space.activate()` | `vm_activate` | records it; the carrier adopts the space at the next `user_run` |
 | a tenant page fault | nothing until `user_run` returns | `fault` or `pfn_mkwrite` records and returns |
-| the space is dropped | `vm_destroy`, later (chapter 13) | zap everything, drop the reference |
+| the space is dropped | `vm_destroy`, later (chapter 14) | zap everything, drop the reference |
 
 `make probe` shows the fault path: the probe kernel maps only its program's text, the program stores to an unmapped address, and the log shows one Linux fault, the kernel proper's handler mapping a fresh frame, and the program reading its data back. `make mem-func` runs the tests of the next chapter over all four edits.
 

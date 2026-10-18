@@ -23,10 +23,10 @@ each layer and the chapter of the book that explains it:
  ------------------------------------------------------------------------------
   kernel proper        kernels/hello/src/lib.rs (never edited),   ch. 2
                        kernels/probe/ yield/ sched/ mem/
-  vOSTD                vostd/  (with libs/, two Asterinas crates) ch. 3, 8, 9, 10, 13
+  vOSTD                vostd/  (with libs/, two Asterinas crates) ch. 3, 9, 10, 11, 14
  ----------- the image ABI: services, entry table, boot arguments, ------------
              vCPU records   vostd/src/abi.rs = linux/endovisor/kernelet.h  ch. 3
-  endovisor            linux/endovisor/  (kernelet.ko)            ch. 3, 5-12
+  endovisor            linux/endovisor/  (kernelet.ko)            ch. 3, 5-13
   the carrier hooks    linux/patches/0001-carrier-hooks.patch     ch. 4
   Linux 6.12           .build/linux-6.12, configured by linux/config.fragment
  ------------------------------------------------------------------------------

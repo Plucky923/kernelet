@@ -22,7 +22,7 @@ A `.klet` file is the sandbox's configuration, written by the Makefile's
 and a command line that the kernel proper reads as its kernel command line.
 
 The book explains creating a sandbox and the root carrier in chapter 5
-(carriers); the runtimes' measurements of native Linux appear in chapter 14.
+(carriers); the runtimes' measurements of native Linux appear in chapter 15.
 
 ## How they are built
 

@@ -30,7 +30,7 @@ It adds 219 lines (198 of them not blank) and removes none, counted with
 `git apply --numstat`.
 
 The book explains the patch in chapter 4 (carrier hooks), `kernel_clone` in
-chapter 5 (carriers), and the two address-space helpers in chapter 12.
+chapter 5 (carriers), and the two address-space helpers in chapter 13.
 
 ## How it is applied
 

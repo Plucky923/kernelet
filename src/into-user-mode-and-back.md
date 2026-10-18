@@ -27,7 +27,7 @@ fn execute<T: UserModeHooks>(&mut self, hooks: &T) -> ReturnReason {
 }
 ```
 
-So `user_run` returns `0` for a system call, `1` for an exception and `2` for "an event happened; the kernel may want to know, then call me again". The third case is for chapter 9. The context it is given is a `RawUserContext`: the eighteen registers of chapter 2, in a fixed order, followed by three fields for exceptions.
+So `user_run` returns `0` for a system call, `1` for an exception and `2` for "an event happened; the kernel may want to know, then call me again". The third case is for chapter 10. The context it is given is a `RawUserContext`: the eighteen registers of chapter 2, in a fixed order, followed by three fields for exceptions.
 
 On the endovisor's side, `user_run` is the one service that does not use the stub of the last chapter. It records the context, switches to the Linux stack, and does not come back until a hook brings the carrier into the kernelet again:
 
@@ -40,12 +40,12 @@ static u64 klet_svc_user_run(struct klet_user_ctx *ctx)
 
 	c->ctx = ctx;                               /* where the registers are, and where to put them later */
 	WRITE_ONCE(c->state, KLET_USER);            /* "in, or on the way to, user mode" */
-	smp_mb();                                   /* the state is published before the pending word is read: chapter 9 */
-	if (atomic_read(&c->vrec.pending)) {        /* a virtual interrupt arrived meanwhile: chapter 9 */
+	smp_mb();                                   /* the state is published before the pending word is read: chapter 10 */
+	if (atomic_read(&c->vrec.pending)) {        /* a virtual interrupt arrived meanwhile: chapter 10 */
 		WRITE_ONCE(c->state, KLET_RUNNING);
 		return KLET_RUN_EVENT;
 	}
-	klet_mirror_out(c, false);                  /* chapter 10: give Linux its preemption count back */
+	klet_mirror_out(c, false);                  /* chapter 11: give Linux its preemption count back */
 	klet_switch(&c->coro_sp, c->linux_sp);      /* to the Linux stack, inside whichever hook entered us */
 	return c->run_ret;                          /* ... much later, with the reason the hook recorded */
 }
@@ -106,7 +106,7 @@ static bool klet_on_syscall(struct pt_regs *regs)
 
 	/* ... the kernelet handled the call and called user_run again ... */
 	if (c->state == KLET_USER) {
-		klet_space_adopt(c, c->vrec.space);     /* the right address space: chapter 12 */
+		klet_space_adopt(c, c->vrec.space);     /* the right address space: chapter 13 */
 		klet_ctx_to_regs(c, regs);              /* its new registers */
 		c->user_live = true;                    /* from here on pt_regs is the authority, until the next hook */
 	} else {
@@ -192,7 +192,7 @@ static bool klet_drain_signals(struct klet_carrier *c)
 }
 ```
 
-A fault signal is recognized by its number and its `si_code` together. The number is one of `SIGSEGV`, `SIGBUS`, `SIGILL`, `SIGFPE` and `SIGTRAP`, and the code is one a trap handler uses: positive, and below `SI_KERNEL`, the code Linux puts on signals it sends on its own account. Four more signals are accepted with `SI_KERNEL`, because some of x86's trap handlers have no finer code to give and send `SI_KERNEL` themselves ([`arch/x86/kernel/traps.c`](https://elixir.bootlin.com/linux/v6.12/source/arch/x86/kernel/traps.c)): `SIGSEGV` for a general-protection fault, an invalid task-state segment, an overflow trap (`int 4`), a bounds-check fault from 32-bit code, and the fault a processor raises on a disabled extended-state feature; `SIGBUS` for a segment-not-present and a stack fault; `SIGTRAP` for a breakpoint (`int3`); and `SIGFPE` for the coprocessor segment overrun that no current processor raises. In the extended-state case the trap number Linux left in the thread structure is stale, and the kernel proper sees whatever the last exception was. No process can forge that code, since `kill` sends `SI_USER`. Anything else is discarded: a signal sent by a process, which on the host side can only be the operator, since a tenant's `kill` is a system call and the syscall hook takes those; or a signal Linux sends for a reason of its own, such as a resource limit. One kind is left alone: a signal Linux has made fatal and marked immutable, which is what a seccomp filter's *kill* action does to its `SIGSYS`; the drain leaves it in the queue, Linux delivers it on the same pass, and the carrier's death ends the sandbox (chapter 11).
+A fault signal is recognized by its number and its `si_code` together. The number is one of `SIGSEGV`, `SIGBUS`, `SIGILL`, `SIGFPE` and `SIGTRAP`, and the code is one a trap handler uses: positive, and below `SI_KERNEL`, the code Linux puts on signals it sends on its own account. Four more signals are accepted with `SI_KERNEL`, because some of x86's trap handlers have no finer code to give and send `SI_KERNEL` themselves ([`arch/x86/kernel/traps.c`](https://elixir.bootlin.com/linux/v6.12/source/arch/x86/kernel/traps.c)): `SIGSEGV` for a general-protection fault, an invalid task-state segment, an overflow trap (`int 4`), a bounds-check fault from 32-bit code, and the fault a processor raises on a disabled extended-state feature; `SIGBUS` for a segment-not-present and a stack fault; `SIGTRAP` for a breakpoint (`int3`); and `SIGFPE` for the coprocessor segment overrun that no current processor raises. In the extended-state case the trap number Linux left in the thread structure is stale, and the kernel proper sees whatever the last exception was. No process can forge that code, since `kill` sends `SI_USER`. Anything else is discarded: a signal sent by a process, which on the host side can only be the operator, since a tenant's `kill` is a system call and the syscall hook takes those; or a signal Linux sends for a reason of its own, such as a resource limit. One kind is left alone: a signal Linux has made fatal and marked immutable, which is what a seccomp filter's *kill* action does to its `SIGSYS`; the drain leaves it in the queue, Linux delivers it on the same pass, and the carrier's death ends the sandbox (chapter 12).
 
 `SIGKILL` and `SIGSTOP` are left in the queue. The first is how the operator and the endovisor end a carrier, and Linux acts on it in the same loop. The second takes effect at the carrier's next return to user mode, where Linux stops it as it stops any task; a stopped carrier is a stopped virtual CPU until `SIGCONT`, and a virtual CPU that does not return to user mode, because it is idle or runs only kernel tasks, keeps running with the stop pending.
 
@@ -213,7 +213,7 @@ static void klet_on_resume(struct pt_regs *regs)
 
 	for (;;) {
 		if (c->state == KLET_DEAD || c->inst->stopped || c->inst->dying) {
-			klet_carrier_die(c);                                 /* chapter 11 */
+			klet_carrier_die(c);                                 /* chapter 12 */
 			return;
 		}
 		if (c->state == KLET_NEW) {                              /* never entered: defensive, the start function enters first */
@@ -224,7 +224,7 @@ static void klet_on_resume(struct pt_regs *regs)
 			klet_regs_snapshot(c, regs);                         /* the faulting registers, into ctx */
 			c->user_live = false;                                /* ctx is the authority again */
 		}
-		if (c->exc_pending) {                                    /* from a signal, or from the fault handler of chapter 12 */
+		if (c->exc_pending) {                                    /* from a signal, or from the fault handler of chapter 13 */
 			c->exc_pending = false;
 			if (c->state == KLET_USER && c->user_live) {
 				klet_regs_snapshot(c, regs);                     /* same: ctx must hold the registers of the faulting instruction */
@@ -234,7 +234,7 @@ static void klet_on_resume(struct pt_regs *regs)
 			klet_enter(c, KLET_RUN_EXCEPTION);                   /* user_run returns 1 */
 			continue;
 		}
-		if (atomic_read(&c->vrec.pending)) {                     /* a virtual interrupt: chapter 9 */
+		if (atomic_read(&c->vrec.pending)) {                     /* a virtual interrupt: chapter 10 */
 			if (c->state == KLET_USER && c->user_live) {
 				klet_regs_snapshot(c, regs);                     /* the interrupted registers, into ctx */
 				c->user_live = false;
@@ -257,11 +257,11 @@ The loop shape matters: each `klet_enter` returns when the kernelet calls `user_
 
 The same flag guards the end of the loop. The exit loop runs the hook for work of Linux's own as well, a reschedule, a signal the drain dropped, a stop and a continue, and then nothing is pending for the kernelet and the registers in `pt_regs` are the tenant's live ones. Applying the context over them would send the tenant back to the return of its last system call, a rewind of everything it had done since, so the hook leaves them alone and returns. One of the memory tests, `make mem-kill`, runs a tenant that keeps a count in a register and the same count in memory and reports the first moment they part, while it is preempted, signaled, and stopped and continued.
 
-Page faults on tenant memory take a shorter path through the endovisor's own fault handler, which sets `exc_pending` directly; that is chapter 12. What the kernel proper sees is the same in both cases: `execute` returns `UserException`, with a `CpuException::PageFault` carrying the address.
+Page faults on tenant memory take a shorter path through the endovisor's own fault handler, which sets `exc_pending` directly; that is chapter 13. What the kernel proper sees is the same in both cases: `execute` returns `UserException`, with a `CpuException::PageFault` carrying the address.
 
 ## Hello, world
 
-With chapters 3 to 7 built, `make hello` boots Linux in QEMU, loads the module, runs the runtime, and this appears in the serial log (one line of Linux's own about an out-of-tree module, and eight lines of counters at unload, are left out):
+With chapters 3 to 8 built, `make hello` boots Linux in QEMU, loads the module, runs the runtime, and this appears in the serial log (one line of Linux's own about an out-of-tree module, and eight lines of counters at unload, are left out):
 
 ```
 INIT: loading kernelet.ko
@@ -293,7 +293,7 @@ kernelet: endovisor unloaded
 INIT: done
 ```
 
-Line by line: the endovisor publishes the offsets by which vOSTD will find its way around Linux (chapter 8); the root carrier is made by the handler (chapter 5); it clones the carrier of virtual CPU 0, which enters the image (chapter 3) and, before anything else, times a heap allocation and its free and then, at its first log line, a service call that does nothing (chapter 14); the kernel proper creates its address space (chapter 12); the program's `write` arrives by the syscall hook and the kernel proper prints the message through `log_write`, followed by the message's own newline as an empty line; its `exit` becomes the `stop` service (chapter 11); both carriers die and their lifelines close, and the last release returns what the kernelet held, the stack the stopping carrier was still standing on included (chapter 11); the module's reference count reaches zero and it unloads. The build checks that the log contains the greeting, the exit code, a clean unload, and no Linux error report.
+Line by line: the endovisor publishes the offsets by which vOSTD will find its way around Linux (chapter 9); the root carrier is made by the handler (chapter 5); it clones the carrier of virtual CPU 0, which enters the image (chapter 3) and, before anything else, times a heap allocation and its free and then, at its first log line, a service call that does nothing (chapter 15); the kernel proper creates its address space (chapter 13); the program's `write` arrives by the syscall hook and the kernel proper prints the message through `log_write`, followed by the message's own newline as an empty line; its `exit` becomes the `stop` service (chapter 12); both carriers die and their lifelines close, and the last release returns what the kernelet held, the stack the stopping carrier was still standing on included (chapter 12); the module's reference count reaches zero and it unloads. The build checks that the log contains the greeting, the exit code, a clean unload, and no Linux error report.
 
 <div class="recap">
 

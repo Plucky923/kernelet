@@ -4,7 +4,7 @@ A scheduler needs to be interrupted. A time slice ends because a timer interrupt
 
 ## Bits in a record
 
-A virtual interrupt is a bit in the `pending` word of a virtual CPU's record (chapter 8). The endovisor sets it, from any context; the kernelet's handler for it runs on that virtual CPU's carrier, in ordinary task context, soon after. Two bits exist in this prototype:
+A virtual interrupt is a bit in the `pending` word of a virtual CPU's record (chapter 9). The endovisor sets it, from any context; the kernelet's handler for it runs on that virtual CPU's carrier, in ordinary task context, soon after. Two bits exist in this prototype:
 
 | bit | meaning | set by |
 |---|---|---|
@@ -72,7 +72,7 @@ static enum hrtimer_restart klet_watch_fn(struct hrtimer *timer)
 	} else {
 		/* in a critical section: the kernelet delivers it itself when the section ends */
 	}
-	/* 3. the bound on critical sections: chapter 10 */
+	/* 3. the bound on critical sections: chapter 11 */
 
 	hrtimer_forward_now(timer, ns_to_ktime(KLET_WATCH_INTERVAL_NS));   /* a requested firing goes back to its period's own expiry instead */
 	return HRTIMER_RESTART;
@@ -103,11 +103,11 @@ bool klet_virq_redirect(struct klet_carrier *c, struct pt_regs *regs)
 }
 ```
 
-When the timer interrupt returns, it returns into the kernelet's **upcall** stub, the kernelet's own interrupt handler, entered by a redirected interrupt, rather than into the interrupted instruction. `klet_in_kernelet(c)` is the endovisor's own bookkeeping, state `RUNNING` and depth 0, from chapter 6: a carrier inside a service call is never redirected, because it may hold Linux's locks.
+When the timer interrupt returns, it returns into the kernelet's **upcall** stub, the kernelet's own interrupt handler, entered by a redirected interrupt, rather than into the interrupted instruction. `klet_in_kernelet(c)` is the endovisor's own bookkeeping, state `RUNNING` and depth 0, from chapter 7: a carrier inside a service call is never redirected, because it may hold Linux's locks.
 
 ## The upcall
 
-The stub is in vOSTD, in assembly, because it is entered between two arbitrary instructions and must put every register and the flags back exactly. It saves everything on the *current task's* kernelet stack, calls a Rust function, and returns to the interrupted instruction. It is written in Intel syntax, destination first, as Rust's `global_asm!` has it; chapter 6's switch was in the assembler's own syntax, source first.
+The stub is in vOSTD, in assembly, because it is entered between two arbitrary instructions and must put every register and the flags back exactly. It saves everything on the *current task's* kernelet stack, calls a Rust function, and returns to the interrupted instruction. It is written in Intel syntax, destination first, as Rust's `global_asm!` has it; chapter 7's switch was in the assembler's own syntax, source first.
 
 *Simplified from `prototype/vostd/src/vcpu.rs`: `klet_virq_entry`, `klet_virq_body`.*
 
@@ -133,13 +133,13 @@ extern "C" fn klet_virq_body() -> u64 {
     assert!(IMAGE_TEXT_LO <= ip && ip < IMAGE_TEXT_HI);   // never resume at an address the host made up
 
     let owns_mirror = get_guard_count() == 0;            // this upcall begins a critical section of its own
-    if owns_mirror { host_preempt_inc(); }               // chapter 10: tell Linux so
+    if owns_mirror { host_preempt_inc(); }               // chapter 11: tell Linux so
 
     run_handlers(rec);                                   // TICK: the timer callbacks; KICK: a look at the run queue
 
     let host_wants_cpu = if owns_mirror { host_preempt_dec_and_test() } else { false };
     unsafe { write_volatile(rec.irq_off.get(), 0) };     // unmask: what a machine's interrupt return would do
-    if host_wants_cpu { host_yield(); }                  // chapter 10: Linux was waiting for this processor
+    if host_wants_cpu { host_yield(); }                  // chapter 11: Linux was waiting for this processor
     if get_guard_count() == 0 {                          // kernel-mode preemption: switch if the scheduler wants to
         crate::task::scheduler::might_preempt();
     }
@@ -181,7 +181,7 @@ Two separate fields in the record stand for the two ways a kernel holds things o
 
 Both are updated by the virtual CPU that owns the record, with single instructions where it matters, because the endovisor reads them from an interrupt on the same processor and the upcall writes them. If a guard's increment compiled to a load, an add and a store, and an upcall ran between the load and the store and changed the word itself, the store would overwrite the upcall's change; a single `inc` cannot be split by an interrupt.
 
-Kernel-mode preemption has one more consequence, which OSTD on a machine never meets, because its interrupts never switch tasks underneath kernel code. `reschedule` (chapter 8) makes its decision and then switches; between the two, the run queue has already made the chosen task its current one and put the still-running task back in the queue. An upcall that lands in that window and calls `might_preempt` would decide again, and could pick the task that is still running; a switch to a task waits until that task has finished switching away, which a running task never does. So vOSTD marks the window with a flag in the virtual CPU's local storage, set before the decision is made and cleared once the switch has completed, or at once when the decision is to do nothing, and `might_preempt` inside the window only leaves a note. The switch, once complete, or the decision to do nothing, acts on the note at once, so a preemption is deferred by the window and never by more. The window has a price, which chapter 14 shows on the wake-up across virtual CPUs: a kick usually arrives after the woken virtual CPU has already picked the task, lands inside the window, and the note costs one reschedule that finds nothing to do.
+Kernel-mode preemption has one more consequence, which OSTD on a machine never meets, because its interrupts never switch tasks underneath kernel code. `reschedule` (chapter 9) makes its decision and then switches; between the two, the run queue has already made the chosen task its current one and put the still-running task back in the queue. An upcall that lands in that window and calls `might_preempt` would decide again, and could pick the task that is still running; a switch to a task waits until that task has finished switching away, which a running task never does. So vOSTD marks the window with a flag in the virtual CPU's local storage, set before the decision is made and cleared once the switch has completed, or at once when the decision is to do nothing, and `might_preempt` inside the window only leaves a note. The switch, once complete, or the decision to do nothing, acts on the note at once, so a preemption is deferred by the window and never by more. The window has a price, which chapter 15 shows on the wake-up across virtual CPUs: a kick usually arrives after the woken virtual CPU has already picked the task, lands inside the window, and the note costs one reschedule that finds nothing to do.
 
 A bit that was left pending while interrupts were masked must still be delivered. The guard that unmasks does it:
 
@@ -190,7 +190,7 @@ A bit that was left pending while interrupts were masked must still be delivered
 ```rust
 pub(crate) fn irq_unmask() {
     let leaving = get_guard_count() == 0;       // the end of a critical section?
-    /* ... chapter 10's mirror ... */
+    /* ... chapter 11's mirror ... */
     set_irq_off(false);
     if leaving {
         vcpu::deliver_if_pending();             // one load and a branch
@@ -234,7 +234,7 @@ static void klet_kick_ipi(void *arg)            /* runs in interrupt context on 
 }
 ```
 
-A requested firing is not a tick, unless the period it cut short has already run out: the callback raises no TICK for it, takes no strike (chapter 10's bound on critical sections), and puts the timer back on the expiry of the period it cut short, so a kick neither advances the kernelet's clock nor delays its next tick. A kick whose bit is already set does nothing at all, so a thousand kicks cost one delivery.
+A requested firing is not a tick, unless the period it cut short has already run out: the callback raises no TICK for it, takes no strike (chapter 11's bound on critical sections), and puts the timer back on the expiry of the period it cut short, so a kick neither advances the kernelet's clock nor delays its next tick. A kick whose bit is already set does nothing at all, so a thousand kicks cost one delivery.
 
 <div class="recap">
 

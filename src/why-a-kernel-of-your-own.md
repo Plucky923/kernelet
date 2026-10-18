@@ -76,7 +76,7 @@ These are used in one sense throughout the book.
 | **vOSTD** | the framework a kernelet is built on: OSTD's interface with a different implementation underneath |
 | **service table** | the fixed list of host functions a kernelet may call; its only way out |
 | **grant** | the physical memory a kernelet has been given |
-| **virtual CPU** | one of the fixed number of processors a sandbox is given when it is created; the kernelet runs its tasks on them as a kernel runs on real processors (chapter 8) |
+| **virtual CPU** | one of the fixed number of processors a sandbox is given when it is created; the kernelet runs its tasks on them as a kernel runs on real processors (chapter 9) |
 | **carrier** | a Linux task of a sandbox: the root carrier, which holds the sandbox together, and one carrier per virtual CPU, which stands behind it (chapter 5) |
 | **kernelet runtime** | the host program that creates and configures sandboxes, as a container runtime does (chapter 5) |
 | **carrier event hooks** | the two functions Linux calls for a carrier, at a system call and before user mode; the small patch that adds them is the one change to Linux (chapter 4) |

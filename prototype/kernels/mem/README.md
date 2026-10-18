@@ -22,10 +22,10 @@ The tests go by E-numbers in the code and the logs:
 | `pressure` | `make mem-pressure` | E7: every entry survives Linux's reclaim while the guest swaps |
 | `perf` | `make mem-perf` (measurement) | E6: first touch, map, protect, read after protect, copies. E9: fork of 64 MiB, the child's reads, the parent's re-reads, munmap |
 
-The book explains the services, the area, faults and adoption in chapter 12,
+The book explains the services, the area, faults and adoption in chapter 13,
 the walk, copies, frame references, the range lock, the withheld set, the
-retire list and the sleeping contract in chapter 13, and the numbers in
-chapter 14.
+retire list and the sleeping contract in chapter 14, and the numbers in
+chapter 15.
 
 ## Files
 

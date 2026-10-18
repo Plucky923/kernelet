@@ -1,6 +1,6 @@
 # Sharing a processor politely
 
-Linux will take a processor away from a carrier whenever its own policy says so: the sandbox's turn is over, or a host task with a better claim woke up. That is right and necessary. This chapter is about three ways in which the kernelet and Linux can get in each other's way over it, and the one mechanism, the watch timer of chapter 9, that resolves all three.
+Linux will take a processor away from a carrier whenever its own policy says so: the sandbox's turn is over, or a host task with a better claim woke up. That is right and necessary. This chapter is about three ways in which the kernelet and Linux can get in each other's way over it, and the one mechanism, the watch timer of chapter 10, that resolves all three.
 
 ## Problem 1: a Linux that does not preempt kernel code
 
@@ -12,7 +12,7 @@ Linux will take a processor away from a carrier whenever its own policy says so:
 
 Kernelet code contains no call to `cond_resched()`, because it cannot call Linux. On a kernel booted with `preempt=none`, a kernelet task that computes for a few seconds would hold its processor for those seconds, against every other task that wants it. The test kernel in `prototype/kernels/yield/src/lib.rs` does exactly that, and `make yield` runs it twice on such a kernel, once with the mechanism below turned off and once with it on, with a competing host process pinned to the same processor. Without it, the competitor stalls for the kernelet's whole computation, long enough for Linux's own stall detector to complain; with it, the competitor's progress reports never pause for as long as a second, which is what the test asserts.
 
-The mechanism is the watch timer volunteering on the kernelet's behalf, and it has two forms. Usually the upcall of chapter 9 does it: on its way out, if Linux has set `need_resched` meanwhile, vOSTD calls `vcpu_yield`, which reschedules in Linux (how vOSTD notices is the mirror of Problem 2, below). When the upcall cannot be taken, because the interrupted task's stack has too little room left for the handlers, the timer points the interrupted frame at a **yield stub** in the endovisor instead, by the same means:
+The mechanism is the watch timer volunteering on the kernelet's behalf, and it has two forms. Usually the upcall of chapter 10 does it: on its way out, if Linux has set `need_resched` meanwhile, vOSTD calls `vcpu_yield`, which reschedules in Linux (how vOSTD notices is the mirror of Problem 2, below). When the upcall cannot be taken, because the interrupted task's stack has too little room left for the handlers, the timer points the interrupted frame at a **yield stub** in the endovisor instead, by the same means:
 
 *Simplified from `prototype/linux/endovisor/watch.c`: `klet_watch_fn`.*
 
@@ -58,7 +58,7 @@ unsigned long klet_yield_body(void)
 	unsigned long ip = c->yield_ip;
 
 	klet_run_on_linux_stack(c->linux_sp, &args);   /* klet_svc_body -> klet_do_yield, on the Linux stack */
-	if (args.ret || c->doomed)                      /* the kernelet stopped, or this carrier was killed (chapter 11) */
+	if (args.ret || c->doomed)                      /* the kernelet stopped, or this carrier was killed (chapter 12) */
 		return 0;
 	return ip;
 }
@@ -112,7 +112,7 @@ pub(crate) fn dec_guard_count() {
     let host_wants_cpu = if leaving { vcpu::host_preempt_dec_and_test() } else { false };
     sub_assign(1);
     if host_wants_cpu { vcpu::host_yield(); }                    // the vcpu_yield service: schedule()
-    if leaving { vcpu::deliver_if_pending(); }                   // chapter 9
+    if leaving { vcpu::deliver_if_pending(); }                   // chapter 10
 }
 ```
 
@@ -159,7 +159,7 @@ void klet_svc_body(struct klet_svc_args *args)
 }
 ```
 
-A kernelet in a critical section is therefore *not* in Linux's **atomic mode**, the state of holding something that forbids a task switch and in which code must not sleep. Its guards promise only that no kernelet task switch happens on this virtual CPU until the guard drops; the carrier may still lose the processor, by a Linux sleep inside a service as by a Linux preemption, and the kernelet is already correct under that, as a guest kernel is correct when its hypervisor deschedules a virtual CPU. Chapter 13 states the rule precisely, because the memory services depend on it.
+A kernelet in a critical section is therefore *not* in Linux's **atomic mode**, the state of holding something that forbids a task switch and in which code must not sleep. Its guards promise only that no kernelet task switch happens on this virtual CPU until the guard drops; the carrier may still lose the processor, by a Linux sleep inside a service as by a Linux preemption, and the kernelet is already correct under that, as a guest kernel is correct when its hypervisor deschedules a virtual CPU. Chapter 14 states the rule precisely, because the memory services depend on it.
 
 ## Problem 3: a critical section that never ends
 

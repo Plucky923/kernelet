@@ -45,4 +45,4 @@ The book explains the hooks and this configuration in chapter 4.
 |---|---|
 | `config.fragment` | the configuration fragment |
 | `patches/` | the carrier hooks, `0001-carrier-hooks.patch` (chapter 4) |
-| `endovisor/` | the endovisor module, `kernelet.ko` (chapters 3 and 5 to 12) |
+| `endovisor/` | the endovisor module, `kernelet.ko` (chapters 3 and 5 to 13) |

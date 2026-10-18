@@ -35,17 +35,18 @@ The book follows the order in which a kernelet comes to life, so each chapter us
 3. **What a kernelet is made of** is the shape of the thing: the image, the framework beneath the kernel, and the table of functions through which it talks to Linux.
 4. **Carrier hooks and patch overview** adds the two hooks through which a tenant's system calls reach its kernelet, and lists the rest of the one small patch to Linux.
 5. **Carriers** are the Linux tasks on which a kernelet runs.
-6. **Two stacks** is how a kernelet keeps its own stacks on a Linux task.
-7. **Into user mode and back** is the round trip of a system call, after which the hundred-line kernel prints its greeting.
-8. **Tasks and virtual CPUs** gives the kernelet its own tasks and its own scheduler.
-9. **Virtual interrupts** gives it a timer.
-10. **Sharing a processor politely** keeps it from holding a processor against Linux.
-11. **Stopping a kernelet** removes it, even when it will not cooperate.
-12. **Tenant memory on Linux's page tables** is the central mechanism: the tenant's memory lives in a Linux address space that the kernelet edits only by asking.
-13. **What vOSTD adds on top** is the bookkeeping that makes that sound.
-14. **What it costs** gives the numbers.
+6. **The kernelet UAPI** is what a program on the host may ask of a kernel that runs kernelets, and how user space creates the carriers.
+7. **Two stacks** is how a kernelet keeps its own stacks on a Linux task.
+8. **Into user mode and back** is the round trip of a system call, after which the hundred-line kernel prints its greeting.
+9. **Tasks and virtual CPUs** gives the kernelet its own tasks and its own scheduler.
+10. **Virtual interrupts** gives it a timer.
+11. **Sharing a processor politely** keeps it from holding a processor against Linux.
+12. **Stopping a kernelet** removes it, even when it will not cooperate.
+13. **Tenant memory on Linux's page tables** is the central mechanism: the tenant's memory lives in a Linux address space that the kernelet edits only by asking.
+14. **What vOSTD adds on top** is the bookkeeping that makes that sound.
+15. **What it costs** gives the numbers.
 
-Chapters 12 and 13 are the climax, and everything before them is there so that they can be read.
+Chapters 13 and 14 are the climax, and everything before them is there so that they can be read.
 
 ## Conventions
 

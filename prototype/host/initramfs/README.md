@@ -13,7 +13,7 @@ crashes the kernel.
 
 It belongs to the harness rather than to the design; the book describes the
 harness, and how to read a serial log, where it first boots the prototype
-(chapter 7, where `make hello` first boots).
+(chapter 8, where `make hello` first boots).
 
 ## How it is built
 

@@ -29,7 +29,7 @@ flowchart TB
         k0["<b>the task's kernelet stack, 256 KiB</b>"] ~~~ k1["user_task: the loop"] --> k2["execute()"] --> k3["user_run: parked in klet_switch"]
     end
     L -- "klet_switch: into the kernelet" --> B
-    B -. "the kernelet's own task switch<br/>(chapter 8)" .-> K
+    B -. "the kernelet's own task switch<br/>(chapter 9)" .-> K
     K -- "klet_switch: back to Linux" --> L
 ```
 
@@ -104,21 +104,21 @@ static void klet_enter(struct klet_carrier *c, u64 run_ret)
 	c->run_ret = run_ret;                   /* what user_run will return, if that is where it stopped */
 	c->state = KLET_RUNNING;
 	c->depth = 0;
-	klet_mirror_in(c);                      /* chapter 10: note Linux's preemption count */
-	klet_watch_arm(c);                      /* chapter 9: the watch timer on this processor */
+	klet_mirror_in(c);                      /* chapter 11: note Linux's preemption count */
+	klet_watch_arm(c);                      /* chapter 10: the watch timer on this processor */
 	klet_switch(&c->linux_sp, c->coro_sp);  /* returns when the kernelet leaves */
 }
 
 /* On a kernelet stack: give control back to Linux. */
 static void klet_leave(struct klet_carrier *c, enum klet_state state)
 {
-	klet_mirror_out(c, state == KLET_DEAD); /* chapter 10: what the kernelet lent Linux's preemption count, taken back */
+	klet_mirror_out(c, state == KLET_DEAD); /* chapter 11: what the kernelet lent Linux's preemption count, taken back */
 	c->state = state;
 	klet_switch(&c->coro_sp, c->linux_sp);  /* returns when the kernelet is next entered */
 }
 ```
 
-Where does `klet_enter` get called? From exactly three places: the carrier's start function (chapter 5), the syscall hook, and the resume hook (chapter 7). Each of those is a frame on the Linux stack, and `klet_switch` parks that frame until the kernelet leaves.
+Where does `klet_enter` get called? From exactly three places: the carrier's start function (chapter 5), the syscall hook, and the resume hook (chapter 8). Each of those is a frame on the Linux stack, and `klet_switch` parks that frame until the kernelet leaves.
 
 ## Where the stacks come from
 
@@ -159,7 +159,7 @@ void klet_kstack_put(struct klet_inst *inst, u64 base)
 }
 ```
 
-The real function holds the instance's lock around the search and the reservation, so that two virtual CPUs cannot both take the last stack. The kernelet reaches the pool through two services, `kstack_alloc` and `kstack_free`. The carrier's own first stack, the one `klet_coro_prepare` sets up, comes from the same pool; so does the stack of every task the kernel proper creates (chapter 8).
+The real function holds the instance's lock around the search and the reservation, so that two virtual CPUs cannot both take the last stack. The kernelet reaches the pool through two services, `kstack_alloc` and `kstack_free`. The carrier's own first stack, the one `klet_coro_prepare` sets up, comes from the same pool; so does the stack of every task the kernel proper creates (chapter 9).
 
 ## Services run on the Linux stack
 
@@ -204,7 +204,7 @@ void klet_svc_body(struct klet_svc_args *args)                /* runs on the Lin
 {
 	struct klet_carrier *c = klet_current_carrier();
 
-	c->depth++;                      /* "inside the host": chapters 9 to 11 read this */
+	c->depth++;                      /* "inside the host": chapters 10 to 12 read this */
 	switch (args->op) {
 	case KLET_SVC_LOG_WRITE:
 		printk(KERN_INFO "kernelet: %.*s\n", (int)args->a1, (const char *)args->a0);
@@ -220,9 +220,9 @@ void klet_svc_body(struct klet_svc_args *args)                /* runs on the Lin
 
 The endovisor finds the calling carrier from Linux's `current` task and the hooks pointer in it: `klet_current_carrier()` is `container_of(current->carrier_hooks, struct klet_carrier, hooks)` (given a pointer to a field, `container_of` subtracts the field's offset to get the enclosing structure). No service takes a "which kernelet" argument, so a kernelet cannot claim to be another.
 
-The **depth** counter says whether this carrier is, right now, inside endovisor or Linux code on the kernelet's behalf, where it may hold Linux's locks: it is 1 exactly then. The watch timer of chapter 9 and the eviction of chapter 11 must never touch the instruction pointer of such a carrier, and the depth is how they know.
+The **depth** counter says whether this carrier is, right now, inside endovisor or Linux code on the kernelet's behalf, where it may hold Linux's locks: it is 1 exactly then. The watch timer of chapter 10 and the eviction of chapter 12 must never touch the instruction pointer of such a carrier, and the depth is how they know.
 
-The one exception to the stub is `user_run`, which leaves the kernelet stack and does not come back until the next hook brings the carrier in; it is chapter 7's. `stop` uses the stub like any service, and then leaves forever (chapter 11).
+The one exception to the stub is `user_run`, which leaves the kernelet stack and does not come back until the next hook brings the carrier in; it is chapter 8's. `stop` uses the stub like any service, and then leaves forever (chapter 12).
 
 <div class="recap">
 

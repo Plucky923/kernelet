@@ -133,7 +133,7 @@ A `UserContext` is a user program's register file: the sixteen general registers
 
 Then the loop. `user_mode.execute(...)` **enters user mode**: it loads the context into the processor's registers and starts the program. The call *returns* when something brings the processor back into the kernel: a system call, an exception, or an event the kernel asked to be told about. The return value says which. The context now holds the program's registers as they were at that moment, and the kernel reads and changes them through `context_mut()` before calling `execute` again.
 
-So a user program, to this kernel, is a function call that returns now and then. The kernel's handler for the program lives *inside* a loop, on a kernel stack, and its local variables survive every trip the program makes to user mode and back. Keep that picture; it is the one Linux does not share, and reconciling the two is the work of chapters 6 and 7.
+So a user program, to this kernel, is a function call that returns now and then. The kernel's handler for the program lives *inside* a loop, on a kernel stack, and its local variables survive every trip the program makes to user mode and back. Keep that picture; it is the one Linux does not share, and reconciling the two is the work of chapters 7 and 8.
 
 ```mermaid
 sequenceDiagram
@@ -190,11 +190,11 @@ Here is everything the hundred-line kernel needs, with what OSTD does on a machi
 | the kernel uses | on a machine, OSTD | inside Linux, vOSTD must |
 |---|---|---|
 | `FrameAllocOptions`, `Segment` | allocates from the machine's RAM | allocate from a grant of memory Linux hands it (chapter 3) |
-| `VmSpace::new`, `cursor_mut`, `map` | writes a hardware page table the processor walks | ask Linux to put the page in a Linux page table (chapter 12) |
-| `VmSpace::activate` | loads the page-table register | remember which address space this virtual CPU is in, and switch the carrier to it (chapter 12) |
-| `TaskOptions`, `Task::run`, `disable_preempt` | its own tasks, stacks and scheduler | the same code, on stacks Linux lends it (chapters 6 and 8) |
-| `UserMode::execute` | the processor's instruction for entering user mode, and its trap handlers | a Linux task that enters user mode on the kernelet's behalf, with a patch to Linux that routes the system call back (chapters 4 to 7) |
-| `VmSpace::reader`, `read_fallible` | reads the user address, with a fault handler as the safety net | walk the page table itself and copy through the kernel's own map of memory (chapter 13) |
+| `VmSpace::new`, `cursor_mut`, `map` | writes a hardware page table the processor walks | ask Linux to put the page in a Linux page table (chapter 13) |
+| `VmSpace::activate` | loads the page-table register | remember which address space this virtual CPU is in, and switch the carrier to it (chapter 13) |
+| `TaskOptions`, `Task::run`, `disable_preempt` | its own tasks, stacks and scheduler | the same code, on stacks Linux lends it (chapters 7 and 9) |
+| `UserMode::execute` | the processor's instruction for entering user mode, and its trap handlers | a Linux task that enters user mode on the kernelet's behalf, with a patch to Linux that routes the system call back (chapters 4 to 8) |
+| `VmSpace::reader`, `read_fallible` | reads the user address, with a fault handler as the safety net | walk the page table itself and copy through the kernel's own map of memory (chapter 14) |
 | `println!`, `poweroff` | the serial port; the power controller | two calls into the host (chapter 3) |
 
 <div class="recap">

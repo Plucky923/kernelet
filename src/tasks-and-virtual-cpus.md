@@ -32,7 +32,7 @@ A **virtual CPU** is one of the processors a sandbox is given when it is created
 
 ## The kernelet's tasks are its own
 
-vOSTD's task layer is the real OSTD's code: a task is a function, a stack and a saved register set; switching tasks saves one set of callee-saved registers and loads another; waiting is a matter of OSTD's own wait queues. None of it involves Linux, which never sees a kernelet task at all. The two places where the machine shows through are the stack and the context switch, and both are familiar from chapter 6.
+vOSTD's task layer is the real OSTD's code: a task is a function, a stack and a saved register set; switching tasks saves one set of callee-saved registers and loads another; waiting is a matter of OSTD's own wait queues. None of it involves Linux, which never sees a kernelet task at all. The two places where the machine shows through are the stack and the context switch, and both are familiar from chapter 7.
 
 *Simplified from `prototype/vostd/src/task/mod.rs` and `prototype/vostd/src/task/kernel_stack.rs`: `build`, `KernelStack`.*
 
@@ -68,12 +68,12 @@ A carrier and the kernelet need a small amount of shared state per virtual CPU, 
 struct klet_vcpu_rec {
 	u32 vcpu_id;            /* which virtual CPU this is: CpuId::current() reads it */
 	u32 nr_vcpus;
-	atomic_t pending;       /* virtual interrupts raised and not yet taken: chapter 9 */
+	atomic_t pending;       /* virtual interrupts raised and not yet taken: chapter 10 */
 	u32 preempt_info;       /* OSTD's preemption word: guard count and need-preempt bit */
 	u32 irq_off;            /* the virtual interrupt flag, inverted */
-	u32 mirrored;           /* chapter 10 */
-	u64 virq_ip;            /* where an upcall interrupted the kernelet: chapter 9 */
-	u64 space;              /* the tenant address space this vCPU has activated: chapter 12 */
+	u32 mirrored;           /* chapter 11 */
+	u64 virq_ip;            /* where an upcall interrupted the kernelet: chapter 10 */
+	u64 space;              /* the tenant address space this vCPU has activated: chapter 13 */
 	u64 stack_limit;        /* the bottom of the current task's kernelet stack */
 	u64 stolen_ns;          /* how long Linux kept this vCPU off a processor */
 };
@@ -83,7 +83,7 @@ The record is embedded in the endovisor's per-carrier structure, directly after 
 
 <div class="linux">
 
-**Linux: per-processor data and `%gs`.** Linux keeps a block of per-processor variables, and on x86-64 the segment register `%gs` points at the current processor's block, so that reading one of them is a single `mov` with a `%gs:` prefix, whichever processor the code is on. Two of those variables matter here: the pointer to the **current task**, and the **preemption count** of chapter 10. The block's layout is Linux's own, so a module learns the offsets at run time.
+**Linux: per-processor data and `%gs`.** Linux keeps a block of per-processor variables, and on x86-64 the segment register `%gs` points at the current processor's block, so that reading one of them is a single `mov` with a `%gs:` prefix, whichever processor the code is on. Two of those variables matter here: the pointer to the **current task**, and the **preemption count** of chapter 11. The block's layout is Linux's own, so a module learns the offsets at run time.
 
 </div>
 
@@ -102,7 +102,7 @@ pub(crate) fn vrec() -> &'static VcpuRec {
 
 Whichever processor the carrier is on, `%gs` names that processor's block, the block's current task is this carrier, and this carrier's hooks lead to this virtual CPU's record. Being moved between processors between the two loads changes nothing.
 
-Everything OSTD keeps per CPU, such as the scheduler's run-queue locks and the timer callbacks, is in vOSTD an array with one slot per virtual CPU, indexed by the `vcpu_id` in the record. The one per-CPU word that must be updated with single instructions, OSTD's preemption word, lives in the record itself, and chapter 9 says why.
+Everything OSTD keeps per CPU, such as the scheduler's run-queue locks and the timer callbacks, is in vOSTD an array with one slot per virtual CPU, indexed by the `vcpu_id` in the record. The one per-CPU word that must be updated with single instructions, OSTD's preemption word, lives in the record itself, and chapter 10 says why.
 
 ## Starting, idling, kicking
 
@@ -128,9 +128,9 @@ static void klet_do_vcpu_idle(struct klet_carrier *c, u64 deadline_ns)
 }
 ```
 
-The order of the first three lines is the one every Linux sleep uses so that no wake-up is lost: the sleeper marks itself, *then* checks; the waker sets the bit, *then* checks the mark. One of the two always sees the other. The sleep is *killable*, so that `SIGKILL` ends it (chapter 11).
+The order of the first three lines is the one every Linux sleep uses so that no wake-up is lost: the sleeper marks itself, *then* checks; the waker sets the bit, *then* checks the mark. One of the two always sees the other. The sleep is *killable*, so that `SIGKILL` ends it (chapter 12).
 
-**Kicking.** When the kernelet's scheduler puts a task on another virtual CPU's run queue, that virtual CPU should notice soon, as a machine would be told by an inter-processor interrupt. vOSTD calls `vcpu_kick(i)`, which sets a KICK bit in the target's record and does whichever of three things gets it seen: wakes the carrier if it is asleep in `vcpu_idle`, flags it if it is in user mode, or, if it is running kernelet code on another processor right now, sends that processor an interrupt that makes the kick be delivered at once instead of at the next tick (chapter 9).
+**Kicking.** When the kernelet's scheduler puts a task on another virtual CPU's run queue, that virtual CPU should notice soon, as a machine would be told by an inter-processor interrupt. vOSTD calls `vcpu_kick(i)`, which sets a KICK bit in the target's record and does whichever of three things gets it seen: wakes the carrier if it is asleep in `vcpu_idle`, flags it if it is in user mode, or, if it is running kernelet code on another processor right now, sends that processor an interrupt that makes the kick be delivered at once instead of at the next tick (chapter 10).
 
 `reschedule` below takes the scheduling decision as a closure, so that `yield_now`, `park_current` and the others share its loop and differ only in the decision.
 
@@ -148,7 +148,7 @@ fn set_need_preempt(cpu_id: CpuId) {
 
 fn reschedule<F>(mut f: F)                       // the heart of every scheduling decision
 where F: FnMut(&mut LocalRunQueue) -> ReschedAction {
-    open_resched_window();                       // clears need-preempt; chapter 9 says what else it does
+    open_resched_window();                       // clears need-preempt; chapter 10 says what else it does
     let next_task = loop {
         match f(local_run_queue) {
             ReschedAction::DoNothing => return,
@@ -163,11 +163,11 @@ where F: FnMut(&mut LocalRunQueue) -> ReschedAction {
 }
 ```
 
-`Retry` means the run queue is empty: the virtual CPU spins a little, in case a sibling is about to enqueue something, and then calls `vcpu_idle` (a deadline of zero means "until the next tick", the watch timer's of chapter 9). When the sleep ends, TICK is pending, the closure runs again, and either finds a task or sleeps again.
+`Retry` means the run queue is empty: the virtual CPU spins a little, in case a sibling is about to enqueue something, and then calls `vcpu_idle` (a deadline of zero means "until the next tick", the watch timer's of chapter 10). When the sleep ends, TICK is pending, the closure runs again, and either finds a task or sleeps again.
 
 ## One carrier, many threads
 
-A virtual CPU runs the threads of many tenant processes in turn, and each process has its own address space. The kernel proper, as on a machine, activates the right `VmSpace` before it runs a thread; in vOSTD, `activate` records the space in the virtual CPU's record (the `space` field above), and the carrier switches to that process's Linux address space on its next trip to user mode. The switch itself is chapter 12's `klet_space_adopt`, which both hooks of chapter 7 call just before they apply the registers.
+A virtual CPU runs the threads of many tenant processes in turn, and each process has its own address space. The kernel proper, as on a machine, activates the right `VmSpace` before it runs a thread; in vOSTD, `activate` records the space in the virtual CPU's record (the `space` field above), and the carrier switches to that process's Linux address space on its next trip to user mode. The switch itself is chapter 13's `klet_space_adopt`, which both hooks of chapter 8 call just before they apply the registers.
 
 The floating-point and vector registers belong to a tenant thread too. To Linux they are the *carrier's* user state: Linux saves them when it switches the carrier out and restores them, lazily, before the carrier next returns to user mode, and it does not know that the kernelet has put a different thread on the carrier in between.
 

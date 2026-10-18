@@ -231,7 +231,7 @@ fn destroy(mut node: Node) {
 
 Every memory service except `vm_flush`, `vm_activate` and `vm_wake` may sleep in Linux: for the address-space lock, for a page-table page, for the zap's own pauses between tables, in `vm_wait`. And the kernel proper calls `map` holding a preemption guard, because every cursor takes one. On a machine that would be a contradiction: OSTD forbids sleeping inside a critical section. Here it is not, and the design states the rule in four parts.
 
-1. A service may sleep whenever its work needs it. Its prologue lifts the mirror of chapter 10, so Linux sees nothing wrong, and its epilogue restores it.
+1. A service may sleep whenever its work needs it. Its prologue lifts the mirror of chapter 11, so Linux sees nothing wrong, and its epilogue restores it.
 2. A service that may sleep must not be called while the caller holds a kernelet **spin lock** or has virtual interrupts off. Under a plain preemption guard it may. The reason is lock-holder preemption: a spin lock held across a Linux sleep makes every other virtual CPU that wants it spin for the sleep's length. vOSTD asserts this before every sleeping service, with a count of spin locks held that is separate from the guard count.
 3. What a sleep costs is stated, not hidden: this virtual CPU's pending virtual interrupts and the kernelet's grace periods wait for the carrier to return, as they do when Linux deschedules it.
 4. The mirror remains a latency optimization and is load-bearing for correctness nowhere.
@@ -257,7 +257,7 @@ pub(crate) fn assert_may_sleep(service: &str) {
 }
 ```
 
-Why rule 1 is sound was argued at the end of chapter 10's second problem: a kernelet's critical section promises only that no kernelet task switch happens on this virtual CPU until the guard drops, and a sleep in Linux is the same event as a Linux preemption, which the kernelet already survives at any instruction. `make mem-func` maps a page into a fresh 2 MiB region, which makes Linux allocate a page-table page, inside a preemption guard, on a Linux built with `CONFIG_DEBUG_ATOMIC_SLEEP`, the option that makes Linux complain about any sleep in atomic mode, and Linux reports nothing; `make mem-r2` does the same under a spin lock, and vOSTD stops the kernelet before the call crosses.
+Why rule 1 is sound was argued at the end of chapter 11's second problem: a kernelet's critical section promises only that no kernelet task switch happens on this virtual CPU until the guard drops, and a sleep in Linux is the same event as a Linux preemption, which the kernelet already survives at any instruction. `make mem-func` maps a page into a fresh 2 MiB region, which makes Linux allocate a page-table page, inside a preemption guard, on a Linux built with `CONFIG_DEBUG_ATOMIC_SLEEP`, the option that makes Linux complain about any sleep in atomic mode, and Linux reports nothing; `make mem-r2` does the same under a spin lock, and vOSTD stops the kernelet before the call crosses.
 
 <div class="recap">
 

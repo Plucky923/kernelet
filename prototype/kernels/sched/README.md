@@ -16,8 +16,8 @@ sandbox's command line picks one with `mode=`:
 | `fair` | `make sched-fair` (measurement) | a sibling control group's share of the processors does not depend on how many tasks the sandbox runs |
 | `perf` | `make sched-perf` (measurement) | the cost of a kernelet task switch, a wake-up on the same and on the other vCPU, and a round trip between two tenant processes on one vCPU (timed in user mode, like the native one), beside native Linux's |
 
-The book explains the task layer and virtual CPUs in chapter 8, the mirror,
-the yield stubs and the bound in chapter 10, and the numbers in chapter 14.
+The book explains the task layer and virtual CPUs in chapter 9, the mirror,
+the yield stubs and the bound in chapter 11, and the numbers in chapter 15.
 
 ## Files
 

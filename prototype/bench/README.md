@@ -18,4 +18,4 @@ Makefile's check targets run them.
 `make sched-fair`, `sched-perf` and `mem-perf` are measurements, not tests:
 `make bench` runs all three and prints their tables, and never fails, because
 their assertions depend on the host being quiet. The book discusses the
-numbers in chapter 14 (what it costs).
+numbers in chapter 15 (what it costs).
