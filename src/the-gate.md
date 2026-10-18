@@ -31,7 +31,7 @@ flowchart TB
     s --> g{"the gate:<br/>the KERNELET bit?"}
     g -- no --> t
     g -- "yes, but<br/>ops->on_syscall(regs)<br/>returned false" --> t
-    g -- "yes, and<br/>it returned true" --> x["the table<br/>is skipped"]
+    g -- "yes, and<br/>it returned true" --> x["Linux's system-call<br/>table is skipped"]
 ```
 
 **On the way out.** This hook is the one that is not obvious. A system call is the only reason a tenant *asks* for its kernel, but it is not the only reason the kernel must run before the tenant does. Three more appear in later chapters:
