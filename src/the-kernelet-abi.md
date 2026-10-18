@@ -1,6 +1,20 @@
 # The kernelet ABI
 
-The previous chapter was the view from above the framework: a kernel that allocates frames, maps pages and enters user mode. This chapter is the view from below. Chapter 3 said what an image is, three layers in one file, and named the third of them, the image ABI, without opening it. This chapter opens it: what the host tells a kernelet at start, what the kernelet may call, and what the host calls, down to the three structures that say so. Nothing in it runs yet; it is the shape that the next chapters fill in.
+The previous chapter was the view from above the framework: a kernel that allocates frames, maps pages and enters user mode. This chapter is the view from below: what is in the image file that chapter 2 registered, and how the code in it talks to the host. Nothing in it runs yet; it is the shape that the next chapters fill in.
+
+A kernelet image is three layers of code compiled into one file.
+
+1. **The kernel proper**, the hundred-line kernel of the last chapter: safe Rust, never edited.
+2. **vOSTD**, a Rust crate whose library name is `ostd`, so that the kernel proper's `use ostd::...` lines resolve to it. It offers every type and function the kernel proper uses, with the same names and signatures as the real OSTD. It is in `prototype/vostd/`.
+3. **The image ABI** (an *application binary interface* is the exact layout of what two separately compiled pieces of code pass each other), a few C-layout structures that both vOSTD and the endovisor know: what the host tells the kernelet at start, which functions the kernelet may call, and which functions the host may call. It is in `prototype/vostd/src/abi.rs` on the Rust side and `prototype/linux/endovisor/kernelet.h` on the C side, and the two must agree byte for byte.
+
+The first two are the image's contents; the third is this chapter's subject.
+
+<div class="linux">
+
+**Linux: modules and exported symbols.** A kernel module is code loaded into the running kernel with `insmod`. It may call only kernel functions that the kernel marks as **exported** (`EXPORT_SYMBOL` in the source); the rest are private to the kernel even though they are in the same address space. The endovisor is a module. A few functions it needs are not exported in a stock kernel, which is one of the two reasons for the patch in the next chapter.
+
+</div>
 
 ## The three tables
 
@@ -72,7 +86,7 @@ pub static kernelet_entry_table: EntryTable = EntryTable {
 
 The endovisor checks `abi_version` against its own when the module loads, and refuses to load if the two halves were built from different ABIs.
 
-In this prototype the image is linked statically into the endovisor's module, so there is one kernelet per module load; registering kinds, as chapter 3 describes, is what a full endovisor does instead, and the shortcut changes nothing below this chapter.
+In this prototype the image is linked statically into the endovisor's module, so there is one kernelet per module load; registering kinds, as chapter 2 describes, is what a full endovisor does instead, and the shortcut changes nothing below this chapter.
 
 ## The grant and the direct map
 

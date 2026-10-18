@@ -14,6 +14,11 @@ leaves kernelet code.
 It depends on the patch (`../patches`) and on nothing else that is not
 exported to modules, bar the one prototype it repeats for `flush_tlb_mm_range`.
 
+`uapi/kernelet.h` is the kernelet UAPI: the device node `/dev/kernelet`, its
+`ioctl`s and their structures, which the book's chapter 2 specifies and
+`../../host/runtime/holder.c` uses. This module does not implement it yet;
+the header is the interface's definition, shared with host programs.
+
 ## How it is built
 
 `make kernelet-module` from the top level: first `make image`, which builds

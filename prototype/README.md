@@ -27,10 +27,11 @@ each layer and the chapter of the book that explains it:
  ----------- the image ABI: services, entry table, boot arguments, ------------
              vCPU records   vostd/src/abi.rs = linux/endovisor/kernelet.h  ch. 4
   endovisor            linux/endovisor/  (kernelet.ko)            ch. 4, 6-13
+  the kernelet UAPI    linux/endovisor/uapi/kernelet.h            ch. 2
   the carrier hooks    linux/patches/0001-carrier-hooks.patch     ch. 5
   Linux 6.12           .build/linux-6.12, configured by linux/config.fragment
  ------------------------------------------------------------------------------
-  kernelet runtime     host/runtime/run-*.c                       user mode on the host
+  kernelet runtime     host/runtime/run-*.c, holder.c             user mode on the host
   initramfs (PID 1)    host/initramfs/init.c
   QEMU with KVM        the Makefile's `run`
 ```

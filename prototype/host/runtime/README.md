@@ -21,7 +21,7 @@ A `.klet` file is the sandbox's configuration, written by the Makefile's
 `stage-*` targets: the magic `KLET`, a version (2), the number of virtual CPUs,
 and a command line that the kernel proper reads as its kernel command line.
 
-The book explains creating a sandbox and the root carrier in chapter 6
+The book explains the kernelet UAPI, which `holder.c` uses, in chapter 2; creating a sandbox the way the other runtimes still do, with a root carrier, in chapter 6
 (carriers); the runtimes' measurements of native Linux appear in chapter 15.
 
 ## How they are built
@@ -39,3 +39,4 @@ The book explains creating a sandbox and the root carrier in chapter 6
 | `run-yield.c` | the sandbox and a competitor pinned to one CPU; the competitor computes the same checksum in user space and reports its progress | `make yield` |
 | `run-sched.c` | the sandbox in its own control group; with `coop` two competitors in a sibling group, with `fair` one, and the fairness measurement; with `perf` no competitor, and after the sandbox the same switch and wake-up measurements on native Linux | `make sched-*` |
 | `run-mem.c` | the sandbox; with `pressure` also swap and a memory hog until reclaim has run; with `kill`, a competitor on the processor of vCPU 1's carrier, then the carriers' signal dispositions from `/proc`, a SIGTERM and a SIGUSR1 to it and a SIGTERM to the root carrier, 2000 rounds of SIGQUIT, SIGABRT, SIGTSTP, SIGTTIN and SIGTTOU to it and a SIGQUIT and a SIGTSTP to the root carrier, a SIGSTOP and a SIGCONT, and a SIGKILL; with `killidle` and `killspin`, a SIGKILL to the carrier of vCPU 1 once the kernelet says it is idle in `vcpu_idle` or looping in a kernel task, and the time the sandbox takes to end | `make mem-*` |
+| `holder.c` | the kernelet UAPI's first user: `register` hands an image to `KERNELET_KIND_REGISTER`; `run` creates a sandbox, forks and configures one child per virtual CPU, each of which executes its exec descriptor, waits for the end and destroys. The endovisor of this prototype does not offer `/dev/kernelet` yet, so it is built but not run; the book reads it in chapter 2 | none yet |

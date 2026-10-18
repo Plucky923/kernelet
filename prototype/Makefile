@@ -343,8 +343,9 @@ kernelet-module: image
 	$(MAKE) module DIR=linux/endovisor
 	@echo "kernelet.ko built with the $(KLET_KERNEL) kernel proper"
 
-runtime: host/runtime/run-hello.c host/runtime/run-probe.c host/runtime/run-yield.c host/runtime/run-sched.c host/runtime/run-mem.c
+runtime: host/runtime/run-hello.c host/runtime/run-probe.c host/runtime/run-yield.c host/runtime/run-sched.c host/runtime/run-mem.c host/runtime/holder.c linux/endovisor/uapi/kernelet.h
 	gcc -static -O2 -Wall -Wextra -o $(RUNTIME) host/runtime/run-hello.c
+	gcc -static -O2 -Wall -Wextra -I linux/endovisor/uapi -o $(BUILD)/holder host/runtime/holder.c
 	gcc -static -O2 -Wall -Wextra -o $(BUILD)/run-probe host/runtime/run-probe.c
 	gcc -static -O2 -Wall -Wextra -o $(BUILD)/run-yield host/runtime/run-yield.c
 	gcc -static -O2 -Wall -Wextra -o $(BUILD)/run-sched host/runtime/run-sched.c -lpthread
@@ -1145,7 +1146,7 @@ clean:
 	rm -rf $(STAGE) $(INIT) $(INITRAMFS) $(SERIAL)
 	-$(KBUILD) M=$(CURDIR)/linux/endovisor clean
 	rm -f $(IMAGE) $(HELLO_ELF) $(PROBE_ELF) $(YIELD_ELF) $(SCHED_ELF) $(CURDIR)/kernels/mem/mem $(RUNTIME)
-	rm -f $(BUILD)/run-probe $(BUILD)/run-yield $(BUILD)/run-sched $(BUILD)/run-mem
+	rm -f $(BUILD)/run-probe $(BUILD)/run-yield $(BUILD)/run-sched $(BUILD)/run-mem $(BUILD)/holder
 	rm -f $(BUILD)/image_start.o $(BUILD)/image_end.o $(INITRAMFS_LIST)
 	rm -f $(BUILD)/*.log $(BUILD)/*.out
 	rm -rf $(CARGO_DIR) $(MEM_LOGDIR) $(BENCH_OUT)
