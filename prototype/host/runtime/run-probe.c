@@ -19,7 +19,7 @@
  *
  * With "seccomp", the child also installs, before the exec, a seccomp filter
  * that kills the process on system call 1000, the probe's endless one; every
- * carrier inherits it. Seccomp runs before the gate's syscall hook, so the
+ * carrier inherits it. Seccomp runs before the syscall hook, so the
  * kernelet never sees that call: Linux kills the carrier with SIGSYS, and the
  * carrier's death must end the sandbox by itself, with nobody killing the
  * root carrier, and leave no warning behind.

@@ -20,7 +20,7 @@
  *
  * A carrier runs the threads of more than one tenant process, so the address
  * space it is in is not its own: on its way to user mode it adopts the one its
- * virtual CPU has activated (klet_space_adopt), with the gate patch's
+ * virtual CPU has activated (klet_space_adopt), with the patch's
  * kernelet_switch_mm(), and when it dies it goes back to its own empty one
  * (klet_leave_space).
  */
@@ -119,7 +119,7 @@ static vm_fault_t klet_space_report(struct vm_fault *vmf, bool mkwrite)
 {
 	struct vm_area_struct *vma = vmf->vma;
 	struct klet_space *sp = vma->vm_file ? vma->vm_file->private_data : NULL;
-	struct klet_carrier *c = current->kernelet ? klet_current_carrier() : NULL;
+	struct klet_carrier *c = current->carrier_hooks ? klet_current_carrier() : NULL;
 	bool user = !!(vmf->flags & FAULT_FLAG_USER);
 	bool write = mkwrite || !!(vmf->flags & FAULT_FLAG_WRITE);
 	bool exec = !!(vmf->flags & FAULT_FLAG_INSTRUCTION);
@@ -178,7 +178,7 @@ static int klet_space_mmap(struct file *file, struct vm_area_struct *vma)
 {
 	struct klet_space *sp = file->private_data;
 
-	if (!current->kernelet)
+	if (!current->carrier_hooks)
 		return -EPERM;
 	/* The area belongs in its own space's address space and nowhere else. */
 	if (!sp || vma->vm_mm != sp->mm) {

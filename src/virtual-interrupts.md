@@ -58,7 +58,7 @@ static enum hrtimer_restart klet_watch_fn(struct hrtimer *timer)
 		tick = !ktime_before(hrtimer_cb_get_time(timer), this_cpu_read(klet_watch_period_end));
 	}
 
-	if (!current->kernelet)                     /* not a carrier any more: stop */
+	if (!current->carrier_hooks)                     /* not a carrier any more: stop */
 		return HRTIMER_NORESTART;
 	c = klet_current_carrier();
 
@@ -229,7 +229,7 @@ void klet_kick_remote(struct klet_carrier *c)
 static void klet_kick_ipi(void *arg)            /* runs in interrupt context on that processor */
 {
 	struct klet_carrier *c = arg;
-	if (current->kernelet == &c->gate)          /* still the same carrier there? */
+	if (current->carrier_hooks == &c->hooks)          /* still the same carrier there? */
 		klet_watch_fire_now();                  /* then make the watch timer fire, and it will redirect */
 }
 ```

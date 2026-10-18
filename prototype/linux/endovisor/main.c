@@ -117,9 +117,9 @@ struct file *klet_lifeline_create(struct klet_carrier *c)
 /*
  * `CpuId::current()` is on the hottest path the kernelet has, so it cannot be a
  * service call. What vOSTD does instead is two dependent loads: the host's
- * per-processor current-task pointer through `gs:`, the gate pointer inside that
- * task, and then the vCPU record, which is embedded in the carrier record the gate
- * belongs to. The mirror is a third: one `inc`/`dec` of the host's preemption count
+ * per-processor current-task pointer through `gs:`, the hooks pointer inside that
+ * task, and then the vCPU record, which is embedded in the carrier record the hooks
+ * belong to. The mirror is a third: one `inc`/`dec` of the host's preemption count
  * through `gs:`.
  *
  * The `gs:`-relative offsets are derived at run time from the segment base rather
@@ -148,13 +148,13 @@ static int klet_publish_host_offsets(struct klet_inst *inst)
 
 	inst->boot.gs_current_task = off_cur;
 	inst->boot.gs_preempt_count = off_pc;
-	inst->boot.task_gate_off = offsetof(struct task_struct, kernelet);
-	inst->boot.gate_vrec_off = offsetof(struct klet_carrier, vrec) -
-				   offsetof(struct klet_carrier, gate);
+	inst->boot.task_hooks_off = offsetof(struct task_struct, carrier_hooks);
+	inst->boot.hooks_vrec_off = offsetof(struct klet_carrier, vrec) -
+				   offsetof(struct klet_carrier, hooks);
 
-	pr_info("kernelet: host offsets: gs:current %#llx, gs:preempt_count %#llx, task->kernelet +%llu, gate->vrec +%llu\n",
+	pr_info("kernelet: host offsets: gs:current %#llx, gs:preempt_count %#llx, task->carrier_hooks +%llu, hooks->vrec +%llu\n",
 		inst->boot.gs_current_task, inst->boot.gs_preempt_count,
-		inst->boot.task_gate_off, inst->boot.gate_vrec_off);
+		inst->boot.task_hooks_off, inst->boot.hooks_vrec_off);
 	return 0;
 }
 
@@ -465,13 +465,13 @@ static int __init klet_init(void)
 	 * With vsyscall emulation, a tenant that jumps to the vsyscall page
 	 * faults, and Linux's fault handler runs gettimeofday, time or getcpu
 	 * for it (emulate_vsyscall()) and returns to user mode: a system call
-	 * the gate never sees, which no other path in the endovisor can
+	 * the syscall hook never sees, which no other path in the endovisor can
 	 * catch. Whether `vsyscall=none` was given at boot is held in a static
 	 * of Linux's that no module can read, so a kernel built with emulation
 	 * is refused outright.
 	 */
 #ifdef CONFIG_X86_VSYSCALL_EMULATION
-	pr_err("kernelet: refusing to load: this kernel emulates the vsyscall page (CONFIG_X86_VSYSCALL_EMULATION=y), through which a tenant could have Linux run a system call without passing the gate; build Linux with it off\n");
+	pr_err("kernelet: refusing to load: this kernel emulates the vsyscall page (CONFIG_X86_VSYSCALL_EMULATION=y), through which a tenant could have Linux run a system call without passing the syscall hook; build Linux with it off\n");
 	return -EINVAL;
 #endif
 

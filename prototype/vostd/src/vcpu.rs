@@ -14,12 +14,12 @@
 //! call. The endovisor publishes three numbers in the boot arguments:
 //!
 //! - the `gs:`-relative offset of the host's current-task pointer,
-//! - the offset of the gate pointer inside the host's task structure,
-//! - the offset of the vCPU record from the gate pointer.
+//! - the offset of the hooks pointer inside the host's task structure,
+//! - the offset of the vCPU record from the hooks pointer.
 //!
 //! Two dependent loads then give the record. The sequence is safe at any
 //! instruction boundary: whichever processor the carrier is on, the host's
-//! current-task pointer names *this* task, and this task's gate names this
+//! current-task pointer names *this* task, and this task's hooks name this
 //! vCPU's record. Migration between the two loads changes nothing.
 //!
 //! # The mirror
@@ -46,16 +46,16 @@ use crate::abi::{svc, BootArgs, VcpuRec, VIRQ_KICK, VIRQ_LINES, VIRQ_TICK};
 
 static GS_CURRENT_TASK: AtomicUsize = AtomicUsize::new(0);
 static GS_PREEMPT_COUNT: AtomicUsize = AtomicUsize::new(0);
-static TASK_GATE_OFF: AtomicUsize = AtomicUsize::new(0);
-static GATE_VREC_OFF: AtomicUsize = AtomicUsize::new(0);
+static TASK_HOOKS_OFF: AtomicUsize = AtomicUsize::new(0);
+static HOOKS_VREC_OFF: AtomicUsize = AtomicUsize::new(0);
 static MIRROR_ON: AtomicU32 = AtomicU32::new(0);
 static IMAGE_TEXT_LO: AtomicUsize = AtomicUsize::new(0);
 static IMAGE_TEXT_HI: AtomicUsize = AtomicUsize::new(0);
 
 /// Records the host offsets. Called once, from `kernelet_entry`.
 pub(crate) fn init_host_offsets(boot: &BootArgs) {
-    TASK_GATE_OFF.store(boot.task_gate_off as usize, Ordering::Relaxed);
-    GATE_VREC_OFF.store(boot.gate_vrec_off as usize, Ordering::Relaxed);
+    TASK_HOOKS_OFF.store(boot.task_hooks_off as usize, Ordering::Relaxed);
+    HOOKS_VREC_OFF.store(boot.hooks_vrec_off as usize, Ordering::Relaxed);
     GS_PREEMPT_COUNT.store(boot.gs_preempt_count as usize, Ordering::Relaxed);
     IMAGE_TEXT_LO.store(boot.image_text_lo as usize, Ordering::Relaxed);
     IMAGE_TEXT_HI.store(boot.image_text_hi as usize, Ordering::Relaxed);
@@ -92,12 +92,12 @@ pub(crate) fn vrec() -> &'static VcpuRec {
             options(nostack, readonly, preserves_flags),
         );
     }
-    let gate_slot = task + TASK_GATE_OFF.load(Ordering::Relaxed);
-    // SAFETY: a carrier's task always has a non-null gate pointer, and the vCPU
-    // record is embedded in the carrier record the gate belongs to.
-    let gate = unsafe { core::ptr::read(gate_slot as *const usize) };
+    let hooks_slot = task + TASK_HOOKS_OFF.load(Ordering::Relaxed);
+    // SAFETY: a carrier's task always has a non-null hooks pointer, and the vCPU
+    // record is embedded in the carrier record the hooks belong to.
+    let hooks = unsafe { core::ptr::read(hooks_slot as *const usize) };
     // SAFETY: as above.
-    unsafe { &*((gate + GATE_VREC_OFF.load(Ordering::Relaxed)) as *const VcpuRec) }
+    unsafe { &*((hooks + HOOKS_VREC_OFF.load(Ordering::Relaxed)) as *const VcpuRec) }
 }
 
 /// Tells the endovisor the low bound of the kernelet stack the current OSTD task

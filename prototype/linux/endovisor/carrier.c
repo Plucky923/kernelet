@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0
 /*
- * vCPU carriers, the coroutine, the gate hooks, and the service table.
+ * vCPU carriers, the coroutine, the carrier hooks, and the service table.
  *
  * The whole control flow of the prototype is here:
  *
@@ -156,7 +156,7 @@ struct klet_carrier *klet_carrier_new(struct klet_inst *inst, enum klet_kind kin
 	if (!c)
 		return NULL;
 
-	c->gate.ops = &klet_gate_ops;
+	c->hooks = klet_carrier_hooks;
 	c->inst = inst;
 	c->kind = kind;
 	c->vcpu = vcpu;
@@ -255,7 +255,7 @@ int klet_carrier_attach(struct klet_carrier *c)
 	if (c->kind == KLET_ROOT)
 		c->inst->root_lifeline_fd = fd;
 
-	current->kernelet = &c->gate;
+	current->carrier_hooks = &c->hooks;
 	set_syscall_work(KERNELET);
 	return 0;
 }
@@ -267,7 +267,7 @@ int klet_carrier_attach(struct klet_carrier *c)
 static void klet_detach(struct klet_carrier *c)
 {
 	clear_syscall_work(KERNELET);
-	current->kernelet = NULL;
+	current->carrier_hooks = NULL;
 
 	klet_sched_detach(c);
 	klet_leave_space(c);
@@ -343,7 +343,7 @@ void klet_carrier_lifeline_closed(struct klet_carrier *c)
 	 * is killed, and whatever is spinning inside the kernelet is evicted. That
 	 * holds after the kernelet stopped itself too, because a vCPU it left
 	 * spinning in kernel mode on a lock the stopped vCPU held never returns to
-	 * the gate to die: only eviction gets it out.
+	 * a hook to die: only eviction gets it out.
 	 *
 	 * A vCPU carrier's death while the sandbox is live is the sandbox's death
 	 * as well: killed by the OOM killer or an operator, it takes its virtual
@@ -355,7 +355,7 @@ void klet_carrier_lifeline_closed(struct klet_carrier *c)
 
 	/*
 	 * A carrier killed from outside while in user mode dies in Linux's exit
-	 * path without the gate ever running again, so klet_detach() never ran
+	 * path without a hook ever running again, so klet_detach() never ran
 	 * for it. Whatever detach did not release is released here, which runs
 	 * however the carrier died (the lifeline's last fput() in exit_files()
 	 * defers its release to task work, so it runs from exit_task_work(), in
@@ -387,7 +387,7 @@ void klet_carrier_lifeline_closed(struct klet_carrier *c)
 	 *
 	 * Nothing may still reach the record through the task first. A carrier
 	 * killed in user mode never ran klet_detach(): its task_struct still
-	 * points at the gate, and its preempt notifier is still registered, and
+	 * points at the hooks, and its preempt notifier is still registered, and
 	 * both would be used after the free, by the watch timer's and the sweep's
 	 * look at `current` in the rest of do_exit(), and by the final
 	 * schedule()'s sched_out notifier. The lifeline is released in
@@ -415,12 +415,12 @@ void klet_carrier_lifeline_closed(struct klet_carrier *c)
 					c->vcpu, current->pid, sig);
 		}
 		clear_syscall_work(KERNELET);
-		WRITE_ONCE(current->kernelet, NULL);
+		WRITE_ONCE(current->carrier_hooks, NULL);
 		barrier();
 		klet_sched_detach(c);
 	}
 	if (!c->pnotifier_on &&
-	    !(c->task && READ_ONCE(c->task->kernelet) == &c->gate))
+	    !(c->task && READ_ONCE(c->task->carrier_hooks) == &c->hooks))
 		klet_carrier_put(c);
 	else
 		pr_warn("kernelet: %s carrier record (pid %d) released away from its task; kept\n",
@@ -428,7 +428,7 @@ void klet_carrier_lifeline_closed(struct klet_carrier *c)
 }
 
 /*
- * The carrier gives up. Unbinds the gate, frees the coroutine and kills itself:
+ * The carrier gives up. Clears the hooks pointer, frees the coroutine and kills itself:
  * returning to user mode is not an option, because the registers on the way out
  * belong to the kernelet and may be nonsense by now.
  */
@@ -819,7 +819,7 @@ static void klet_ctx_set_exception(struct klet_carrier *c)
  * word, and this sets the pending word before it looks at the state, so at least
  * one of the two sees the other and the interrupt is never lost.
  *
- * Nor is the set_notify_resume(): the gate clears TIF_NOTIFY_RESUME *before* it
+ * Nor is the set_notify_resume(): the patched exit loop clears TIF_NOTIFY_RESUME *before* it
  * runs the resume hook, in the same pass of the exit loop, so a request made
  * while the hook runs, after its last look at the pending word, is still set
  * when the loop reads the flags again, and the loop runs the hook once more.
@@ -1086,13 +1086,13 @@ static int klet_carrier_main(void *arg)
 	int err;
 
 	/*
-	 * The clone copied the root carrier's gate pointer and syscall-work bit.
+	 * The clone copied the root carrier's hooks pointer and syscall-work bit.
 	 * This task is not a carrier until klet_carrier_attach() makes it one,
 	 * and must not reach the root's record through them meanwhile, nor after
 	 * a failure below, when the root's record may be gone.
 	 */
 	clear_syscall_work(KERNELET);
-	current->kernelet = NULL;
+	current->carrier_hooks = NULL;
 
 	/*
 	 * Drop the copy of the root carrier's lifeline that came with the fresh
@@ -1276,10 +1276,10 @@ static void klet_carrier_doom(struct klet_carrier *c)
 }
 
 /* ------------------------------------------------------------------ */
-/* The gate                                                           */
+/* The carrier hooks                                                  */
 /* ------------------------------------------------------------------ */
 
-static bool klet_gate_syscall(struct pt_regs *regs)
+static bool klet_on_syscall(struct pt_regs *regs)
 {
 	struct klet_carrier *c = klet_current_carrier();
 
@@ -1329,7 +1329,7 @@ static bool klet_gate_syscall(struct pt_regs *regs)
 	return true;
 }
 
-static void klet_gate_resume(struct pt_regs *regs)
+static void klet_on_resume(struct pt_regs *regs)
 {
 	struct klet_carrier *c = klet_current_carrier();
 
@@ -1348,7 +1348,7 @@ static void klet_gate_resume(struct pt_regs *regs)
 
 		/*
 		 * Linux has decided that this carrier dies (seccomp killed it on
-		 * one of the tenant's system calls, which the gate never saw): go
+		 * one of the tenant's system calls, which the syscall hook never saw): go
 		 * no further, and let the exit loop deliver the signal, which
 		 * ends the task, and the lifeline then the sandbox. The kernelet
 		 * must not run again on a task Linux considers dead.
@@ -1450,9 +1450,9 @@ static void klet_gate_resume(struct pt_regs *regs)
 	}
 }
 
-const struct kernelet_gate_ops klet_gate_ops = {
-	.on_syscall = klet_gate_syscall,
-	.on_resume = klet_gate_resume,
+const struct carrier_event_hooks klet_carrier_hooks = {
+	.on_syscall = klet_on_syscall,
+	.on_resume = klet_on_resume,
 };
 
 /* ------------------------------------------------------------------ */
@@ -2355,8 +2355,8 @@ static void klet_svc_fpu_load(const void *area, u64 len)
  * The carrier is marked as leaving *before* the pending word is read, so that a
  * virtual interrupt raised in the window is either seen here or makes the raiser
  * flag the carrier. Either way it is not lost: a flag raised while the resume
- * hook is still running makes the exit loop run the hook again, because the gate
- * clears TIF_NOTIFY_RESUME before the hook, not after (klet_virq_raise).
+ * hook is still running makes the exit loop run the hook again, because the
+ * patched loop clears TIF_NOTIFY_RESUME before the hook, not after (klet_virq_raise).
  */
 static u64 klet_svc_user_run(struct klet_user_ctx *ctx)
 {

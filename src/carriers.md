@@ -1,6 +1,6 @@
 # Carriers
 
-The gate attaches a hook to a Linux task. This chapter is about those tasks: where they come from, what they inherit, and how the endovisor learns when one dies. The word for them is the book's first Linux-specific term.
+Chapter 4 attached two hooks to a Linux task. This chapter is about those tasks: where they come from, what they inherit, and how the endovisor learns when one dies. The word for them is the book's first Linux-specific term.
 
 A **carrier** is a Linux task that belongs to a sandbox. Linux schedules carriers like any tasks; it does not know what they carry. A sandbox has a fixed number of carriers, chosen when it is created: one **root carrier**, which holds the sandbox together and never runs kernelet code, and one carrier per **virtual CPU**, which runs the kernelet's code and enters user mode on the kernelet's behalf; a virtual CPU is one of the processors the kernelet believes it has. Chapter 8 says what a virtual CPU is in full; for now, a sandbox with one virtual CPU, like the hundred-line kernel's, has a root carrier and one other.
 
@@ -65,7 +65,7 @@ static int klet_load_binary(struct linux_binprm *bprm)
 	start_thread(current_pt_regs(), 0, 0);      /* valid 64-bit user registers, even though it never uses them */
 
 	root = klet_carrier_new(inst, KLET_ROOT, -1);
-	klet_carrier_attach(root);                  /* install the gate and the lifeline */
+	klet_carrier_attach(root);                  /* install the hooks and the lifeline */
 	sigprocmask(SIG_SETMASK, &none, NULL);      /* no signal blocked ... */
 	for (sig = 1; sig <= _NSIG; sig++)          /* ... and every one that can be ignored is: chapter 7 says why */
 		if (!sig_kernel_only(sig))              /* (SIGKILL and SIGSTOP cannot be) */
@@ -80,7 +80,7 @@ Each line does what any program loader does, with one difference. The ELF loader
 
 The call to `start_thread` looks pointless for a task that will never run user code, and is not: a task cloned from this one copies its saved registers, segment selectors and flags included, and those clones *will* run user code. The root carrier's registers are the template.
 
-The last line is the handoff. The root carrier returns from the handler and heads for user mode, as every `execve` does. On the way it passes through the exit loop, and because the flag is set, the gate's resume hook runs. For the root carrier that hook returns only to die: it is where the root carrier does its work.
+The last line is the handoff. The root carrier returns from the handler and heads for user mode, as every `execve` does. On the way it passes through the exit loop, and because the flag is set, the resume hook runs. For the root carrier that hook returns only to die: it is where the root carrier does its work.
 
 ## The root carrier starts the others
 
@@ -124,7 +124,7 @@ static int klet_spawn_vcpu(struct klet_inst *inst, int vcpu)
 
 `wait_event_interruptible` is Linux's ordinary way to sleep until a condition holds: a waker *wakes* the queue the sleeper named, and the sleeper checks its condition again. An *interruptible* sleep also ends whenever a signal is pending for the task. The clones use the *killable* variant, which ends only for `SIGKILL`, because a `SIGSTOP` sent to a carrier stays pending until the carrier next heads for user mode (chapter 7) and must not end the wait early.
 
-Each clone is a separate process, not a thread: no `CLONE_VM`, no `CLONE_FILES`, no `CLONE_THREAD`. It gets a *copy* of the root's empty address space, a copy of its descriptor table, and, because Linux copies the task structure, the root's gate pointer, syscall-work bit, control group, credentials and seccomp filter. The control group, the credentials and the seccomp filter it keeps as they came: the endovisor sets none of them up per carrier; `fork` does. The gate pointer and the lifeline (defined below) it replaces at once: the clone's first act, below, is to clear the inherited pointer, so that nothing it does before it is attached can reach the root's record, then to attach a record of its own, and to close the inherited copy of the root's lifeline and open one of its own.
+Each clone is a separate process, not a thread: no `CLONE_VM`, no `CLONE_FILES`, no `CLONE_THREAD`. It gets a *copy* of the root's empty address space, a copy of its descriptor table, and, because Linux copies the task structure, the root's hooks pointer, syscall-work bit, control group, credentials and seccomp filter. The control group, the credentials and the seccomp filter it keeps as they came: the endovisor sets none of them up per carrier; `fork` does. The hooks pointer and the lifeline (defined below) it replaces at once: the clone's first act, below, is to clear the inherited pointer, so that nothing it does before it is attached can reach the root's record, then to attach a record of its own, and to close the inherited copy of the root's lifeline and open one of its own.
 
 ```mermaid
 flowchart TB
@@ -133,7 +133,7 @@ flowchart TB
     root -- "kernel_clone(...)" --> v1["carrier of virtual CPU 1<br/>waits for vcpu_boot"]
     subgraph inherited[" "]
         direction TB
-        i0["<b>inherited by every clone,<br/>because Linux copies it</b>"] ~~~ i1["gate pointer<br/>(replaced by its own)"] --- i2[empty address space] --- i3[control group]
+        i0["<b>inherited by every clone,<br/>because Linux copies it</b>"] ~~~ i1["hooks pointer<br/>(replaced by its own)"] --- i2[empty address space] --- i3[control group]
         i3 --- i4[seccomp filter] --- i5["lifeline, see below<br/>(replaced by its own)"]
     end
     root -. "copied at the clone" .-> inherited
@@ -149,12 +149,12 @@ static int klet_carrier_main(void *arg)
 	int vcpu = (int)(long)arg;
 
 	clear_syscall_work(KERNELET);               /* not a carrier until attached: the inherited pointer must not be used */
-	current->kernelet = NULL;
+	current->carrier_hooks = NULL;
 	f = fget(inst->root_lifeline_fd);           /* the inherited copy of the root's lifeline: close it, and drop */
 	close_fd(inst->root_lifeline_fd);           /* the reference now rather than at the next return to user mode, */
 	__fput_sync(f);                             /* in case the root died meanwhile and this copy was the last */
 	c = klet_carrier_new(inst, KLET_VCPU, vcpu);
-	klet_carrier_attach(c);                     /* this task's own gate record and lifeline */
+	klet_carrier_attach(c);                     /* this task's own hooks and lifeline */
 	mmget(current->mm);                         /* keep a reference to the empty address space ... */
 	c->blank_mm = current->mm;                  /* ... which chapter 12 drops when a tenant's replaces it */
 	inst->vcpus[vcpu] = c;
@@ -198,7 +198,7 @@ int klet_carrier_attach(struct klet_carrier *c)
 	int fd = get_unused_fd_flags(0);
 	fd_install(fd, file);
 
-	current->kernelet = &c->gate;               /* attach the gate ... */
+	current->carrier_hooks = &c->hooks;         /* attach the hooks ... */
 	set_syscall_work(KERNELET);                 /* ... and ask for the syscall hook */
 	return 0;
 }
@@ -210,12 +210,12 @@ static int klet_lifeline_release(struct inode *inode, struct file *file)
 }
 ```
 
-A clone starts with a copy of its parent's descriptor table, which is why `klet_carrier_main` closes the inherited copy of the root's lifeline first: otherwise the root's death notice would wait until the last carrier died. The close forces the file's release at once, because Linux normally defers a release to the closer's next return to user mode, and a root that died between the clone and the close, leaving this copy as the last reference, would otherwise be noticed only when the new carrier first got there; a clone that finds the root gone does not become a carrier. A tenant cannot close a lifeline, because closing a descriptor is a Linux system call, and the gate takes those.
+A clone starts with a copy of its parent's descriptor table, which is why `klet_carrier_main` closes the inherited copy of the root's lifeline first: otherwise the root's death notice would wait until the last carrier died. The close forces the file's release at once, because Linux normally defers a release to the closer's next return to user mode, and a root that died between the clone and the close, leaving this copy as the last reference, would otherwise be noticed only when the new carrier first got there; a clone that finds the root gone does not become a carrier. A tenant cannot close a lifeline, because closing a descriptor is a Linux system call, and the syscall hook takes those.
 
 When a lifeline closes, the endovisor takes the carrier off its lists. If the sandbox was still running, whichever carrier's lifeline it was, the sandbox is over: the endovisor marks the kernelet dying and ends every other carrier, which is chapter 11. The root's lifeline ends it even after the kernelet has stopped itself, for a reason chapter 11 gives.
 
 <div class="recap">
 
-**Recap.** A carrier is an ordinary Linux user task that runs kernelet code and enters user mode for it. The root carrier is made by `execve` of a sandbox file, which the endovisor's binary-format handler claims, giving it an empty address space and the gate; it never runs user code and it returns from the resume hook only to die. It clones one carrier per virtual CPU with `kernel_clone`, and each clone inherits the gate, the empty address space, the control group and the seccomp filter by the ordinary rules of `fork`. Every carrier holds a lifeline, an open file whose release tells the endovisor that the carrier has died.
+**Recap.** A carrier is an ordinary Linux user task that runs kernelet code and enters user mode for it. The root carrier is made by `execve` of a sandbox file, which the endovisor's binary-format handler claims, giving it an empty address space and the hooks; it never runs user code and it returns from the resume hook only to die. It clones one carrier per virtual CPU with `kernel_clone`, and each clone inherits the hooks, the empty address space, the control group and the seccomp filter by the ordinary rules of `fork`. Every carrier holds a lifeline, an open file whose release tells the endovisor that the carrier has died.
 
 </div>

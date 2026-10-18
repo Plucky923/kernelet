@@ -1,6 +1,6 @@
 # host: what runs in the booted Linux's user space
 
-Two things run on the host side of the gate, as ordinary programs in the
+Two things run on the host side, as ordinary programs in the
 guest's initramfs, and both are here:
 
 | directory | what it is |

@@ -174,7 +174,7 @@ static enum hrtimer_restart klet_watch_fn(struct hrtimer *timer)
 	 * The timer lives exactly as long as this processor is running a carrier of
 	 * a live sandbox. Nothing else has to be tracked.
 	 */
-	if (!current->kernelet) {
+	if (!current->carrier_hooks) {
 		this_cpu_write(klet_watch_last_tick, 0);
 		return HRTIMER_NORESTART;
 	}

@@ -32,7 +32,7 @@ _start:
 	syscall
 
 	# 2. A non-page-fault exception: Linux turns #UD into SIGILL, and the
-	#    gate's resume hook must hand it to the kernel proper as trap 6.
+	#    resume hook must hand it to the kernel proper as trap 6.
 	#    The kernel proper advances rip by these two bytes.
 	ud2
 

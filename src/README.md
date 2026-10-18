@@ -33,7 +33,7 @@ The book follows the order in which a kernelet comes to life, so each chapter us
 1. **Why a kernel of your own** says what a kernelet is and why it can be safe.
 2. **The kernel we will run** reads the hundred-line kernel that runs throughout the book, and lists what it needs from a machine.
 3. **What a kernelet is made of** is the shape of the thing: the image, the framework beneath the kernel, and the table of functions through which it talks to Linux.
-4. **The gate** is the small patch to Linux that hands a tenant's system calls to its kernelet.
+4. **Carrier hooks and patch overview** adds the two hooks through which a tenant's system calls reach its kernelet, and lists the rest of the one small patch to Linux.
 5. **Carriers** are the Linux tasks on which a kernelet runs.
 6. **Two stacks** is how a kernelet keeps its own stacks on a Linux task.
 7. **Into user mode and back** is the round trip of a system call, after which the hundred-line kernel prints its greeting.

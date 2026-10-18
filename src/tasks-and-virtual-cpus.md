@@ -79,7 +79,7 @@ struct klet_vcpu_rec {
 };
 ```
 
-The record is embedded in the endovisor's per-carrier structure, directly after the gate structure that `task_struct` points at. That placement is what makes it fast to find.
+The record is embedded in the endovisor's per-carrier structure, directly after the table of hooks that `task_struct` points at. That placement is what makes it fast to find.
 
 <div class="linux">
 
@@ -87,7 +87,7 @@ The record is embedded in the endovisor's per-carrier structure, directly after 
 
 </div>
 
-When it creates the root carrier, the endovisor computes the `%gs`-relative offset of the current-task pointer, checks it by reading the pointer back and comparing it with `current`, and publishes it in the boot arguments together with the offset of the gate pointer inside `task_struct` and the offset of the record from the gate. vOSTD then finds its record with two dependent loads and no call:
+When it creates the root carrier, the endovisor computes the `%gs`-relative offset of the current-task pointer, checks it by reading the pointer back and comparing it with `current`, and publishes it in the boot arguments together with the offset of the hooks pointer inside `task_struct` and the offset of the record from the hooks. vOSTD then finds its record with two dependent loads and no call:
 
 *Simplified from `prototype/vostd/src/vcpu.rs`: `vrec`.*
 
@@ -95,12 +95,12 @@ When it creates the root carrier, the endovisor computes the `%gs`-relative offs
 pub(crate) fn vrec() -> &'static VcpuRec {
     let task: usize;
     unsafe { asm!("mov {t}, gs:[{o}]", t = out(reg) task, o = in(reg) GS_CURRENT_TASK) };
-    let gate = unsafe { core::ptr::read((task + TASK_GATE_OFF) as *const usize) };
-    unsafe { &*((gate + GATE_VREC_OFF) as *const VcpuRec) }
+    let hooks = unsafe { core::ptr::read((task + TASK_HOOKS_OFF) as *const usize) };
+    unsafe { &*((hooks + HOOKS_VREC_OFF) as *const VcpuRec) }
 }
 ```
 
-Whichever processor the carrier is on, `%gs` names that processor's block, the block's current task is this carrier, and this carrier's gate leads to this virtual CPU's record. Being moved between processors between the two loads changes nothing.
+Whichever processor the carrier is on, `%gs` names that processor's block, the block's current task is this carrier, and this carrier's hooks lead to this virtual CPU's record. Being moved between processors between the two loads changes nothing.
 
 Everything OSTD keeps per CPU, such as the scheduler's run-queue locks and the timer callbacks, is in vOSTD an array with one slot per virtual CPU, indexed by the `vcpu_id` in the record. The one per-CPU word that must be updated with single instructions, OSTD's preemption word, lives in the record itself, and chapter 9 says why.
 

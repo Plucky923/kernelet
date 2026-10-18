@@ -18,7 +18,7 @@ The resolution is to give kernelet code stacks of its own. A **kernelet stack** 
 flowchart TB
     subgraph L[" "]
         direction TB
-        l0["<b>the carrier's Linux stack, 16 KiB</b>"] ~~~ l1["pt_regs: the user registers"] --> l2["entry code frames"] --> l3["the gate hook's frame<br/>(klet_carrier_main's, the first time)"] --> l4["klet_enter, parked in klet_switch"]
+        l0["<b>the carrier's Linux stack, 16 KiB</b>"] ~~~ l1["pt_regs: the user registers"] --> l2["entry code frames"] --> l3["the hook's frame<br/>(klet_carrier_main's, the first time)"] --> l4["klet_enter, parked in klet_switch"]
     end
     subgraph B[" "]
         direction TB
@@ -118,7 +118,7 @@ static void klet_leave(struct klet_carrier *c, enum klet_state state)
 }
 ```
 
-Where does `klet_enter` get called? From exactly three places: the carrier's start function (chapter 5), the gate's syscall hook, and the gate's resume hook (chapter 7). Each of those is a frame on the Linux stack, and `klet_switch` parks that frame until the kernelet leaves.
+Where does `klet_enter` get called? From exactly three places: the carrier's start function (chapter 5), the syscall hook, and the resume hook (chapter 7). Each of those is a frame on the Linux stack, and `klet_switch` parks that frame until the kernelet leaves.
 
 ## Where the stacks come from
 
@@ -218,7 +218,7 @@ void klet_svc_body(struct klet_svc_args *args)                /* runs on the Lin
 }
 ```
 
-The endovisor finds the calling carrier from Linux's `current` task and the gate pointer in it: `klet_current_carrier()` is `container_of(current->kernelet, struct klet_carrier, gate)` (given a pointer to a field, `container_of` subtracts the field's offset to get the enclosing structure). No service takes a "which kernelet" argument, so a kernelet cannot claim to be another.
+The endovisor finds the calling carrier from Linux's `current` task and the hooks pointer in it: `klet_current_carrier()` is `container_of(current->carrier_hooks, struct klet_carrier, hooks)` (given a pointer to a field, `container_of` subtracts the field's offset to get the enclosing structure). No service takes a "which kernelet" argument, so a kernelet cannot claim to be another.
 
 The **depth** counter says whether this carrier is, right now, inside endovisor or Linux code on the kernelet's behalf, where it may hold Linux's locks: it is 1 exactly then. The watch timer of chapter 9 and the eviction of chapter 11 must never touch the instruction pointer of such a carrier, and the depth is how they know.
 

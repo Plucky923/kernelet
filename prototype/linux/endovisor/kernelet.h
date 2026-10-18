@@ -117,8 +117,8 @@ struct klet_boot_args {
 	 */
 	u64 gs_current_task;
 	u64 gs_preempt_count;
-	u64 task_gate_off;
-	u64 gate_vrec_off;
+	u64 task_hooks_off;
+	u64 hooks_vrec_off;
 	u64 fpu_area_size;
 	u64 fpu_area_align;
 	u64 tsc_khz;
@@ -348,10 +348,10 @@ struct klet_space {
 };
 
 struct klet_carrier {
-	/* Must be first: the published gate->vrec offset assumes nothing, but
-	 * keeping the gate first makes the two offsets easy to read. */
-	struct kernelet_gate gate;
-	/* The shared record. Its offset from `gate` is in the boot arguments. */
+	/* Must be first: the published hooks->vrec offset assumes nothing, but
+	 * keeping the hooks first makes the two offsets easy to read. */
+	struct carrier_event_hooks hooks;
+	/* The shared record. Its offset from `hooks` is in the boot arguments. */
 	struct klet_vcpu_rec vrec;
 
 	struct klet_inst *inst;
@@ -573,14 +573,14 @@ extern struct klet_inst klet_inst;
 extern const struct klet_services klet_services;
 extern bool klet_mirror;
 
-static inline struct klet_carrier *klet_carrier_of(struct kernelet_gate *gate)
+static inline struct klet_carrier *klet_carrier_of(struct carrier_event_hooks *hooks)
 {
-	return container_of(gate, struct klet_carrier, gate);
+	return container_of(hooks, struct klet_carrier, hooks);
 }
 
 static inline struct klet_carrier *klet_current_carrier(void)
 {
-	return klet_carrier_of(current->kernelet);
+	return klet_carrier_of(current->carrier_hooks);
 }
 
 /*
@@ -703,7 +703,7 @@ void klet_carrier_lifeline_closed(struct klet_carrier *c);
 void klet_stop_instance(struct klet_inst *inst, u64 code);
 void klet_kill_instance(struct klet_inst *inst);
 void klet_virq_raise(struct klet_carrier *c, u32 bit);
-extern const struct kernelet_gate_ops klet_gate_ops;
+extern const struct carrier_event_hooks klet_carrier_hooks;
 
 /* main.c */
 struct file *klet_lifeline_create(struct klet_carrier *c);

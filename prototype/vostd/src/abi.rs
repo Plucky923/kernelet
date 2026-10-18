@@ -16,8 +16,8 @@
 //! vOSTD calls no Linux symbol. Everything it needs from the host arrives
 //! through [`Services`], except the four host offsets in [`BootArgs`] (where the
 //! current-task pointer and the preemption count sit in the per-CPU area, where
-//! a task's gate pointer sits in its `task_struct`, and where the vCPU record
-//! sits from the gate) that let it find its own [`VcpuRec`] and mirror its guard
+//! a task's hooks pointer sits in its `task_struct`, and where the vCPU record
+//! sits from the hooks) that let it find its own [`VcpuRec`] and mirror its guard
 //! depth into the host's preemption count without a call.
 
 use core::{
@@ -48,10 +48,10 @@ pub struct BootArgs {
     pub gs_current_task: u64,
     /// The `gs:`-relative offset of the host's preemption count.
     pub gs_preempt_count: u64,
-    /// The byte offset of the gate pointer inside the host's task structure.
-    pub task_gate_off: u64,
-    /// The byte offset of the vCPU record pointer from the gate pointer.
-    pub gate_vrec_off: u64,
+    /// The byte offset of the hooks pointer inside the host's task structure.
+    pub task_hooks_off: u64,
+    /// The byte offset of the vCPU record from the hooks pointer.
+    pub hooks_vrec_off: u64,
     /// The size in bytes of a floating-point save area.
     pub fpu_area_size: u64,
     /// The alignment a floating-point save area must have.

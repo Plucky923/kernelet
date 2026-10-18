@@ -13,7 +13,7 @@ A **kernelet** is a complete kernel, written in safe Rust against the Asterinas 
 ```sh
 make build          # into book/; needs mdbook and mdbook-mermaid
 make check          # every link resolves; every file and identifier the captions name exists in prototype/
-make render PAGE=the-gate.html OUT=/tmp/gate.png   # screenshot a page and check its diagrams rendered
+make render PAGE=carrier-hooks.html OUT=/tmp/page.png   # screenshot a page and check its diagrams rendered
 ```
 
 The book is built with mdbook 0.5.2 and mdbook-mermaid 0.17.0. `make build` then prints `Warning: The mdbook-mermaid preprocessor was built against version 0.5.0 of mdbook, but we're being called from version 0.5.2`; it is harmless, and the diagrams render.

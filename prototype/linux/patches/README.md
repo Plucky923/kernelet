@@ -1,13 +1,13 @@
-# patches: the gate
+# patches: the carrier hooks
 
-`0001-kernelet-gate.patch` is the whole change to Linux v6.12 that a kernelet
+`0001-carrier-hooks.patch` is the whole change to Linux v6.12 that a kernelet
 needs; everything else is the endovisor module. It adds, behind
 `CONFIG_KERNELET`:
 
-- a `kernelet` pointer in `struct task_struct` and a syscall-work bit, which
+- a `carrier_hooks` pointer in `struct task_struct` and a syscall-work bit, which
   together mark a task as a carrier (`include/linux/sched.h`,
   `include/linux/thread_info.h`, `include/linux/entry-common.h`);
-- the two hooks of `struct kernelet_gate_ops` in the generic entry code
+- the two hooks of `struct carrier_event_hooks` in the generic entry code
   (`kernel/entry/common.c`): `syscall`, offered every system call of a carrier
   after seccomp, and `resume`, run on every exit to user mode with work
   pending, before signals are delivered (`include/linux/kernelet.h`). For a
@@ -26,16 +26,16 @@ needs; everything else is the endovisor module. It adds, behind
   flush of `vm_flush`;
 - the Kconfig entry, which selects `PREEMPT_NOTIFIERS` (`init/Kconfig`).
 
-It adds 223 lines (201 of them not blank) and removes none, counted with
+It adds 219 lines (198 of them not blank) and removes none, counted with
 `git apply --numstat`.
 
-The book explains the patch in chapter 4 (the gate), `kernel_clone` in
+The book explains the patch in chapter 4 (carrier hooks), `kernel_clone` in
 chapter 5 (carriers), and the two address-space helpers in chapter 12.
 
 ## How it is applied
 
 `make patch` at the top level applies it to `.build/linux-6.12` and is
 idempotent: a reverse dry run that succeeds means the patch is already in. It
-leaves a stamp, `.build/linux-6.12/.kernelet-gate-patch`, so it runs once per
+leaves a stamp, `.build/linux-6.12/.carrier-hooks-patch`, so it runs once per
 change of the patch file, and `make source` and `make linux` both go through
 it. The patch was generated with `diff -u` against pristine v6.12 files.

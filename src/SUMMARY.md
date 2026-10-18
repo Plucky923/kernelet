@@ -5,7 +5,7 @@
 - [Why a kernel of your own](why-a-kernel-of-your-own.md)
 - [The kernel we will run](the-kernel-we-will-run.md)
 - [What a kernelet is made of](what-a-kernelet-is-made-of.md)
-- [The gate](the-gate.md)
+- [Carrier hooks and patch overview](carrier-hooks.md)
 - [Carriers](carriers.md)
 - [Two stacks](two-stacks.md)
 - [Into user mode and back](into-user-mode-and-back.md)

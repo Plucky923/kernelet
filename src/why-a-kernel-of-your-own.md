@@ -79,7 +79,7 @@ These are used in one sense throughout the book.
 | **virtual CPU** | one of the fixed number of processors a sandbox is given when it is created; the kernelet runs its tasks on them as a kernel runs on real processors (chapter 8) |
 | **carrier** | a Linux task of a sandbox: the root carrier, which holds the sandbox together, and one carrier per virtual CPU, which stands behind it (chapter 5) |
 | **kernelet runtime** | the host program that creates and configures sandboxes, as a container runtime does (chapter 5) |
-| **gate** | the small change to Linux that hands a tenant's system calls to its kernelet (chapter 4) |
+| **carrier event hooks** | the two functions Linux calls for a carrier, at a system call and before user mode; the small patch that adds them is the one change to Linux (chapter 4) |
 
 The last three are the Linux-specific parts of the design, and the chapters named define them in full.
 

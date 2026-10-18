@@ -27,7 +27,7 @@ each layer and the chapter of the book that explains it:
  ----------- the image ABI: services, entry table, boot arguments, ------------
              vCPU records   vostd/src/abi.rs = linux/endovisor/kernelet.h  ch. 3
   endovisor            linux/endovisor/  (kernelet.ko)            ch. 3, 5-12
-  the gate             linux/patches/0001-kernelet-gate.patch     ch. 4
+  the carrier hooks    linux/patches/0001-carrier-hooks.patch     ch. 4
   Linux 6.12           .build/linux-6.12, configured by linux/config.fragment
  ------------------------------------------------------------------------------
   kernelet runtime     host/runtime/run-*.c                       user mode on the host
@@ -38,7 +38,7 @@ each layer and the chapter of the book that explains it:
 The top level holds five directories: `kernels/` (the five kernels proper, each
 with its tenant program), `vostd/` and `libs/` (the framework and the two
 crates it and the kernels take unchanged from the Asterinas tree), `linux/`
-(everything that is Linux's: the configuration fragment, the gate patch and the
+(everything that is Linux's: the configuration fragment, the patch and the
 endovisor module), `host/` (what runs in the booted Linux's user space: the
 kernelet runtimes and PID 1) and `bench/` (the scripts that turn the
 measurement logs into tables).
@@ -47,8 +47,8 @@ The kernel proper and vOSTD are one Rust static library, pre-linked into one
 relocatable object, the **image**, which is linked into the endovisor module.
 The image calls no Linux symbol: everything it needs from the host is a
 service in the table the endovisor hands it at entry. The endovisor is an
-ordinary out-of-tree module apart from the gate, a patch to Linux that adds
-210 lines (188 of them not blank) and removes none, most of them in the generic
+ordinary out-of-tree module apart from the patch to Linux, which adds
+219 lines (198 of them not blank) and removes none, most of them in the generic
 entry code and `kernel/fork.c`. The kernelet runtime is the user-space program
 that creates a sandbox, by exec'ing a `.klet` file that the
 endovisor's binary-format handler turns into the sandbox's root carrier.
@@ -71,7 +71,7 @@ Each directory has a `README.md` saying what is in it.
   settings are preconditions rather than conveniences. Vsyscall emulation
   (`CONFIG_X86_VSYSCALL_EMULATION`) must be off: with it, a tenant that jumps
   to the vsyscall page has Linux run `gettimeofday`, `time` or `getcpu` for
-  it in the page-fault handler, without passing the gate, and the endovisor
+  it in the page-fault handler, without passing the syscall hook, and the endovisor
   refuses to load on such a kernel (it cannot read whether `vsyscall=none` was
   given at boot, so it refuses either way). And `CONFIG_BUG` must be on:
   `tinyconfig` turns it off, and then every `WARN_ON()` in Linux is silent,
@@ -132,7 +132,7 @@ make bench    # the measurements
 
 The first `make test` downloads the v6.12 tarball (about 140 MB) from
 cdn.kernel.org, unpacks it into `.build/linux-6.12`, deletes the tarball,
-applies the gate patch, configures and builds the kernel (a `tinyconfig`
+applies the patch, configures and builds the kernel (a `tinyconfig`
 kernel, so this is quick), builds the Rust image, and then runs the tests:
 315 s measured from an empty `.build/` on an eight-core machine, 134 s of them
 in the first test (measured before the kernel gained `CONFIG_BUG` and `probe`
@@ -179,14 +179,14 @@ Run them from `prototype/`, or from the repository root as
 | `make mem-perf` | measurement: E6 and E9, the memory costs, five boots | 14 |
 | `make sched`, `make mem` | the sched tests (`sched-policy`, `sched-coop`, `sched-fpu`); the mem tests (`mem-func`, `mem-r2`, `mem-conc`, `mem-kill`, `mem-pressure`). The measurements are `make bench`'s | 8, 10, 12, 13 |
 | `make crates` | download the Rust crates, once | – |
-| `make source` | download and unpack Linux v6.12 if `.build/linux-6.12/Makefile` is not there, and apply the gate patch | 4 |
-| `make patch` | apply the gate patch; idempotent | 4 |
+| `make source` | download and unpack Linux v6.12 if `.build/linux-6.12/Makefile` is not there, and apply the patch | 4 |
+| `make patch` | apply the patch; idempotent | 4 |
 | `make linux` | configure (once, from `linux/config.fragment`; `make config` does only that) and build `bzImage`, `modules` (which writes the tree's `Module.symvers`, without which no out-of-tree module links) and `modules_prepare` | 4 |
 | `make image` | build vOSTD and the kernel proper named by `KLET_KERNEL` (`hello`, `probe`, `yieldk`, `schedk`, `mem`) and pre-link the image | 3 |
 | `make kernelet-module` | the image, then `linux/endovisor/kernelet.ko` | 3 |
 | `make runtime`, `make initramfs`, `make run` | the runtimes; the initramfs from `.build/stage`; one boot | 5, 7 |
 | `make clean` | remove the harness's artifacts: the image and module, the runtimes, the staging area and the initramfs, the Rust build, every log and test output. It leaves the Linux tree, its build, the Cargo registry and `.build/crates.stamp` (which says the registry has the crates) | – |
-| `make distclean` | `clean`, then `make mrproper` in the Linux tree, which removes its build and its configuration (`.config`, `include/generated`). It leaves the unpacked source, the gate patch applied to it and the patch's stamp, so the next `make linux` configures and builds again but neither downloads nor patches | – |
+| `make distclean` | `clean`, then `make mrproper` in the Linux tree, which removes its build and its configuration (`.config`, `include/generated`). It leaves the unpacked source, the patch applied to it and the patch's stamp, so the next `make linux` configures and builds again but neither downloads nor patches | – |
 
 Internal targets, which the ones above call: `all` (`linux initramfs`),
 `module DIR=<dir>` and `stage-module DIR=<dir>` (an out-of-tree module, built
@@ -266,8 +266,8 @@ requires 0 live in each of the last three.
   then ignores it again, so that the next fault is forced, and drained, the
   same way. The one exception is a signal Linux has made fatal for good,
   which it marks `SA_IMMUTABLE`: seccomp's `SIGSYS` when a filter kills
-  (`SECCOMP_RET_KILL_PROCESS` or `_THREAD`), which arrives before the gate
-  ever sees the call. Seccomp has then already marked the task dead, and a
+  (`SECCOMP_RET_KILL_PROCESS` or `_THREAD`), which arrives before the syscall
+  hook ever sees the call. Seccomp has then already marked the task dead, and a
   carrier that lived on would hit seccomp's `WARN` at its next system call.
   So the drain never takes such a signal, and the resume hook, finding one
   pending, returns at once and lets Linux deliver it: the carrier dies by it

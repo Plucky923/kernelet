@@ -31,7 +31,7 @@ NOTES = {
     "kernelet_user_switch_other_mm_cycles":
         "two tenant threads of two different tenant processes alternating on one "
         "vCPU through a yield system call, a round trip timed in user mode: per "
-        "thread a gate entry and exit, an OSTD switch, an address-space adoption "
+        "thread the two hooks, in and out, an OSTD switch, an address-space adoption "
         "(kernelet_switch_mm) and the kernel proper's floating-point save and load",
     "linux_process_yield_roundtrip_cycles":
         "two Linux processes on one CPU calling sched_yield(): the same plus an "

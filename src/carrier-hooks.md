@@ -1,10 +1,10 @@
-# The gate
+# Carrier hooks and patch overview
 
 A kernelet's user program runs in user mode on a real processor. When it executes `syscall`, the processor jumps into whatever the hardware's system-call entry register points at, and on a Linux machine that is Linux's entry code. Linux would then look the call number up in its own table and run `write`. Nothing in the hundred-line kernel would ever hear of it.
 
-So the design needs a way to **hand a system call to a kernelet before Linux handles it**. It also needs, for reasons this chapter builds up to, a way to **run kernelet code just before one of its tasks enters user mode**, whatever brought the task into the kernel. Linux has no such interface. This chapter adds one that does both, the **gate**: two hooks in Linux's entry path.
+So the design needs a way to **hand a system call to a kernelet before Linux handles it**. It also needs, for reasons this chapter builds up to, a way to **run kernelet code just before one of its tasks enters user mode**, whatever brought the task into the kernel. Linux has no such interface. This chapter adds one that does both: two hooks, which Linux calls only for the tasks that carry a kernelet.
 
-A **gate** is what the patch lets a Linux task carry: a record, pointed to by a new field of the task structure, that names a table of two hooks. Linux's entry path calls the hooks at the two points every crossing between a task's user mode and the kernel passes through: when the task's user mode makes a system call, and just before the task returns to user mode. Whoever holds a task's gate thus sees every crossing, in and out, and runs first at each; that is what the word means here. The record, the table and the hooks all belong to the endovisor. It implements the one table of hooks, attaches a gate to every carrier it creates (chapter 5), and finds its own state for the carrier from the record whenever a hook is called. Linux itself only defines the types, `struct kernelet_gate` and `struct kernelet_gate_ops`, and makes the two calls; a task whose pointer is null, which is every ordinary task, never reaches either.
+A **carrier** is a Linux task that runs a kernelet's code and enters user mode for it: the root carrier of a sandbox, and one carrier per virtual CPU (chapter 1's table; chapter 5 is about them). What makes a task a carrier, as far as Linux is concerned, is one new field of the task structure: a pointer to its **carrier event hooks**, a table of two functions. Linux calls them at the two events through which every crossing between a carrier's user mode and the kernel passes: a system call from the carrier's user mode, and the carrier's return to user mode. The table is the whole interface between Linux's core and the endovisor. The core knows the type of the two functions and the two places to call them, and nothing of what is behind them; the endovisor implements the functions, puts a table into every carrier record it creates, and finds that record from the table's address when a hook is called. For an ordinary task the pointer is null, and nothing in the patch is reached.
 
 ## Where Linux can be hooked
 
@@ -16,7 +16,7 @@ On x86-64 every system-call instruction, after a few lines of assembly and one a
 
 </div>
 
-Linux thus already has three stages at which something other than the handler sees a system call. All three are controlled from user space, and none lets kernel code *answer* a call. The gate is a fourth stage that does, and it has a second half on the way out.
+Linux thus already has three stages at which something other than the handler sees a system call. All three are controlled from user space, and none lets kernel code *answer* a call. The syscall hook is a fourth stage that does, and the resume hook is its counterpart on the way out.
 
 ## Two hooks, one for each direction
 
@@ -28,9 +28,9 @@ flowchart TB
     e --> w{"any syscall<br/>work bit set?"}
     w -- no --> t["Linux's<br/>system-call table"]
     w -- yes --> s["syscall_trace_enter:<br/>dispatch, ptrace, seccomp"]
-    s --> g{"the gate:<br/>the KERNELET bit?"}
+    s --> g{"the KERNELET<br/>bit set?"}
     g -- no --> t
-    g -- "yes, but<br/>ops->on_syscall(regs)<br/>returned false" --> t
+    g -- "yes, but<br/>hooks->on_syscall(regs)<br/>returned false" --> t
     g -- "yes, and<br/>it returned true" --> x["Linux's system-call<br/>table is skipped"]
 ```
 
@@ -46,8 +46,8 @@ In every case the task is inside the kernel, on its way back to user mode, and s
 flowchart TB
     p{"work pending?<br/>(a signal, a flag,<br/>a reschedule)"} -- no --> back["restore pt_regs,<br/>return to user mode"]
     p -- yes --> loop[exit_to_user_mode_loop]
-    loop --> r{"the gate:<br/>current->kernelet?"}
-    r -- yes --> h["ops->on_resume(regs)"]
+    loop --> r{"a carrier?<br/>(current->carrier_hooks)"}
+    r -- yes --> h["the task's hooks:<br/>on_resume(regs)"]
     h --> sig[signals, reschedule]
     r -- no --> sig
     sig --> p
@@ -55,13 +55,13 @@ flowchart TB
 
 ## The patch, hunk by hunk
 
-**A hook structure and a pointer per task.** A new header defines the two hooks as function pointers, and `struct task_struct` gains a pointer to a structure holding them. A task whose pointer is null is unaffected by anything else in the patch.
+**A table of hooks and a pointer per task.** A new header defines the table, two function pointers, and `struct task_struct` gains a pointer to one. A task whose pointer is null is unaffected by anything else in the patch.
 
-*Simplified from `prototype/linux/patches/0001-kernelet-gate.patch`: `kernelet_gate_ops`, `kernelet_gate`.*
+*Simplified from `prototype/linux/patches/0001-carrier-hooks.patch`: `carrier_event_hooks`.*
 
 ```c
 /* include/linux/kernelet.h (new) */
-struct kernelet_gate_ops {
+struct carrier_event_hooks {
 	/* Called from syscall_trace_enter(), after seccomp, for a system call
 	 * issued by a carrier's user mode; regs hold the number and the
 	 * arguments. Returns true if the kernelet serviced the call: regs then
@@ -87,24 +87,20 @@ struct kernelet_gate_ops {
 	void (*on_resume)(struct pt_regs *regs);
 };
 
-struct kernelet_gate {
-	const struct kernelet_gate_ops *ops;
-};
-
 /* include/linux/sched.h, inside struct task_struct */
-	struct kernelet_gate		*kernelet;	/* NULL for every ordinary task */
+	struct carrier_event_hooks	*carrier_hooks;	/* NULL for every ordinary task */
 ```
 
 **One bit of syscall work.** Linux calls `syscall_trace_enter()` only for tasks with a bit set in their syscall-work mask. The patch adds a bit, `SYSCALL_WORK_KERNELET`, and includes it in the set that triggers the call on entry. A task that is not a kernelet's pays nothing: the fast path does not even test the pointer.
 
 **The syscall hook.** Inside `syscall_trace_enter()`, directly after seccomp:
 
-*Simplified from `prototype/linux/patches/0001-kernelet-gate.patch`: `SYSCALL_WORK_KERNELET`.*
+*Simplified from `prototype/linux/patches/0001-carrier-hooks.patch`: `SYSCALL_WORK_KERNELET`.*
 
 ```c
 /* kernel/entry/common.c, syscall_trace_enter() */
 	if (work & SYSCALL_WORK_KERNELET) {
-		if (current->kernelet->ops->on_syscall(regs))
+		if (current->carrier_hooks->on_syscall(regs))
 			return -1L;
 	}
 ```
@@ -125,22 +121,22 @@ The commonest piece of task work is closing a file. When the last reference to a
 
 The hook, with Linux's own work for that flag placed before it:
 
-*Simplified from `prototype/linux/patches/0001-kernelet-gate.patch`: `resume_user_mode_work`.*
+*Simplified from `prototype/linux/patches/0001-carrier-hooks.patch`: `resume_user_mode_work`.*
 
 ```c
 /* kernel/entry/common.c, exit_to_user_mode_loop() */
-		if (unlikely(current->kernelet)) {
+		if (unlikely(current->carrier_hooks)) {
 			if (ti_work & _TIF_NOTIFY_RESUME) {          /* Linux's own notify-resume work first, since it clears the flag: */
 				resume_user_mode_work(regs);             /* a flag set while the hook runs then survives to the loop's */
 				ti_work &= ~_TIF_NOTIFY_RESUME;          /* next look at the flags, and the hook runs again */
 			}
-			current->kernelet->ops->on_resume(regs);
+			current->carrier_hooks->on_resume(regs);
 		}
 ```
 
 Linux's own notify-resume work goes first because its first act is to clear the flag that requested it. Run after the hook, it would clear a request the endovisor made from another processor while the hook was looking elsewhere, and the carrier would enter user mode with that request pending (chapter 9). Placing the hook before signal delivery is what lets the kernelet take a tenant's exceptions away from Linux, as chapter 7 shows.
 
-**The gate is inherited.** Nothing in the patch copies the pointer into child tasks, and nothing needs to: Linux creates a task by copying the parent's whole `task_struct` ([`dup_task_struct()`](https://elixir.bootlin.com/linux/v6.12/source/kernel/fork.c#L1101)), the new field included, and the syscall-work bits are inherited the same way. A child of a kernelet's task is therefore attached to the gate before it executes its first instruction, and there is no moment at which it could make a system call that Linux would answer. This is the difference between a field Linux does not know about, which it copies, and a setting Linux knows about, such as Syscall User Dispatch, which it deliberately resets at `fork` and `exec`.
+**The hooks are inherited.** Nothing in the patch copies the pointer into child tasks, and nothing needs to: Linux creates a task by copying the parent's whole `task_struct` ([`dup_task_struct()`](https://elixir.bootlin.com/linux/v6.12/source/kernel/fork.c#L1101)), the new field included, and the syscall-work bits are inherited the same way. A child of a carrier therefore has the hooks before it executes its first instruction, and there is no moment at which it could make a system call that Linux would answer. This is the difference between a field Linux does not know about, which it copies, and a setting Linux knows about, such as Syscall User Dispatch, which it deliberately resets at `fork` and `exec`.
 
 **Two helper functions.** `kernel/fork.c` gains two functions that the endovisor cannot write itself because everything they touch is private to the core kernel: `kernelet_mm_alloc()`, which creates an empty address space with a chosen owner, and `kernelet_switch_mm()`, which makes the calling task run in a different address space. Both belong to chapter 12, where tenant memory is built; they are mentioned here only so that the patch's contents are complete.
 
@@ -148,7 +144,7 @@ Linux's own notify-resume work goes first because its first act is to clear the 
 
 **A configuration option.** `CONFIG_KERNELET` guards all of it. The prototype's kernel configuration turns it on. A kernel built without it behaves exactly as a stock kernel, since every line the patch adds to a function is inside `#ifdef CONFIG_KERNELET`; what remains outside are the include lines, a forward declaration, the new header's two prototypes, the bit's name and a macro that expands to zero.
 
-**A precondition.** The kernel must be built without the legacy *vsyscall* page (`CONFIG_X86_VSYSCALL_EMULATION` unset). A program that jumps to that page's fixed address gets three system calls answered by Linux's own page-fault handler, without ever reaching the entry path, so the gate would never see them. The module refuses to load on a kernel built with it.
+**A precondition.** The kernel must be built without the legacy *vsyscall* page (`CONFIG_X86_VSYSCALL_EMULATION` unset). A program that jumps to that page's fixed address gets three system calls answered by Linux's own page-fault handler, without ever reaching the entry path, so the syscall hook would never see them. The module refuses to load on a kernel built with it.
 
 ## What the patch does not do
 
@@ -156,6 +152,6 @@ It adds no new system call, no boot parameter, and no change to Linux's schedule
 
 <div class="recap">
 
-**Recap.** The gate is two hooks in Linux's generic entry layer, selected by a pointer in `task_struct` and a syscall-work bit: `on_syscall` runs after seccomp and can answer the call so that Linux's table is skipped; `on_resume` runs on the way back to user mode, before signals are delivered, and gives the kernelet the last word before the tenant runs, for everything that is not a system call: a carrier's first entry, a tenant's fault, a timer or another virtual CPU wanting it. A child inherits the attachment because Linux copies the task structure. The rest of the patch is two helpers and two exports for later chapters.
+**Recap.** The carrier event hooks are two functions that Linux's generic entry layer calls for a carrier, selected by a pointer in `task_struct` and a syscall-work bit: `on_syscall` runs after seccomp and can answer the call so that Linux's table is skipped; `on_resume` runs on the way back to user mode, before signals are delivered, and gives the kernelet the last word before the tenant runs, for everything that is not a system call: a carrier's first entry, a tenant's fault, a timer or another virtual CPU wanting it. A child inherits the pointer because Linux copies the task structure. The rest of the patch is two helpers and two exports for later chapters.
 
 </div>

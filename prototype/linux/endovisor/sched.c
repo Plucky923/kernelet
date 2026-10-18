@@ -8,7 +8,7 @@
  *    carrier, so that the endovisor can count, exactly rather than by sampling,
  *    every time Linux switches a carrier out *involuntarily* while it was running
  *    kernelet code with a guard held. With the mirror on that count must be zero;
- *    with it off it is not. CONFIG_PREEMPT_NOTIFIERS is selected by the gate's
+ *    with it off it is not. CONFIG_PREEMPT_NOTIFIERS is selected by the patch's
  *    Kconfig entry, which is the one line the patch grew for this.
  *
  * 2. **vcpu_on_spin.** A spin lock that has spun a thousand times may be waiting
@@ -279,7 +279,7 @@ static void klet_kick_ipi(void *arg)
 {
 	struct klet_carrier *c = arg;
 
-	if (!current->kernelet || current->kernelet != &c->gate)
+	if (!current->carrier_hooks || current->carrier_hooks != &c->hooks)
 		return;
 	atomic_inc(&c->inst->kick_ipis);
 	klet_watch_fire_now();

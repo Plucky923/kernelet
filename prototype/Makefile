@@ -34,8 +34,8 @@
 #
 #   make crates       download the Rust crates the build needs (once, online)
 #   make source       fetch and unpack Linux v6.12 if it is not there yet, and
-#                     apply the gate patch
-#   make patch        apply linux/patches/0001-kernelet-gate.patch (idempotent)
+#                     apply the patch
+#   make patch        apply linux/patches/0001-carrier-hooks.patch (idempotent)
 #   make config       configure the tree: tinyconfig, then linux/config.fragment
 #   make linux        configure (once) and build bzImage, modules and
 #                     modules_prepare
@@ -84,7 +84,7 @@ SERIAL    := $(BUILD)/serial.log
 KBUILD := $(MAKE) -C $(LINUX_DIR) ARCH=$(ARCH)
 
 # --- the kernelet prototype ---------------------------------------------
-PATCH      := $(CURDIR)/linux/patches/0001-kernelet-gate.patch
+PATCH      := $(CURDIR)/linux/patches/0001-carrier-hooks.patch
 TEMPLATE   := $(CURDIR)/kernels/hello/upstream
 CARGO      ?= cargo
 RUST_TARGET := x86_64-unknown-none
@@ -174,11 +174,11 @@ bench:
 	done; \
 	echo "make bench: done; the tables are in $(BENCH_OUT)/*.table"
 
-# --- the Linux patch (the gate) -----------------------------------------
+# --- the Linux patch (the carrier hooks)---------------------------------
 
 # Idempotent: a successful reverse dry-run means the patch is already in. The
 # stamp makes it run once per change of the patch, not once per target.
-PATCH_STAMP := $(LINUX_DIR)/.kernelet-gate-patch
+PATCH_STAMP := $(LINUX_DIR)/.carrier-hooks-patch
 
 patch: $(PATCH_STAMP)
 
@@ -194,7 +194,7 @@ $(PATCH_STAMP): $(PATCH) $(LINUX_DIR)/Makefile
 # --- kernel -------------------------------------------------------------
 
 # A clean checkout has no .build/linux-6.12: fetch the tarball, unpack it and
-# throw the tarball away; `patch` then applies the gate. The df guard runs only
+# throw the tarball away; `patch` then applies it. The df guard runs only
 # before the download and before the first build of the tree, the two steps
 # that take the disk (about 1.8 GB between them); once the kernel is built, a
 # boot needs only a few megabytes, and no test refuses to run.
@@ -1072,7 +1072,7 @@ check-probe-log:
 	exit $$rc
 
 # The probe's tenant under a seccomp filter that kills on system call 1000.
-# Seccomp runs before the gate, so the kernelet never sees that call: Linux
+# Seccomp runs before the syscall hook, so the kernelet never sees that call: Linux
 # forces SIGSYS on the carrier as a fatal signal, the resume hook must leave it
 # for Linux to deliver rather than drain it, and the carrier's death must end
 # the sandbox by itself. A drained SIGSYS would let the tenant run on, and its

@@ -1,4 +1,4 @@
-kernelet gate: two hooks in the generic entry layer, a task_struct pointer,
+kernelet: two carrier hooks in the generic entry layer, a task_struct pointer,
 a syscall-work bit, a helper for changing a user task's address space, one for
 allocating a tenant process's address space, and the two exports an endovisor
 module needs that Linux does not already make: kernel_clone, and
@@ -8,24 +8,24 @@ Signed-off-by: kernelet-in-Linux prototype <none@example.com>
 ---
 --- /dev/null
 +++ b/include/linux/kernelet.h
-@@ -0,0 +1,68 @@
+@@ -0,0 +1,64 @@
 +/* SPDX-License-Identifier: GPL-2.0 */
 +/*
-+ * The kernelet gate: the two places where a Linux task that carries a
-+ * kernelet task (a "carrier") diverts out of the generic entry layer and
-+ * into the endovisor.
++ * Carrier event hooks: the two places where a Linux task that carries a
++ * kernelet's virtual CPU (a "carrier") diverts out of the generic entry
++ * layer and into the endovisor.
 + *
-+ * A carrier has a non-NULL current->kernelet.  The pointer is inherited by
-+ * dup_task_struct() like every other task_struct field, so a child is a
-+ * carrier before it exists; the endovisor replaces it with the child's own
-+ * record as the first thing the child does.
++ * A carrier has a non-NULL current->carrier_hooks.  The pointer is
++ * inherited by dup_task_struct() like every other task_struct field, so a
++ * child is a carrier before it exists; the endovisor replaces it with the
++ * child's own table as the first thing the child does.
 + */
 +#ifndef _LINUX_KERNELET_H
 +#define _LINUX_KERNELET_H
 +
 +struct pt_regs;
 +
-+struct kernelet_gate_ops {
++struct carrier_event_hooks {
 +	/*
 +	 * Called from syscall_trace_enter(), after seccomp, for a system call
 +	 * issued by a carrier's user mode; regs hold the number and the
@@ -55,10 +55,6 @@ Signed-off-by: kernelet-in-Linux prototype <none@example.com>
 +	void (*on_resume)(struct pt_regs *regs);
 +};
 +
-+struct kernelet_gate {
-+	const struct kernelet_gate_ops *ops;
-+};
-+
 +/*
 + * Makes the current *user* task run in `mm`.  A carrier carries a virtual CPU
 + * and runs many tenant threads, so its address space is not its own: it is the
@@ -83,7 +79,7 @@ Signed-off-by: kernelet-in-Linux prototype <none@example.com>
  struct bpf_run_ctx;
  struct bpf_net_context;
  struct capture_control;
-+struct kernelet_gate;
++struct carrier_event_hooks;
  struct cfs_rq;
  struct fs_struct;
  struct futex_pi_state;
@@ -93,7 +89,7 @@ Signed-off-by: kernelet-in-Linux prototype <none@example.com>
  
 +#ifdef CONFIG_KERNELET
 +	/* Non-NULL if this task is a kernelet carrier. Inherited by fork. */
-+	struct kernelet_gate		*kernelet;	/* see linux/kernelet.h */
++	struct carrier_event_hooks	*carrier_hooks;	/* see linux/kernelet.h */
 +#endif
 +
  	/* Thread group tracking: */
@@ -161,7 +157,7 @@ Signed-off-by: kernelet-in-Linux prototype <none@example.com>
 +	 * call never becomes a Linux system call at all.
 +	 */
 +	if (work & SYSCALL_WORK_KERNELET) {
-+		if (current->kernelet->ops->on_syscall(regs))
++		if (current->carrier_hooks->on_syscall(regs))
 +			return -1L;
 +	}
 +#endif
@@ -188,12 +184,12 @@ Signed-off-by: kernelet-in-Linux prototype <none@example.com>
 +		 * before, such a request is in the flags read again at the end of
 +		 * this pass, and the loop runs the hook once more.
 +		 */
-+		if (unlikely(current->kernelet)) {
++		if (unlikely(current->carrier_hooks)) {
 +			if (ti_work & _TIF_NOTIFY_RESUME) {
 +				resume_user_mode_work(regs);
 +				ti_work &= ~_TIF_NOTIFY_RESUME;
 +			}
-+			current->kernelet->ops->on_resume(regs);
++			current->carrier_hooks->on_resume(regs);
 +		}
 +#endif
 +
@@ -327,7 +323,7 @@ Signed-off-by: kernelet-in-Linux prototype <none@example.com>
  source "kernel/Kconfig.kexec"
  
 +config KERNELET
-+	bool "Kernelet gate (Asterinas kernelets in kernel mode)"
++	bool "Kernelet carrier hooks (Asterinas kernelets in kernel mode)"
 +	depends on GENERIC_ENTRY && X86_64
 +	select PREEMPT_NOTIFIERS
 +	help
@@ -335,7 +331,7 @@ Signed-off-by: kernelet-in-Linux prototype <none@example.com>
 +	  paths, a task_struct pointer and a helper for changing the address
 +	  space of a user task, through which a loadable endovisor can carry
 +	  Asterinas kernelet virtual CPUs on ordinary Linux tasks.  A task with
-+	  a NULL current->kernelet, which is every task on a machine with no
++	  a NULL current->carrier_hooks, which is every task on a machine with no
 +	  endovisor loaded, is unaffected.
 +
 +	  If unsure, say N.

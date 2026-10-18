@@ -4,7 +4,7 @@
 # It exists to exercise three things the 100-line kernel never touches: demand
 # paging (a tenant page fault reported by the area's fault handler and mapped
 # by the kernel proper), a non-page-fault exception delivered through the
-# gate's resume hook, and eviction of kernelet code that will not give up its
+# resume hook, and eviction of kernelet code that will not give up its
 # CPU.
 
 [package]

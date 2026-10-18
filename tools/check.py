@@ -16,7 +16,7 @@ It fails, with a line per problem, if:
 
 So a sentence such as
 
-    *Simplified from `prototype/endovisor/carrier.c`: `klet_gate_syscall` and `klet_enter`.*
+    *Simplified from `prototype/endovisor/carrier.c`: `klet_on_syscall` and `klet_enter`.*
 
 is a promise the checker keeps: the file exists, and both names are in it.
 """

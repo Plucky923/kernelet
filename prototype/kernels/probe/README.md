@@ -25,7 +25,7 @@ prototype against the same API, that drives:
    so that the only way the host gets that processor back is to evict the
    kernelet when the runtime kills the sandbox.
 
-The book uses it in chapter 4 (seccomp before the gate), chapter 7
+The book uses it in chapter 4 (seccomp before the syscall hook), chapter 7
 (exceptions), chapter 11 (stopping a kernelet: kill and eviction) and chapter
 12 (faults on tenant memory).
 
@@ -35,7 +35,7 @@ The book uses it in chapter 4 (seccomp before the gate), chapter 7
 as the test, and two boots. The first is the probe, checked by
 `check-probe-log`. The second runs the same image and tenant with a seccomp
 filter, installed by the runtime before the exec, that kills the process on
-system call 1000, the endless one: seccomp runs before the gate, so the
+system call 1000, the endless one: seccomp runs before the syscall hook, so the
 kernelet never sees the call, and Linux forces `SIGSYS` on the carrier as a
 fatal signal. `check-probe-seccomp` checks that the resume hook left it for
 Linux to deliver, that the carrier died by it, that its death ended the

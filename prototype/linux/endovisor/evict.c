@@ -51,7 +51,7 @@ static enum hrtimer_restart klet_sweep(struct hrtimer *timer)
 	 */
 	if (!klet_in_image_text(regs->ip))
 		goto again;
-	if (!current->kernelet)
+	if (!current->carrier_hooks)
 		goto again;
 
 	c = klet_current_carrier();

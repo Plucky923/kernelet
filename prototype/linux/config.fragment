@@ -15,7 +15,7 @@ CONFIG_NR_CPUS=8
 # CONFIG_X86_X32_ABI is not set
 # No vsyscall page. With emulation on (Linux's default outside tinyconfig), a
 # tenant that jumps to 0xffffffffff600000 has Linux run gettimeofday, time or
-# getcpu for it in the page-fault handler, and the gate never sees the call.
+# getcpu for it in the page-fault handler, and the syscall hook never sees the call.
 # The endovisor refuses to load on a kernel built with it.
 # CONFIG_X86_VSYSCALL_EMULATION is not set
 # UMIP emulation is not needed; leaving it off is fine.
@@ -120,7 +120,7 @@ CONFIG_MAGIC_SYSRQ=y
 # Retpoline and the other speculation mitigations are left at their
 # defaults on purpose.
 
-# --- the kernelet gate (patches/0001-kernelet-gate.patch) ----------------
+# --- the carrier hooks (patches/0001-carrier-hooks.patch) ----------------
 CONFIG_KERNELET=y
 
 # --- the scheduler tests and measurements --------------------------------

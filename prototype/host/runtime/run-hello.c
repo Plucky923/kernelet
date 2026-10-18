@@ -8,7 +8,7 @@
  * command line. The endovisor's binary-format handler recognises the magic and
  * turns the child into the root carrier of a kernelet.
  *
- * The child never returns to user mode again: on its way there the gate's
+ * The child never returns to user mode again: on its way there the
  * resume hook brings up the sandbox's vCPU carriers and then waits for the
  * sandbox to end. It dies by SIGKILL when the kernelet powers off.
  *

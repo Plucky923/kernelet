@@ -83,7 +83,7 @@ Three choices in this code each close a hole.
 
 ## The address-space switch
 
-Two of the lines above call `kernelet_switch_mm()`, the first of the patch's two helpers, and both gate hooks call it, through `klet_space_adopt` below, before they apply the registers on a trip to user mode in which the virtual CPU has activated a different process than the carrier is in (chapter 8). A carrier is born with an empty address space of its own; to run a tenant thread it must run in *that process's* space.
+Two of the lines above call `kernelet_switch_mm()`, the first of the patch's two helpers, and both hooks call it, through `klet_space_adopt` below, before they apply the registers on a trip to user mode in which the virtual CPU has activated a different process than the carrier is in (chapter 8). A carrier is born with an empty address space of its own; to run a tenant thread it must run in *that process's* space.
 
 <div class="linux">
 
@@ -93,7 +93,7 @@ Two of the lines above call `kernelet_switch_mm()`, the first of the patch's two
 
 The helper does what the two have in common: under the task's lock and with interrupts off, set the task's `mm` and `active_mm` to the new space, load the new page table with the architecture's `switch_mm_irqs_off()`, and keep Linux's per-space bookkeeping in step. It consumes the caller's reference on the new space and hands back the old one, for the caller to drop in a context that may sleep.
 
-*Simplified from `prototype/linux/patches/0001-kernelet-gate.patch`: `kernelet_switch_mm`, `kernelet_mm_alloc`.*
+*Simplified from `prototype/linux/patches/0001-carrier-hooks.patch`: `kernelet_switch_mm`, `kernelet_mm_alloc`.*
 
 ```c
 struct mm_struct *kernelet_switch_mm(struct mm_struct *mm)
@@ -132,7 +132,7 @@ The two `lru_gen_*` calls are for Linux's multi-generational page reclaim, which
 *Simplified from `prototype/linux/endovisor/space.c`: `klet_space_adopt`.*
 
 ```c
-int klet_space_adopt(struct klet_carrier *c, u64 id)       /* called by both gate hooks before user mode */
+int klet_space_adopt(struct klet_carrier *c, u64 id)       /* called by both hooks before user mode */
 {
 	sp = klet_space_get(c->inst, id);                      /* the space must be this kernelet's */
 	if (current->mm != sp->mm) {
