@@ -6,17 +6,19 @@
  * destroys it. This is the smallest such process. Two commands:
  *
  *   holder register NAME IMAGE          register the image file as kind NAME
- *                                       (needs CAP_SYS_MODULE)
+ *                                       (needs the right to load kernel code)
  *   holder run [-c CGROUP] [-p] NAME NR_VCPUS [CMDLINE...]
  *                                       create a sandbox of kind NAME with
  *                                       NR_VCPUS virtual CPUs and run it until
- *                                       it ends; -c moves the holder and so
- *                                       the carriers into the control group
+ *                                       it ends; -c moves the holder, and so
+ *                                       the carriers, into the control group
  *                                       at CGROUP first; -p pins the carrier
  *                                       of virtual CPU i to processor i
  *
- * The holder's console and log are its own standard output and error. The
- * exit status is the kernel proper's exit code, or 128 plus a reason.
+ * The holder's console and log are its own standard output and error (the
+ * console then carries output only; a terminal or a socket would carry both
+ * directions). The exit status is the kernel proper's exit code, 128 for a
+ * panic, 129 for a kill.
  *
  * This program is the interface's first user and is built with the other
  * runtimes (make runtime); the endovisor of this prototype does not offer
@@ -29,12 +31,14 @@
 
 #include <errno.h>
 #include <fcntl.h>
+#include <poll.h>
 #include <sched.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <sys/ioctl.h>
 #include <sys/prctl.h>
+#include <sys/syscall.h>
 #include <sys/wait.h>
 #include <unistd.h>
 
@@ -44,6 +48,18 @@ static void die(const char *what)
 {
 	fprintf(stderr, "holder: %s: %s\n", what, strerror(errno));
 	exit(127);
+}
+
+/* The same, in a forked child: no flushing of the parent's buffers. */
+static void die_child(const char *what)
+{
+	int err = errno;
+	char msg[256];
+	int n = snprintf(msg, sizeof(msg), "holder: carrier: %s: %s\n", what, strerror(err));
+
+	if (n > 0)
+		n = (int)write(2, msg, (size_t)n);	/* and nothing better to do if that fails */
+	_exit(127);
 }
 
 /* Open the device and refuse an interface this program does not know. */
@@ -68,7 +84,7 @@ static int register_kind(int sys, const char *name, const char *image_path)
 
 	if (reg.image_fd < 0)
 		die(image_path);
-	snprintf(reg.name, sizeof(reg.name), "%s", name);
+	snprintf(reg.name, sizeof(reg.name), "%s", name);	/* the name KERNELET_KIND_LIST reports; unique */
 	kind = ioctl(sys, KERNELET_KIND_REGISTER, &reg);
 	if (kind < 0)
 		die("KERNELET_KIND_REGISTER");
@@ -79,18 +95,28 @@ static int register_kind(int sys, const char *name, const char *image_path)
 /* Find a kind by name among those registered. */
 static int find_kind(int sys, const char *name)
 {
-	struct kernelet_kind_info info[16];
-	struct kernelet_kind_list list = {
-		.kinds = (__u64)(unsigned long)info,
-		.capacity = sizeof(info) / sizeof(info[0]),
-	};
+	struct kernelet_kind_info *info = NULL;
+	struct kernelet_kind_list list = { .capacity = 16 };
 	unsigned int i;
 
-	if (ioctl(sys, KERNELET_KIND_LIST, &list) < 0)
-		die("KERNELET_KIND_LIST");
-	for (i = 0; i < list.count && i < list.capacity; i++)
-		if (strcmp(info[i].name, name) == 0)
-			return (int)info[i].id;
+	do {						/* until the array is large enough */
+		free(info);
+		info = calloc(list.capacity, sizeof(*info));
+		if (!info)
+			die("calloc");
+		list.kinds = (__u64)(unsigned long)info;
+		if (ioctl(sys, KERNELET_KIND_LIST, &list) < 0)
+			die("KERNELET_KIND_LIST");
+		if (list.count > list.capacity)
+			list.capacity = list.count;
+	} while (list.count > list.capacity);
+	for (i = 0; i < list.count; i++)
+		if (strcmp(info[i].name, name) == 0) {
+			int id = (int)info[i].id;
+
+			free(info);
+			return id;
+		}
 	fprintf(stderr, "holder: no kind named %s is registered\n", name);
 	exit(127);
 }
@@ -127,14 +153,53 @@ static void start_carrier(int exec_fd, unsigned int vcpu, int pin)
 		CPU_ZERO(&set);
 		CPU_SET(vcpu, &set);
 		if (sched_setaffinity(0, sizeof(set), &set) < 0)
-			die("sched_setaffinity");
+			die_child("sched_setaffinity");
 	}
-	if (prctl(PR_SET_NO_NEW_PRIVS, 1, 0, 0, 0) < 0)	/* the handler insists on it */
-		die("PR_SET_NO_NEW_PRIVS");
+	if (prctl(PR_SET_NO_NEW_PRIVS, 1, 0, 0, 0) < 0)	/* the endovisor insists on it */
+		die_child("PR_SET_NO_NEW_PRIVS");
 	/* A seccomp filter would be installed here; this kernel is built without
 	 * the legacy vsyscall page, so there is nothing for one to close. */
 	execveat(exec_fd, "", argv, envp, AT_EMPTY_PATH);
-	die("execveat");
+	die_child("execveat");
+}
+
+/*
+ * Wait for the sandbox to end. A child that dies before its exec succeeded
+ * never became a carrier, so the endovisor does not know it is gone; watch
+ * the children through process descriptors and kill the sandbox ourselves
+ * if one of them goes while the sandbox is still alive.
+ */
+static void wait_sandbox(int sb, const pid_t *pids, unsigned int nr_vcpus, struct kernelet_exit *ex)
+{
+	struct pollfd pfd[KERNELET_MAX_VCPUS + 1];
+	unsigned int i;
+
+	pfd[0].fd = sb;
+	pfd[0].events = POLLIN;				/* readable once the sandbox has exited */
+	for (i = 0; i < nr_vcpus; i++) {
+		pfd[i + 1].fd = (int)syscall(SYS_pidfd_open, pids[i], 0);
+		pfd[i + 1].events = POLLIN;			/* readable once the child has exited */
+		if (pfd[i + 1].fd < 0)
+			die("pidfd_open");
+	}
+	for (;;) {
+		if (poll(pfd, nr_vcpus + 1, -1) < 0 && errno != EINTR)
+			die("poll");
+		if (pfd[0].revents & POLLIN)
+			break;
+		for (i = 0; i < nr_vcpus; i++)
+			if (pfd[i + 1].revents & POLLIN) {	/* a child is gone: end the sandbox */
+				__u32 reason = 1;
+
+				ioctl(sb, KERNELET_KILL, &reason);
+				pfd[i + 1].fd = -1;		/* polled no more */
+			}
+	}
+	for (i = 0; i < nr_vcpus; i++)
+		if (pfd[i + 1].fd >= 0)
+			close(pfd[i + 1].fd);
+	if (ioctl(sb, KERNELET_WAIT, ex) < 0)
+		die("KERNELET_WAIT");
 }
 
 /* The holder's side: create, configure, start every virtual CPU, wait, destroy. */
@@ -177,8 +242,7 @@ static int run_sandbox(int sys, const char *name, unsigned int nr_vcpus, const c
 		close(exec_fd);
 	}
 
-	if (ioctl(sb, KERNELET_WAIT, &ex) < 0)		/* until the sandbox has ended */
-		die("KERNELET_WAIT");
+	wait_sandbox(sb, pids, nr_vcpus, &ex);		/* until the sandbox has ended */
 	for (i = 0; i < nr_vcpus; i++)
 		waitpid(pids[i], NULL, 0);		/* the carriers died by SIGKILL */
 	if (ioctl(sb, KERNELET_DESTROY) < 0)

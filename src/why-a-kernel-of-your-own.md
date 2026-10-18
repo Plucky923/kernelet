@@ -77,7 +77,7 @@ These are used in one sense throughout the book.
 | **service table** | the fixed list of host functions a kernelet may call; its only way out |
 | **grant** | the physical memory a kernelet has been given |
 | **virtual CPU** | one of the fixed number of processors a sandbox is given when it is created; the kernelet runs its tasks on them as a kernel runs on real processors (chapter 9) |
-| **carrier** | a Linux task of a sandbox: the root carrier, which holds the sandbox together, and one carrier per virtual CPU, which stands behind it (chapter 6) |
+| **carrier** | a Linux task that carries one of a sandbox's virtual CPUs and may run the tenant's programs (chapters 2 and 6) |
 | **kernelet runtime** | the host program that creates and configures sandboxes, as a container runtime does (chapter 2) |
 | **carrier event hooks** | the two functions Linux calls for a carrier, at a system call and before user mode; the small patch that adds them is the one change to Linux (chapter 5) |
 
