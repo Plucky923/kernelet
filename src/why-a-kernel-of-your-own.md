@@ -1,9 +1,6 @@
 # Why a kernel of your own
 
-<!--
-TODO: Begin the paragraph with the cloud computing or IaaS. 
---->
-In a data center, one machine runs programs from many customers, called **tenants**, who do not trust each other and whom the operator does not trust either. Each tenant must be kept from reading, corrupting or starving the others. There are two established ways to do that, and this chapter introduces a third.
+Cloud computing sells computers by the hour. A customer rents a machine from a provider's data center and runs whatever they like on it, which the industry calls *infrastructure as a service*. The machine is rarely theirs alone: one physical computer runs programs from many customers, called **tenants**, who do not trust each other and whom the operator does not trust either. Each tenant must be kept from reading, corrupting or starving the others. There are two established ways to do that, and this chapter introduces a third.
 
 ## Two ways to share a machine
 
