@@ -2,9 +2,9 @@
 
 This is a tutorial about the **kernelet**: a complete OS kernel that runs *inside* another kernel, and does so *safely*.
 
-The tutorial comes with a prototype implementation of kernelets in Linux. It patches and extends the Linux kernel. With those changes a small Rust kernel written against OSTD, the framework at the bottom of the Rust kernel Asterinas, can run inside Linux, scheduled and stopped by Linux without Linux's own code needing to understand the kernel it runs.
+The tutorial comes with a prototype implementation of kernelets in Linux. It patches and extends the Linux kernel. With those changes small Rust kernels written against OSTD, the framework at the bottom of the Rust kernel Asterinas, can run inside Linux, scheduled and stopped by Linux without Linux's own code needing to understand the kernel it runs.
 
-By the end you will know how every part of that prototype works, down to the C and Rust that do it. You will also have run it.
+By the end you will know how every part of that prototype works, down to the C and Rust that do it. You will also have run it; the prototype's README says how.
 
 ## Who this is for
 
@@ -20,7 +20,7 @@ It assumes nothing about the Linux source: every Linux mechanism beyond the cour
 
 ## Code excerpts
 
-Every code excerpt in the book comes from the `prototype/` directory of this repository. Its README says how to build and run the prototype.
+Every code excerpt in the book comes from the `prototype/` directory of this repository.
 
 A caption under each excerpt names the file it comes from and, for a simplified excerpt, the functions it shows, like this:
 
@@ -30,13 +30,13 @@ The caption's first word says how the block differs from the file. "Simplified" 
 
 ## The chapters
 
-The book follows the order in which a kernelet comes to life, so each chapter uses only what the ones before it have built. Chapters 13 and 14 are the climax; everything before them prepares for them.
+Each chapter uses only what the ones before it have built. Some words in the list below are defined only in chapter 1; skim past them.
 
 1. **Why a kernel of your own** says what a kernelet is and why it can be safe.
 2. **The endovisor UAPI**, its user-space interface, is what a program on the host may ask of the endovisor: the image as a file, the device node and its descriptors, and how user space creates the carriers.
 3. **The kernel we will run** reads the hundred-line kernel that runs throughout the book, and lists what it needs from a machine.
-4. **The kernelet ABI**, its binary interface, is how a kernelet talks to its host from the inside: the three tables, the grant, and the first services.
-5. **Carrier hooks and patch overview** adds the two carrier event hooks, at a carrier's system call and on its way back to user mode, which is where a carrier enters and leaves kernelet code, and lists the rest of the one small patch to Linux.
+4. **The kernelet ABI**, its binary interface, is how a kernelet talks to its host from the inside: the tables passed between host and kernelet, the grant, and the first services.
+5. **Carrier hooks and patch overview** adds the two carrier event hooks, where a carrier enters and leaves kernelet code, and lists the rest of the small patch the prototype makes to Linux.
 6. **Carriers** puts a kernelet on the Linux tasks it runs on.
 7. **Two stacks** is how a kernelet keeps its own stacks on a Linux task.
 8. **Into user mode and back** is the round trip of a system call, after which the hundred-line kernel prints its greeting.
@@ -48,10 +48,12 @@ The book follows the order in which a kernelet comes to life, so each chapter us
 14. **What vOSTD adds on top** is the bookkeeping that keeps that arrangement memory-safe, or *sound*, in chapter 1's term.
 15. **What it costs** gives the numbers.
 
+Chapters 13 and 14, where the tenant's memory moves onto Linux's page tables without giving up soundness, are the climax; everything before them prepares for them.
+
 ## Conventions
 
 The book keeps three conventions.
 
-- A few words are used in exactly one sense throughout. Each is introduced where it first appears, collected in chapter 1, and defined in full in the chapter named beside it there; a few appear in the chapter list above before chapter 1 defines them.
+- A few words are used in exactly one sense throughout; chapter 1 collects them, and the chapter named beside a word there defines it in full.
 - Linux functions are linked to the version 6.12 source on `elixir.bootlin.com` the first time they are named, so that you can read the real code.
 - Most figures are diagrams written as text in the page source; a few are drawings.
