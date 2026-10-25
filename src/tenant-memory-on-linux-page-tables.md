@@ -281,7 +281,7 @@ The rule that a kernel-mode access is answered with an error and never reported 
 | a tenant page fault | nothing until `user_run` returns | `fault` or `pfn_mkwrite` records and returns |
 | the space is dropped | `vm_destroy`, later (chapter 14) | zap everything, drop the reference |
 
-`make probe` shows the fault path: the probe kernel maps only its program's text, the program stores to an unmapped address, and the log shows one Linux fault, the kernel proper's handler mapping a fresh frame, and the program reading its data back. `make mem-func` runs the tests of the next chapter over all four edits.
+`make probe` shows the fault path: the probe kernel maps only its program's text, the program stores to an unmapped address, and the log shows one Linux fault, the kernel proper's handler mapping a fresh frame, and the program reading its data back. `make mem-func`, `mem-r2`, `mem-conc` and `mem-pressure` run the tests of the next chapter over the four edits.
 
 <div class="recap">
 
