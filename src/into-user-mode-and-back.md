@@ -264,7 +264,7 @@ Page faults on tenant memory take a shorter path through the endovisor's own fau
 With chapters 4 to 8 built, `make hello` boots Linux in QEMU, loads the module, runs the runtime, and this appears in the serial log (one line of Linux's own about an out-of-tree module, and eight lines of counters at unload, are left out):
 
 ```
-INIT: loading kernelet.ko
+INIT: loading endovisor.ko
 kernelet: kernelet image text [0xffffffffc018507f, 0xffffffffc0194215), 61846 bytes; virq_entry at +0x710c
 kernelet: endovisor loaded: grant 4096 KiB at 0xc00000, linear map 0xffff9d3900000000, watch on, mirror on, fpu area 1088 B, tsc 3791992 kHz
 INIT: running /tests/10-hello
@@ -288,7 +288,7 @@ RUN-HELLO: root carrier (pid 34) killed by signal 9
 RUN-HELLO: no carrier left (module references: 0)
 RUN-HELLO: done
 INIT: /tests/10-hello exited 0
-INIT: unloading kernelet
+INIT: unloading endovisor
 kernelet: endovisor unloaded
 INIT: done
 ```

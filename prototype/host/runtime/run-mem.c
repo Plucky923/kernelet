@@ -45,7 +45,7 @@
 #include <unistd.h>
 
 #define KLET_PATH "/mem.klet"
-#define MODULE_NAME "kernelet"
+#define MODULE_NAME "endovisor"
 #define HOG_SWAP_PAGES 30000UL		/* 117 MiB swapped out */
 #define HOG_MAX_MB 900UL
 #define HOG_CHUNK (4UL << 20)

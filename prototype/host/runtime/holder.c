@@ -1,5 +1,5 @@
 /*
- * holder: a sandbox's holder process, the user of the kernelet UAPI.
+ * holder: a sandbox's holder process, the user of the endovisor UAPI.
  *
  * A kernelet runtime, like a container runtime, has one process per sandbox
  * that creates it, keeps its descriptor open for as long as it lives, and
@@ -22,7 +22,7 @@
  *
  * This program is the interface's first user and is built with the other
  * runtimes (make runtime); the endovisor of this prototype does not offer
- * /dev/kernelet yet, so it cannot run against it.
+ * /dev/endovisor yet, so it cannot run against it.
  *
  * Built static: gcc -static -O2 -I ../../linux/endovisor/uapi -o holder holder.c
  */
@@ -42,7 +42,7 @@
 #include <sys/wait.h>
 #include <unistd.h>
 
-#include <kernelet.h>
+#include <endovisor.h>
 
 static void die(const char *what)
 {
@@ -65,38 +65,38 @@ static void die_child(const char *what)
 /* Open the device and refuse an interface this program does not know. */
 static int open_system(void)
 {
-	int sys = open("/dev/kernelet", O_RDWR | O_CLOEXEC);
+	int sys_fd = open("/dev/endovisor", O_RDWR | O_CLOEXEC);
 
-	if (sys < 0)
-		die("/dev/kernelet");
-	if (ioctl(sys, KERNELET_GET_API_VERSION) != KERNELET_API_VERSION) {
-		fprintf(stderr, "holder: /dev/kernelet speaks another version\n");
+	if (sys_fd < 0)
+		die("/dev/endovisor");
+	if (ioctl(sys_fd, KLET_GET_API_VERSION) != KLET_API_VERSION) {
+		fprintf(stderr, "holder: /dev/endovisor speaks another version\n");
 		exit(127);
 	}
-	return sys;
+	return sys_fd;
 }
 
 /* The operator's step: hand over an image file and name the kind. */
-static int register_kind(int sys, const char *name, const char *image_path)
+static int register_kind(int sys_fd, const char *name, const char *image_path)
 {
-	struct kernelet_kind_register reg = { .image_fd = open(image_path, O_RDONLY | O_CLOEXEC) };
+	struct klet_kind_register reg = { .image_fd = open(image_path, O_RDONLY | O_CLOEXEC) };
 	int kind;
 
 	if (reg.image_fd < 0)
 		die(image_path);
-	snprintf(reg.name, sizeof(reg.name), "%s", name);	/* the name KERNELET_KIND_LIST reports; unique */
-	kind = ioctl(sys, KERNELET_KIND_REGISTER, &reg);
+	snprintf(reg.name, sizeof(reg.name), "%s", name);	/* the name KLET_KIND_LIST reports; unique */
+	kind = ioctl(sys_fd, KLET_KIND_REGISTER, &reg);
 	if (kind < 0)
-		die("KERNELET_KIND_REGISTER");
+		die("KLET_KIND_REGISTER");
 	close(reg.image_fd);
 	return kind;
 }
 
 /* Find a kind by name among those registered. */
-static int find_kind(int sys, const char *name)
+static int find_kind(int sys_fd, const char *name)
 {
-	struct kernelet_kind_info *info = NULL;
-	struct kernelet_kind_list list = { .capacity = 16 };
+	struct klet_kind_info *info = NULL;
+	struct klet_kind_list list = { .capacity = 16 };
 	unsigned int i;
 
 	do {						/* until the array is large enough */
@@ -105,8 +105,8 @@ static int find_kind(int sys, const char *name)
 		if (!info)
 			die("calloc");
 		list.kinds = (__u64)(unsigned long)info;
-		if (ioctl(sys, KERNELET_KIND_LIST, &list) < 0)
-			die("KERNELET_KIND_LIST");
+		if (ioctl(sys_fd, KLET_KIND_LIST, &list) < 0)
+			die("KLET_KIND_LIST");
 		if (list.count > list.capacity)
 			list.capacity = list.count;
 	} while (list.count > list.capacity);
@@ -169,12 +169,12 @@ static void start_carrier(int exec_fd, unsigned int vcpu, int pin)
  * the children through process descriptors and kill the sandbox ourselves
  * if one of them goes while the sandbox is still alive.
  */
-static void wait_sandbox(int sb, const pid_t *pids, unsigned int nr_vcpus, struct kernelet_exit *ex)
+static void wait_sandbox(int sandbox_fd, const pid_t *pids, unsigned int nr_vcpus, struct klet_exit *ex)
 {
-	struct pollfd pfd[KERNELET_MAX_VCPUS + 1];
+	struct pollfd pfd[KLET_MAX_VCPUS + 1];
 	unsigned int i;
 
-	pfd[0].fd = sb;
+	pfd[0].fd = sandbox_fd;
 	pfd[0].events = POLLIN;				/* readable once the sandbox has exited */
 	for (i = 0; i < nr_vcpus; i++) {
 		pfd[i + 1].fd = (int)syscall(SYS_pidfd_open, pids[i], 0);
@@ -191,23 +191,23 @@ static void wait_sandbox(int sb, const pid_t *pids, unsigned int nr_vcpus, struc
 			if (pfd[i + 1].revents & POLLIN) {	/* a child is gone: end the sandbox */
 				__u32 reason = 1;
 
-				ioctl(sb, KERNELET_KILL, &reason);
+				ioctl(sandbox_fd, KLET_KILL, &reason);
 				pfd[i + 1].fd = -1;		/* polled no more */
 			}
 	}
 	for (i = 0; i < nr_vcpus; i++)
 		if (pfd[i + 1].fd >= 0)
 			close(pfd[i + 1].fd);
-	if (ioctl(sb, KERNELET_WAIT, ex) < 0)
-		die("KERNELET_WAIT");
+	if (ioctl(sandbox_fd, KLET_WAIT, ex) < 0)
+		die("KLET_WAIT");
 }
 
 /* The holder's side: create, configure, start every virtual CPU, wait, destroy. */
-static int run_sandbox(int sys, const char *name, unsigned int nr_vcpus, const char *cmdline,
+static int run_sandbox(int sys_fd, const char *name, unsigned int nr_vcpus, const char *cmdline,
 		       const char *cgroup, int pin)
 {
-	struct kernelet_create create = {
-		.kind = (__u32)find_kind(sys, name),
+	struct klet_create create = {
+		.kind = (__u32)find_kind(sys_fd, name),
 		.nr_vcpus = nr_vcpus,
 		.memory_initial = 4 << 20,
 		.memory_max = 64 << 20,
@@ -215,25 +215,25 @@ static int run_sandbox(int sys, const char *name, unsigned int nr_vcpus, const c
 		.cmdline = (__u64)(unsigned long)cmdline,
 		.cmdline_len = (__u32)strlen(cmdline),
 	};
-	struct kernelet_exit ex;
-	pid_t pids[KERNELET_MAX_VCPUS];
-	int sb, out = 1, err = 2;
+	struct klet_exit ex;
+	pid_t pids[KLET_MAX_VCPUS];
+	int sandbox_fd, out = 1, err = 2;
 	unsigned int i;
 
 	if (cgroup)					/* before the create: the group becomes the sandbox's */
 		join_cgroup(cgroup);
-	sb = ioctl(sys, KERNELET_CREATE, &create);
-	if (sb < 0)
-		die("KERNELET_CREATE");
-	if (ioctl(sb, KERNELET_SET_CONSOLE, &out) < 0 || ioctl(sb, KERNELET_SET_LOG, &err) < 0)
-		die("KERNELET_SET_CONSOLE");
-	/* A disk would be attached here: KERNELET_ATTACH_DEVICE with its open file. */
+	sandbox_fd = ioctl(sys_fd, KLET_CREATE, &create);
+	if (sandbox_fd < 0)
+		die("KLET_CREATE");
+	if (ioctl(sandbox_fd, KLET_SET_CONSOLE, &out) < 0 || ioctl(sandbox_fd, KLET_SET_LOG, &err) < 0)
+		die("KLET_SET_CONSOLE");
+	/* A disk would be attached here: KLET_ATTACH_DEVICE with its open file. */
 
 	for (i = 0; i < nr_vcpus; i++) {
-		int exec_fd = ioctl(sb, KERNELET_VCPU_GET_EXEC_FD, &i);
+		int exec_fd = ioctl(sandbox_fd, KLET_VCPU_GET_EXEC_FD, &i);
 
 		if (exec_fd < 0)
-			die("KERNELET_VCPU_GET_EXEC_FD");
+			die("KLET_VCPU_GET_EXEC_FD");
 		pids[i] = fork();
 		if (pids[i] < 0)
 			die("fork");
@@ -242,18 +242,18 @@ static int run_sandbox(int sys, const char *name, unsigned int nr_vcpus, const c
 		close(exec_fd);
 	}
 
-	wait_sandbox(sb, pids, nr_vcpus, &ex);		/* until the sandbox has ended */
+	wait_sandbox(sandbox_fd, pids, nr_vcpus, &ex);		/* until the sandbox has ended */
 	for (i = 0; i < nr_vcpus; i++)
 		waitpid(pids[i], NULL, 0);		/* the carriers died by SIGKILL */
-	if (ioctl(sb, KERNELET_DESTROY) < 0)
-		die("KERNELET_DESTROY");
-	close(sb);
+	if (ioctl(sandbox_fd, KLET_DESTROY) < 0)
+		die("KLET_DESTROY");
+	close(sandbox_fd);
 
 	switch (ex.how) {
-	case KERNELET_END_EXITED:
+	case KLET_END_EXITED:
 		return ex.code;
-	case KERNELET_END_PANICKED:
-		fprintf(stderr, "holder: the kernelet panicked: %.*s\n", KERNELET_MESSAGE_LEN, ex.message);
+	case KLET_END_PANICKED:
+		fprintf(stderr, "holder: the kernelet panicked: %.*s\n", KLET_MESSAGE_LEN, ex.message);
 		return 128;
 	default:
 		fprintf(stderr, "holder: the kernelet was killed: reason %#x\n", ex.reason);
@@ -271,11 +271,11 @@ static void usage(void)
 int main(int argc, char **argv)
 {
 	const char *cgroup = NULL;
-	int pin = 0, sys;
+	int pin = 0, sys_fd;
 
 	if (argc >= 4 && strcmp(argv[1], "register") == 0) {
-		sys = open_system();
-		printf("kind %d\n", register_kind(sys, argv[2], argv[3]));
+		sys_fd = open_system();
+		printf("kind %d\n", register_kind(sys_fd, argv[2], argv[3]));
 		return 0;
 	}
 	if (argc < 2 || strcmp(argv[1], "run") != 0)
@@ -302,9 +302,9 @@ int main(int argc, char **argv)
 				strncat(cmdline, " ", sizeof(cmdline) - strlen(cmdline) - 1);
 			strncat(cmdline, argv[i], sizeof(cmdline) - strlen(cmdline) - 1);
 		}
-		if (nr_vcpus < 1 || nr_vcpus > KERNELET_MAX_VCPUS)
+		if (nr_vcpus < 1 || nr_vcpus > KLET_MAX_VCPUS)
 			usage();
-		sys = open_system();
-		return run_sandbox(sys, argv[0], nr_vcpus, cmdline, cgroup, pin);
+		sys_fd = open_system();
+		return run_sandbox(sys_fd, argv[0], nr_vcpus, cmdline, cgroup, pin);
 	}
 }

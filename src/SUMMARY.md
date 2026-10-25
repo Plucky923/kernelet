@@ -3,7 +3,7 @@
 [How to read this book](README.md)
 
 - [Why a kernel of your own](why-a-kernel-of-your-own.md)
-- [The kernelet UAPI](the-kernelet-uapi.md)
+- [The endovisor UAPI](the-endovisor-uapi.md)
 - [The kernel we will run](the-kernel-we-will-run.md)
 - [The kernelet ABI](the-kernelet-abi.md)
 - [Carrier hooks and patch overview](carrier-hooks.md)

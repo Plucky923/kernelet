@@ -75,7 +75,7 @@
 
 /*
  * The watch can be turned off, which is how a test shows what happens without it:
- * `insmod kernelet.ko klet_watch=0`.
+ * `insmod endovisor.ko klet_watch=0`.
  */
 bool klet_watch = true;
 module_param(klet_watch, bool, 0444);

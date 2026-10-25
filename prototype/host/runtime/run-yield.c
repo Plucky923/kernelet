@@ -37,7 +37,7 @@
 #include <unistd.h>
 
 #define KLET_PATH "/yield.klet"
-#define MODULE_NAME "kernelet"
+#define MODULE_NAME "endovisor"
 
 /* Must match yield/src/lib.rs. */
 #define ROUNDS 800000000ULL

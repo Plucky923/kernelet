@@ -41,7 +41,7 @@
 #                     modules_prepare
 #   make image        build the kernelet image (vostd + a kernel proper) and
 #                     pre-link it; KLET_KERNEL names the kernel proper
-#   make kernelet-module  the image, then linux/endovisor/kernelet.ko
+#   make endovisor-module  the image, then linux/endovisor/endovisor.ko
 #   make runtime      the static runtimes, .build/run-*
 #   make initramfs    compile init and pack .build/initramfs.cpio.gz
 #   make run          boot the kernel under QEMU, serial log to .build/serial.log
@@ -112,7 +112,7 @@ HELLO_ELF  := $(CURDIR)/kernels/hello/hello
 PROBE_ELF  := $(CURDIR)/kernels/probe/probe
 YIELD_ELF  := $(CURDIR)/kernels/yield/yield
 SCHED_ELF  := $(CURDIR)/kernels/sched/sched
-KERNELET_KO := $(CURDIR)/linux/endovisor/kernelet.ko
+ENDOVISOR_KO := $(CURDIR)/linux/endovisor/endovisor.ko
 RUNTIME    := $(BUILD)/run-hello
 
 # `-Z plt=yes` is not cosmetic: the x86_64-unknown-none target sets
@@ -126,7 +126,7 @@ KLET_BUILD_STD := -Zbuild-std=core,alloc,compiler_builtins \
                   -Zbuild-std-features=compiler-builtins-mem
 
 .PHONY: all linux config initramfs run clean distclean module stage-module
-.PHONY: patch kernel-proper-check image kernelet-module runtime
+.PHONY: patch kernel-proper-check image endovisor-module runtime
 .PHONY: stage-hello stage-probe stage-yield hello probe yield
 .PHONY: check-log check-probe-log check-probe-seccomp check-yield-log
 
@@ -339,11 +339,11 @@ $(SCHED_ELF): $(CURDIR)/kernels/sched/sched.S
 $(CURDIR)/kernels/mem/mem: $(CURDIR)/kernels/mem/mem.S
 	gcc -static -nostdlib $< -o $@
 
-kernelet-module: image
+endovisor-module: image
 	$(MAKE) module DIR=linux/endovisor
-	@echo "kernelet.ko built with the $(KLET_KERNEL) kernel proper"
+	@echo "endovisor.ko built with the $(KLET_KERNEL) kernel proper"
 
-runtime: host/runtime/run-hello.c host/runtime/run-probe.c host/runtime/run-yield.c host/runtime/run-sched.c host/runtime/run-mem.c host/runtime/holder.c linux/endovisor/uapi/kernelet.h
+runtime: host/runtime/run-hello.c host/runtime/run-probe.c host/runtime/run-yield.c host/runtime/run-sched.c host/runtime/run-mem.c host/runtime/holder.c linux/endovisor/uapi/endovisor.h
 	gcc -static -O2 -Wall -Wextra -o $(RUNTIME) host/runtime/run-hello.c
 	gcc -static -O2 -Wall -Wextra -I linux/endovisor/uapi -o $(BUILD)/holder host/runtime/holder.c
 	gcc -static -O2 -Wall -Wextra -o $(BUILD)/run-probe host/runtime/run-probe.c
@@ -386,45 +386,45 @@ $(INITRAMFS): host/initramfs/init.c $(GEN_INIT_CPIO)
 # --- staging the prototype ----------------------------------------------
 
 # Only one test runs per boot, because the module carries one kernelet image.
-stage-hello: kernelet-module runtime
+stage-hello: endovisor-module runtime
 	mkdir -p $(STAGE)/modules $(STAGE)/tests
 	rm -f $(STAGE)/tests/* $(STAGE)/*.klet
-	cp $(KERNELET_KO) $(STAGE)/modules/
-	printf 'kernelet.ko\n' > $(STAGE)/modules/order
+	cp $(ENDOVISOR_KO) $(STAGE)/modules/
+	printf 'endovisor.ko\n' > $(STAGE)/modules/order
 	cp $(RUNTIME) $(STAGE)/tests/10-hello
 	chmod +x $(STAGE)/tests/10-hello
 	printf 'KLET\002\000\000\000\001\000\000\000\n' > $(STAGE)/hello.klet
 	chmod +x $(STAGE)/hello.klet
-	@echo "staged: kernelet.ko (hello), /tests/10-hello, /hello.klet"
+	@echo "staged: endovisor.ko (hello), /tests/10-hello, /hello.klet"
 
 # WATCH=0 loads the module with the per-processor watch timer turned off, which
 # is the control for the yield test.
 WATCH ?= 1
-stage-yield: kernelet-module runtime
+stage-yield: endovisor-module runtime
 	mkdir -p $(STAGE)/modules $(STAGE)/tests
 	rm -f $(STAGE)/tests/* $(STAGE)/*.klet
-	cp $(KERNELET_KO) $(STAGE)/modules/
-	printf 'kernelet.ko klet_watch=$(WATCH)\n' > $(STAGE)/modules/order
+	cp $(ENDOVISOR_KO) $(STAGE)/modules/
+	printf 'endovisor.ko klet_watch=$(WATCH)\n' > $(STAGE)/modules/order
 	cp $(BUILD)/run-yield $(STAGE)/tests/10-yield
 	chmod +x $(STAGE)/tests/10-yield
 	printf 'KLET\002\000\000\000\001\000\000\000\n' > $(STAGE)/yield.klet
 	chmod +x $(STAGE)/yield.klet
-	@echo "staged: kernelet.ko (yield, klet_watch=$(WATCH)), /tests/10-yield, /yield.klet"
+	@echo "staged: endovisor.ko (yield, klet_watch=$(WATCH)), /tests/10-yield, /yield.klet"
 
 # PROBE_RUNMODE is the word run-probe reads from /tests/10-probe.arg: empty
 # for the probe's own boot, `seccomp` for the boot under a seccomp filter.
 PROBE_RUNMODE ?=
-stage-probe: kernelet-module runtime
+stage-probe: endovisor-module runtime
 	mkdir -p $(STAGE)/modules $(STAGE)/tests
 	rm -f $(STAGE)/tests/* $(STAGE)/*.klet
-	cp $(KERNELET_KO) $(STAGE)/modules/
-	printf 'kernelet.ko\n' > $(STAGE)/modules/order
+	cp $(ENDOVISOR_KO) $(STAGE)/modules/
+	printf 'endovisor.ko\n' > $(STAGE)/modules/order
 	cp $(BUILD)/run-probe $(STAGE)/tests/10-probe
 	chmod +x $(STAGE)/tests/10-probe
 	printf '$(PROBE_RUNMODE)\n' > $(STAGE)/tests/10-probe.arg
 	printf 'KLET\002\000\000\000\001\000\000\000\n' > $(STAGE)/probe.klet
 	chmod +x $(STAGE)/probe.klet
-	@echo "staged: kernelet.ko (probe), /tests/10-probe, /probe.klet"
+	@echo "staged: endovisor.ko (probe), /tests/10-probe, /probe.klet"
 
 # --- the scheduler experiments ------------------------------------------
 
@@ -438,11 +438,11 @@ SCHED_ARGS    ?=
 SCHED_RUNMODE ?= policy
 MIRROR        ?= 1
 
-stage-sched: kernelet-module runtime
+stage-sched: endovisor-module runtime
 	mkdir -p $(STAGE)/modules $(STAGE)/tests
 	rm -f $(STAGE)/tests/* $(STAGE)/*.klet
-	cp $(KERNELET_KO) $(STAGE)/modules/
-	printf 'kernelet.ko klet_watch=$(WATCH) klet_mirror=$(MIRROR)\n' > $(STAGE)/modules/order
+	cp $(ENDOVISOR_KO) $(STAGE)/modules/
+	printf 'endovisor.ko klet_watch=$(WATCH) klet_mirror=$(MIRROR)\n' > $(STAGE)/modules/order
 	cp $(BUILD)/run-sched $(STAGE)/tests/10-sched
 	chmod +x $(STAGE)/tests/10-sched
 	printf 'KLET\002\000\000\000' > $(STAGE)/sched.klet
@@ -450,7 +450,7 @@ stage-sched: kernelet-module runtime
 	printf 'mode=$(SCHED_MODE) dur=$(SCHED_DUR) $(SCHED_ARGS)\n' >> $(STAGE)/sched.klet
 	chmod +x $(STAGE)/sched.klet
 	printf '$(SCHED_RUNMODE)\n' > $(STAGE)/tests/10-sched.arg
-	@echo "staged: kernelet.ko (sched), /tests/10-sched $(SCHED_RUNMODE), /sched.klet mode=$(SCHED_MODE)"
+	@echo "staged: endovisor.ko (sched), /tests/10-sched $(SCHED_RUNMODE), /sched.klet mode=$(SCHED_MODE)"
 
 # One boot of the sched kernel. Everything about it comes from the variables above.
 .PHONY: sched-boot
@@ -550,7 +550,7 @@ CHECK_UNLOAD = \
 
 check-sched-policy:
 	@rc=0; \
-	sed -n '/INIT: loading kernelet.ko/,$$p' $(SCHED_POLICY_LOG) | sed 's/\r$$//' \
+	sed -n '/INIT: loading endovisor.ko/,$$p' $(SCHED_POLICY_LOG) | sed 's/\r$$//' \
 	  | grep -E 'SCHED-CONF|SCHED-PHASE|SCHED-TASK|SCHED-TRACE begin|SCHED-RESULT|SCHED-ELAPSED|STATS|vCPU' ; \
 	python3 bench/sched-model.py $(SCHED_POLICY_LOG) || rc=1; \
 	for pat in 'SCHED-DONE' 'kernelet: stopped, exit code 0'; do \
@@ -692,11 +692,11 @@ SWAP_IMG      := $(MEM_LOGDIR)/swap.img
 .PHONY: stage-mem mem-boot mem mem-func mem-r2 mem-conc mem-kill mem-pressure mem-perf
 .PHONY: check-mem-log check-mem-r2 check-mem-perf check-mem-kill check-mem-kill-quiet
 
-stage-mem: kernelet-module runtime
+stage-mem: endovisor-module runtime
 	mkdir -p $(STAGE)/modules $(STAGE)/tests
 	rm -f $(STAGE)/tests/* $(STAGE)/*.klet
-	cp $(KERNELET_KO) $(STAGE)/modules/
-	printf 'kernelet.ko $(MEM_MODPARAMS)\n' > $(STAGE)/modules/order
+	cp $(ENDOVISOR_KO) $(STAGE)/modules/
+	printf 'endovisor.ko $(MEM_MODPARAMS)\n' > $(STAGE)/modules/order
 	cp $(BUILD)/run-mem $(STAGE)/tests/10-mem
 	chmod +x $(STAGE)/tests/10-mem
 	printf 'KLET\002\000\000\000' > $(STAGE)/mem.klet
@@ -704,7 +704,7 @@ stage-mem: kernelet-module runtime
 	printf '$(MEM_ARGS)\n' >> $(STAGE)/mem.klet
 	chmod +x $(STAGE)/mem.klet
 	printf '$(MEM_RUNMODE)\n' > $(STAGE)/tests/10-mem.arg
-	@echo "staged: kernelet.ko (mem) $(MEM_MODPARAMS), /mem.klet $(MEM_ARGS)"
+	@echo "staged: endovisor.ko (mem) $(MEM_MODPARAMS), /mem.klet $(MEM_ARGS)"
 
 # MEM_LOG names the copy of the serial log this boot leaves in .build/mem.
 mem-boot:
@@ -975,9 +975,9 @@ check-yield-log:
 	@test -f $(YIELD_OFF_LOG) || { echo "check-log: no $(YIELD_OFF_LOG)"; exit 1; }
 	@test -f $(SERIAL) || { echo "check-log: no $(SERIAL)"; exit 1; }
 	@echo "=== control boot: preempt=none, watch timer OFF ================="
-	@sed -n '/INIT: loading kernelet.ko/,$$p' $(YIELD_OFF_LOG) | sed 's/\r$$//'
+	@sed -n '/INIT: loading endovisor.ko/,$$p' $(YIELD_OFF_LOG) | sed 's/\r$$//'
 	@echo "=== real boot: preempt=none, watch timer ON ====================="
-	@sed -n '/INIT: loading kernelet.ko/,$$p' $(SERIAL) | sed 's/\r$$//'
+	@sed -n '/INIT: loading endovisor.ko/,$$p' $(SERIAL) | sed 's/\r$$//'
 	@echo "================================================================"
 	@echo "--- the two checksums -------------------------------------------"
 	@grep -ho 'yield: checksum 0x[0-9a-f]*' $(YIELD_OFF_LOG) $(SERIAL) | sed 's/^/  kernelet  /'
@@ -1018,7 +1018,7 @@ check-yield-log:
 	echo "  info    RCU stall reports: $$son with the watch on, $$soff with it off"; \
 	if [ "$$son" -eq 0 ]; then echo "  ok      no RCU stall with the watch on"; \
 	else echo "  BAD     RCU stalled with the watch on"; rc=1; fi; \
-	for pat in 'INIT: unloading kernelet' 'INIT: done'; do \
+	for pat in 'INIT: unloading endovisor' 'INIT: done'; do \
 	  if grep -qF "$$pat" $(SERIAL); then echo "  ok      $$pat"; \
 	  else echo "  MISSING $$pat"; rc=1; fi; \
 	done; \
@@ -1038,7 +1038,7 @@ check-yield-log:
 check-probe-log:
 	@test -f $(PROBE_LOG) || { echo "check-log: no $(PROBE_LOG)"; exit 1; }
 	@echo "--- serial log, from the module load to the end -----------------"
-	@sed -n '/INIT: loading kernelet.ko/,$$p' $(PROBE_LOG) | sed 's/\r$$//'
+	@sed -n '/INIT: loading endovisor.ko/,$$p' $(PROBE_LOG) | sed 's/\r$$//'
 	@echo "----------------------------------------------------------------"
 	@rc=0; \
 	n=$$(grep -c 'probe: illegal instruction at' $(PROBE_LOG)); \
@@ -1058,7 +1058,7 @@ check-probe-log:
 	           'probe: general protection fault at' \
 	           'probe: spinning inside the kernelet at depth 0' \
 	           'kernelet: evicting vcpu carrier' \
-	           'INIT: unloading kernelet' 'INIT: done'; do \
+	           'INIT: unloading endovisor' 'INIT: done'; do \
 	  if grep -qF "$$pat" $(PROBE_LOG); then echo "  ok      $$pat"; \
 	  else echo "  MISSING $$pat"; rc=1; fi; \
 	done; \
@@ -1081,7 +1081,7 @@ check-probe-log:
 check-probe-seccomp:
 	@test -f $(PROBE_SECCOMP_LOG) || { echo "check-log: no $(PROBE_SECCOMP_LOG)"; exit 1; }
 	@echo "--- $$(basename $(PROBE_SECCOMP_LOG)), from the module load to the end ---"
-	@sed -n '/INIT: loading kernelet.ko/,$$p' $(PROBE_SECCOMP_LOG) | sed 's/\r$$//'
+	@sed -n '/INIT: loading endovisor.ko/,$$p' $(PROBE_SECCOMP_LOG) | sed 's/\r$$//'
 	@echo "----------------------------------------------------------------"
 	@f=$(PROBE_SECCOMP_LOG); rc=0; \
 	for pat in 'RUN-PROBE: seccomp filter installed: system call 1000 kills the process' \
@@ -1093,7 +1093,7 @@ check-probe-seccomp:
 	           'a carrier is gone, the sandbox is dying' \
 	           'RUN-PROBE: the sandbox ended by itself' \
 	           'RUN-PROBE: no carrier left (module references: 0)' \
-	           'INIT: unloading kernelet' 'INIT: done'; do \
+	           'INIT: unloading endovisor' 'INIT: done'; do \
 	  if grep -qF "$$pat" $$f; then echo "  ok      $$pat"; \
 	  else echo "  MISSING $$pat"; rc=1; fi; \
 	done; \
@@ -1116,7 +1116,7 @@ check-probe-seccomp:
 check-log:
 	@test -f $(SERIAL) || { echo "check-log: no $(SERIAL)"; exit 1; }
 	@echo "--- serial log, from the module load to the end -----------------"
-	@sed -n '/INIT: loading kernelet.ko/,$$p' $(SERIAL) | sed 's/\r$$//'
+	@sed -n '/INIT: loading endovisor.ko/,$$p' $(SERIAL) | sed 's/\r$$//'
 	@echo "----------------------------------------------------------------"
 	@rc=0; \
 	stub=$$(grep -o 'service stub: [0-9]* cycles through the stack switch, [0-9]* for the service body alone' $(SERIAL) | head -1); \
@@ -1126,7 +1126,7 @@ check-log:
 	if [ -n "$$heap" ]; then echo "  ok      $$heap"; \
 	else echo "  MISSING the heap measurement"; rc=1; fi; \
 	for pat in 'Hello, world' 'kernelet: stopped, exit code 0' \
-	           'INIT: unloading kernelet' 'INIT: done'; do \
+	           'INIT: unloading endovisor' 'INIT: done'; do \
 	  if grep -qF "$$pat" $(SERIAL); then echo "  ok      $$pat"; \
 	  else echo "  MISSING $$pat"; rc=1; fi; \
 	done; \

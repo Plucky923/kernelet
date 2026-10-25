@@ -26,8 +26,8 @@ each layer and the chapter of the book that explains it:
   vOSTD                vostd/  (with libs/, two Asterinas crates) ch. 4, 9, 10, 11, 14
  ----------- the image ABI: services, entry table, boot arguments, ------------
              vCPU records   vostd/src/abi.rs = linux/endovisor/kernelet.h  ch. 4
-  endovisor            linux/endovisor/  (kernelet.ko)            ch. 4, 6-13
-  the kernelet UAPI    linux/endovisor/uapi/kernelet.h            ch. 2
+  endovisor            linux/endovisor/  (endovisor.ko)            ch. 4, 6-13
+  the endovisor UAPI    linux/endovisor/uapi/endovisor.h            ch. 2
   the carrier hooks    linux/patches/0001-carrier-hooks.patch     ch. 5
   Linux 6.12           .build/linux-6.12, configured by linux/config.fragment
  ------------------------------------------------------------------------------
@@ -111,7 +111,7 @@ Each directory has a `README.md` saying what is in it.
   line, as in `make test TIMEOUT=600`, wins over all of them, for every boot
   of every target, so a slow host can raise it. For a single boot run by
   hand: `KLET_KERNEL` (which kernel proper, above all for `make image` and
-  `make kernelet-module`), `WATCH=0` (load the module with `klet_watch=0`, for
+  `make endovisor-module`), `WATCH=0` (load the module with `klet_watch=0`, for
   `make stage-yield`) and `MIRROR=0` (`klet_mirror=0`, for the sched
   kernel's boots). The rest, `SCHED_*` (`SCHED_VCPUS`, `SCHED_MODE`,
   `SCHED_DUR`, `SCHED_ARGS`, `SCHED_RUNMODE`, `SCHED_TIMEOUT`), `MEM_*`
@@ -184,7 +184,7 @@ Run them from `prototype/`, or from the repository root as
 | `make patch` | apply the patch; idempotent | 4 |
 | `make linux` | configure (once, from `linux/config.fragment`; `make config` does only that) and build `bzImage`, `modules` (which writes the tree's `Module.symvers`, without which no out-of-tree module links) and `modules_prepare` | 4 |
 | `make image` | build vOSTD and the kernel proper named by `KLET_KERNEL` (`hello`, `probe`, `yieldk`, `schedk`, `mem`) and pre-link the image | 3 |
-| `make kernelet-module` | the image, then `linux/endovisor/kernelet.ko` | 3 |
+| `make endovisor-module` | the image, then `linux/endovisor/endovisor.ko` | 3 |
 | `make runtime`, `make initramfs`, `make run` | the runtimes; the initramfs from `.build/stage`; one boot | 5, 7 |
 | `make clean` | remove the harness's artifacts: the image and module, the runtimes, the staging area and the initramfs, the Rust build, every log and test output. It leaves the Linux tree, its build, the Cargo registry and `.build/crates.stamp` (which says the registry has the crates) | – |
 | `make distclean` | `clean`, then `make mrproper` in the Linux tree, which removes its build and its configuration (`.config`, `include/generated`). It leaves the unpacked source, the patch applied to it and the patch's stamp, so the next `make linux` configures and builds again but neither downloads nor patches | – |

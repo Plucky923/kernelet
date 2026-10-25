@@ -30,7 +30,7 @@
 #include <unistd.h>
 
 #define KLET_PATH "/hello.klet"
-#define MODULE_NAME "kernelet"
+#define MODULE_NAME "endovisor"
 
 static void out(const char *s)
 {

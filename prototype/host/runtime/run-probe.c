@@ -49,7 +49,7 @@
 #define KLET_PATH "/probe.klet"
 /* The probe's endless system call, the one the seccomp filter kills on. */
 #define SYS_SPIN 1000
-#define MODULE_NAME "kernelet"
+#define MODULE_NAME "endovisor"
 
 /* How long the sandbox is left running before it is destroyed. The probe
  * reaches its spinning system call in microseconds; this is generous. */
