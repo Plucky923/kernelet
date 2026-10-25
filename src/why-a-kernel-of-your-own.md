@@ -50,7 +50,7 @@ So the kernel proper can do only what OSTD's interface lets it do. It cannot for
 
 ## The same kernel, a different framework
 
-Give the kernel proper a *different* OSTD. Keep the interface exactly the same, so that the kernel proper compiles against it without a single change, but implement it so that every operation touches only one tenant's resources, and leave out the operations a tenant must never perform, such as talking to hardware directly. The book calls that framework **vOSTD**, *virtual OSTD*, named the way a virtual CPU is named. The kernel proper, unchanged, compiled against vOSTD, is a kernelet.
+Give the kernel proper a *different* OSTD. Keep the interface exactly the same, so that the kernel proper compiles against it without a single change, but implement it so that every operation touches only one tenant's resources, and leave out the operations a tenant must never perform, such as talking to hardware directly. The book calls that framework **vOSTD**, *virtual OSTD*, named the way a virtual CPU is named. The kernel proper, unchanged, linked with vOSTD into one loadable unit, is a kernelet.
 
 Where a hypervisor virtualizes the hardware beneath a kernel, this virtualizes the programming interface the kernel is written against. The boundary is not a hardware mode but the language: what a kernelet can name is decided by what its crates export, and what it can ask of the host is a fixed list of functions that vOSTD is handed when it starts.
 
@@ -63,11 +63,11 @@ These are used in one sense throughout the book.
 | word | meaning |
 |---|---|
 | **tenant** | whoever's programs run in a sandbox; assumed hostile |
-| **kernelet** | one instance of the Asterinas kernel proper compiled against vOSTD, running in kernel mode inside the host kernel |
+| **kernelet** | one instance of the Asterinas kernel proper together with the vOSTD it is linked with, running in kernel mode inside the host kernel |
 | **sandbox** | one tenant's environment: a kernelet plus the user-mode programs it serves. What a virtual machine or a container is to its tenant |
 | **host kernel**, or **host** | the kernel that owns the machine. In this book, Linux |
 | **endovisor** | the component of the host kernel that creates, serves and destroys kernelets. *Endo-* because it sits inside the host kernel, beside the kernelets, where a hypervisor sits beneath its guests. In this book, a Linux kernel module |
-| **vOSTD** | the framework a kernelet is built on: OSTD's interface with a different implementation underneath |
+| **vOSTD** | the framework inside a kernelet: OSTD's interface with a different implementation underneath |
 | **service table** | the fixed list of host functions a kernelet may call; its only way out |
 | **grant** | the physical memory a kernelet has been given |
 | **virtual CPU** | one of the fixed number of processors a sandbox is given when it is created; the kernelet runs its tasks on them as a kernel runs on real processors (chapter 9) |
