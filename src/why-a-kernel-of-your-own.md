@@ -50,8 +50,6 @@ So the kernel proper can do only what OSTD's interface lets it do. It cannot for
 
 Who compiles it matters. The *operator* of the machine builds the kernel proper, and refuses any crate that does not carry `#![deny(unsafe_code)]`, or that allows the keyword back anywhere inside; the tenant never hands over code to be loaded into kernel mode. What the tenant controls is its own programs, and through them which paths of the kernel proper run, with which arguments. OSTD itself, the layer that does use `unsafe`, is written and audited by the operator, like the host kernel: it is trusted, as the host is.
 
-That is the opening.
-
 ## The same kernel, a different framework
 
 Give the kernel proper a *different* OSTD. Keep the interface exactly the same, so that the kernel proper compiles against it without a single change, but implement it so that every operation touches only one tenant's resources, and leave out the operations a tenant must never perform, such as talking to hardware directly. The book calls that framework **vOSTD**, *virtual OSTD*, named the way a virtual CPU is named. The kernel proper, unchanged, compiled against vOSTD, is a kernelet.
