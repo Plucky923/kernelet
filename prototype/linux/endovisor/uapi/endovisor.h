@@ -127,6 +127,10 @@ struct klet_kind_list {
  * KLET_MAX_VCPUS, memory_initial above memory_max, cmdline_len above
  * KLET_CMDLINE_MAX, or nonzero flags; ENOSPC when the endovisor's table
  * of sandboxes is full.
+ * In this prototype a kind has at most one sandbox at a time, because its
+ * one loaded copy is position-dependent (EBUSY while one exists).
+ * In this prototype memory_initial must come to 2 or 4 MiB, the grant being
+ * one physically contiguous run (EINVAL otherwise).
  *
  * Creating needs no privilege beyond access to the device node: a sandbox
  * can reach nothing its creator could not, since its memory is charged to
@@ -159,6 +163,7 @@ struct klet_create {
  * The descriptor is on a file that lives only in memory, one per virtual
  * CPU, owned by root and execute-only: it can be executed, not read or
  * written, and a process that has executed it is not dumpable afterwards.
+ * (The descriptor is an O_PATH one on that file, which execveat accepts.)
  * The endovisor knows which sandbox and which virtual CPU each such file is
  * for by the file's identity, not by its contents. Execute it with
  * execveat(fd, "", argv, envp, AT_EMPTY_PATH); the arguments and the
@@ -196,6 +201,7 @@ struct klet_create {
  * its own reference to the open file; the caller may close fd afterwards.
  * Returns the device's index, which the kernelet sees as the order of
  * devices on its command line.
+ * This prototype has no devices: EOPNOTSUPP.
  */
 enum klet_device_type {
 	KLET_DEVICE_BLOCK	= 1,		/* fd: a regular file or a block device */
@@ -219,6 +225,8 @@ struct klet_device {
  * pipe carries output only. Legal until the sandbox starts (EBUSY after).
  * Without a log file, the log is kept only in a bounded ring that
  * KLET_GET_STATS counts drops from.
+ * In this prototype the console carries output only, and a console or log
+ * not given goes to the host's kernel log, prefixed "kernelet:".
  */
 #define KLET_SET_CONSOLE		_IOW(KLET_IOC, 0x12, __s32)
 #define KLET_SET_LOG		_IOW(KLET_IOC, 0x13, __s32)
@@ -228,6 +236,7 @@ struct klet_device {
  * its ceiling to max; a zero leaves that field alone. Both rounded up to
  * 2 MiB. ENOMEM if add cannot be found, EINVAL if max is below what is
  * granted, ESRCH once the sandbox has been killed.
+ * This prototype's grant is fixed: EOPNOTSUPP.
  */
 struct klet_grant {
 	__u64	add;
@@ -256,6 +265,9 @@ struct klet_grant {
  * last copy of the descriptor closed, or one of the other KLET_KILLED_*
  * when the endovisor killed it (KILLED); message is the panic message
  * (PANICKED) or empty.
+ * This prototype reports a panic as EXITED, as a power-off, with no message.
+ * Of the endovisor's reasons, this prototype detects only
+ * KLET_KILLED_CARRIER_LOST.
  */
 enum klet_end {
 	KLET_END_EXITED	= 1,		/* the kernel proper powered off */

@@ -31,7 +31,7 @@ each layer and the chapter of the book that explains it:
   the carrier hooks    linux/patches/0001-carrier-hooks.patch     ch. 5
   Linux 6.12           .build/linux-6.12, configured by linux/config.fragment
  ------------------------------------------------------------------------------
-  kernelet runtime     host/runtime/run-*.c, holder.c             user mode on the host
+  kernelet runtime     host/runtime/holder.c, sandbox.c, run-*.c  user mode on the host
   initramfs (PID 1)    host/initramfs/init.c
   QEMU with KVM        the Makefile's `run`
 ```
@@ -45,14 +45,17 @@ kernelet runtimes and PID 1) and `bench/` (the scripts that turn the
 measurement logs into tables).
 
 The kernel proper and vOSTD are one Rust static library, pre-linked into one
-relocatable object, the **image**, which is linked into the endovisor module.
-The image calls no Linux symbol: everything it needs from the host is a
-service in the table the endovisor hands it at entry. The endovisor is an
-ordinary out-of-tree module apart from the patch to Linux, which adds
-219 lines (198 of them not blank) and removes none, most of them in the generic
-entry code and `kernel/fork.c`. The kernelet runtime is the user-space program
-that creates a sandbox, by exec'ing a `.klet` file that the
-endovisor's binary-format handler turns into the sandbox's root carrier.
+relocatable object, the **image**, a file of its own (`.build/<kernel>.image`),
+which the holder registers as a *kind* and the endovisor loads and relocates
+itself; one `endovisor.ko` serves every kernel proper. The image calls no
+Linux symbol: everything it needs from the host is a service in the table the
+endovisor hands it at entry. The endovisor is an ordinary out-of-tree module
+apart from the patch to Linux, which adds 223 lines (202 of them not blank)
+and removes none, most of them in the generic entry code and `kernel/fork.c`.
+The kernelet runtime is the user-space program that creates a sandbox through
+the endovisor UAPI, `/dev/endovisor`: its holder creates the sandbox and forks
+one child per virtual CPU, which executes that virtual CPU's exec descriptor
+and so becomes its carrier.
 
 Each directory has a `README.md` saying what is in it.
 
@@ -137,8 +140,8 @@ applies the patch, configures and builds the kernel (a `tinyconfig`
 kernel, so this is quick), builds the Rust image, and then runs the tests:
 315 s measured from an empty `.build/` on an eight-core machine, 134 s of them
 in the first test (measured before the kernel gained `CONFIG_BUG` and `probe`
-its second boot, and not measured again since). After that, `make test` takes about three and a half
-minutes (217 to 221 s measured, the two boots of `probe` 13 s of them), and
+its second boot, and not measured again since). After that, `make test` takes about four
+minutes (252 s measured three times, the three boots of `probe` 23 s of them), and
 `make bench` a little less (190 s: eight boots of the sched kernel and five of
 the mem kernel). Every build is `--offline`, so only the toolchain (once,
 through `rustup`), the crates and the one download of Linux need the network;
@@ -164,8 +167,8 @@ Run them from `prototype/`, or from the repository root as
 |---|---|---|
 | `make test` | the eleven tests below, in order | – |
 | `make bench` | `sched-fair`, `sched-perf`, `mem-perf`, reported | 14 |
-| `make hello` | the 100-line kernel, byte-identical to `kernels/hello/upstream/`: "Hello, world", a clean stop, a clean module unload; also the one-off measurements of what a service costs ("service stub: N cycles") and of what a heap allocation and its free cost ("heap: ... N cycles the pair") | 2, 3, 6, 7 |
-| `make probe` | two boots. The probe: demand paging, a 4 MiB `write` whose buffer the heap refuses (the kernel proper answers `-ENOMEM`, and Linux's page allocator is never asked), exceptions other than page faults (`ud2` twice in a row, trap 6; `int3`, trap 3; `hlt`, trap 13, a general-protection fault), each fault signal ignored again after it was drained, and eviction of a kernelet spinning in kernel mode when the sandbox is killed. Then the same tenant under a seccomp filter that kills the process on its endless system call: Linux forces `SIGSYS` on the carrier as a fatal signal, the resume hook leaves it to Linux, the carrier dies by it, and its death ends the sandbox, with no warning | 4, 7, 11, 12 |
+| `make hello` | first `uapi-check`, the endovisor UAPI's refusals and promises one by one (67 checks, two sandboxes of two kinds at once among them); then the 100-line kernel, byte-identical to `kernels/hello/upstream/`, with its console and log in files: "Hello, world" in the console file, a clean stop, a clean module unload; also the one-off measurements of what a service costs ("service stub: N cycles") and of what a heap allocation and its free cost ("heap: ... N cycles the pair") | 2, 3, 6, 7 |
+| `make probe` | three boots. The probe: demand paging, a 4 MiB `write` whose buffer the heap refuses (the kernel proper answers `-ENOMEM`, and Linux's page allocator is never asked), exceptions other than page faults (`ud2` twice in a row, trap 6; `int3`, trap 3; `hlt`, trap 13, a general-protection fault), each fault signal ignored again after it was drained, and eviction of a kernelet spinning in kernel mode when its carrier is sent `SIGKILL` (by the watch timer). Then the same tenant under a seccomp filter that kills the process on its endless system call: Linux forces `SIGSYS` on the carrier as a fatal signal, the resume hook leaves it to Linux, the carrier dies by it, and its death ends the sandbox, with no warning. Then the probe ended by `KLET_KILL`, which leaves the spinner to the eviction sweep | 2, 4, 7, 11, 12 |
 | `make yield` | two boots under `preempt=none`, the watch timer off (the competitor starves) and on (it does not, and the checksums agree) | 9, 10 |
 | `make sched-policy` | the kernelet's own scheduler: its trace checked against a reference model | 8 |
 | `make sched-coop` | three boots: the mirror on (no involuntary deschedule in a critical section), off (the control), and an overstayer forced to yield at the first tick at least a millisecond after the first strike, about 2 ms on the machine the book was measured on (the check allows 4000 us, because a late tick lengthens it) | 10 |
@@ -173,7 +176,7 @@ Run them from `prototype/`, or from the repository root as
 | `make mem-func` | E2, E3, E4, E10: no Linux fault on mapped pages, fault-around, protection changes, a map under a guard, the withheld set | 12, 13 |
 | `make mem-r2` | E5: the sleeping contract, broken on purpose, ends the kernelet | 13 |
 | `make mem-conc` | E8, E11 on two vCPUs: lockless copies, the contended range lock, a process exiting under a copy, the retire list | 13 |
-| `make mem-kill` | E11 and the carriers as Linux tasks: one carrier of a two-thread process is preempted by a competitor, sent SIGTERM and SIGUSR1 and then 2000 rounds of SIGQUIT, SIGABRT, SIGTSTP, SIGTTIN and SIGTTOU (it lives and runs, and none of them reaches its queue; the root carrier is sent a SIGTERM, a SIGQUIT and a SIGTSTP, and lives too), stopped and continued, and killed while its sibling faults in the same address space; the kill ends the whole sandbox cleanly. Its tenant runs the rewind check meanwhile: a register count and a memory count that must never part. Then two short boots, the carrier of vCPU 1 killed while it is idle in `vcpu_idle` and while it runs a kernel task that calls no service: each kill must end the sandbox within two seconds | 7, 11, 12 |
+| `make mem-kill` | E11 and the carriers as Linux tasks: one carrier of a two-thread process is preempted by a competitor, sent SIGTERM and SIGUSR1 and then 2000 rounds of SIGQUIT, SIGABRT, SIGTSTP, SIGTTIN and SIGTTOU (it lives and runs, and none of them reaches its queue; the carrier of vCPU 0 is sent a SIGTERM, a SIGQUIT and a SIGTSTP, and lives too), stopped and continued, and killed while its sibling faults in the same address space; the kill ends the whole sandbox cleanly. Its tenant runs the rewind check meanwhile: a register count and a memory count that must never part. Then two short boots, the carrier of vCPU 1 killed while it is idle in `vcpu_idle` and while it runs a kernel task that calls no service: each kill must end the sandbox within two seconds | 7, 11, 12 |
 | `make mem-pressure` | E7: the area's entries survive reclaim and swap | 12 |
 | `make sched-fair` | measurement: a sibling group's share of the processors with 1, 50, and 50 tasks and an overstayer | 10, 14 |
 | `make sched-perf` | measurement: a kernelet task switch, a wake-up on the same and on the other vCPU, and a round trip between two tenant processes, beside native Linux, five boots; fails if a kernelet measurement has no samples | 14 |
@@ -183,9 +186,9 @@ Run them from `prototype/`, or from the repository root as
 | `make source` | download and unpack Linux v6.12 if `.build/linux-6.12/Makefile` is not there, and apply the patch | 4 |
 | `make patch` | apply the patch; idempotent | 4 |
 | `make linux` | configure (once, from `linux/config.fragment`; `make config` does only that) and build `bzImage`, `modules` (which writes the tree's `Module.symvers`, without which no out-of-tree module links) and `modules_prepare` | 4 |
-| `make image` | build vOSTD and the kernel proper named by `KLET_KERNEL` (`hello`, `probe`, `yieldk`, `schedk`, `mem`) and pre-link the image | 3 |
-| `make endovisor-module` | the image, then `linux/endovisor/endovisor.ko` | 3 |
-| `make runtime`, `make initramfs`, `make run` | the runtimes; the initramfs from `.build/stage`; one boot | 5, 7 |
+| `make image` | build vOSTD and the kernel proper named by `KLET_KERNEL` (`hello`, `probe`, `yieldk`, `schedk`, `mem`) and pre-link the image, `.build/<kernel>.image`, checking it as the endovisor will: no GOT relocation, no undefined symbol, one global symbol | 2, 3 |
+| `make endovisor-module` | `linux/endovisor/endovisor.ko`, which carries no image | 3 |
+| `make runtime`, `make initramfs`, `make run` | the runtimes (the holder, `run-test`, the drivers); the initramfs from `.build/stage`; one boot | 2, 5, 7 |
 | `make clean` | remove the harness's artifacts: the image and module, the runtimes, the staging area and the initramfs, the Rust build, every log and test output. It leaves the Linux tree, its build, the Cargo registry and `.build/crates.stamp` (which says the registry has the crates) | – |
 | `make distclean` | `clean`, then `make mrproper` in the Linux tree, which removes its build and its configuration (`.config`, `include/generated`). It leaves the unpacked source, the patch applied to it and the patch's stamp, so the next `make linux` configures and builds again but neither downloads nor patches | – |
 
@@ -211,14 +214,19 @@ The endovisor takes four, which the tests set through the initramfs's
 
 Everything the guest prints goes to its serial port, which QEMU writes to
 `.build/serial.log`; each boot overwrites it. The kernelet's own output is
-the lines prefixed `kernelet:` (vOSTD's `println!` is the `log_write`
-service, which is `printk`); `INIT:` lines are PID 1's and `RUN-*:` lines the
-runtime's. Each test keeps a copy of its boot's log before it checks it:
+the lines prefixed `kernelet:`: the endovisor's own, and, for a sandbox
+given no console and no log (the holder's `-k`, which every test but `hello`
+uses), the kernel proper's console lines (`println!`, the `console_write`
+service) and vOSTD's log lines (the `log_write` service), both `printk`.
+`INIT:` lines are PID 1's, `RUN-TEST:` lines a test's steps, and `holder:`,
+`RUN-*:` and `UAPI-CHECK:` lines the runtime's, which it writes through
+`/dev/kmsg` so that they are in order with the endovisor's. Each test keeps a
+copy of its boot's log before it checks it:
 
 | test | log |
 |---|---|
 | `hello`, `sched-fpu` | `.build/serial-<test>.log` |
-| `probe` | `.build/serial-probe.log`, `.build/serial-probe-seccomp.log` |
+| `probe` | `.build/serial-probe.log`, `.build/serial-probe-seccomp.log`, `.build/serial-probe-klet-kill.log` |
 | `yield` | `.build/serial-yield-off.log`, `.build/serial-yield-on.log` |
 | `sched-policy`, `sched-coop`, `sched-fair`, `sched-perf` | `.build/serial-sched-*.log` |
 | `mem-*` | `.build/mem/<name>.log` (`func`, `r2`, `conc`, `kill`, `kill-idle`, `kill-spin`, `pressure`, `perf-1` ... `perf-5`) |
@@ -228,14 +236,18 @@ to a task already running` (vOSTD's report of a scheduler handing it a task
 that is still running elsewhere) in any of its boots' logs, the control boots
 included (Linux prints `WARNING:` only because the kernel is built with
 `CONFIG_BUG`, above), on a missing line it expects, on
-a sandbox whose end did not give back what it held, and on an unclean module
-unload: init's `delete_module kernelet failed`, a log without the endovisor's
-`kernelet: STATS` line or init's `INIT: done`, or anything the endovisor
-allocated for the sandbox still live at unload.
+a sandbox whose end did not give back what it held or that was never
+destroyed, on a module reference count other than 0 when the holder is done
+(read once, with every carrier reaped and every descriptor closed), and on an
+unclean module unload: init's `delete_module endovisor failed`, a log without
+the endovisor's `kernelet: STATS` line or init's `INIT: done`, or anything the
+endovisor allocated for the sandbox still live at unload.
 
-When the sandbox's last carrier dies, the endovisor prints `kernelet: the
-sandbox is gone:` with how many heap blocks the kernelet still held and how
-many kernelet stacks it returned to `vmalloc`. When the module unloads, it
+When a sandbox's last carrier dies, the endovisor prints `kernelet: sandbox N
+is gone:` with how many heap blocks the kernelet still held and how many
+kernelet stacks it returned to `vmalloc`, then `kernelet: sandbox N exited:`
+with how it ended, and `kernelet: sandbox N destroyed` when it is destroyed.
+The counters at unload are the totals of every sandbox the module ran. When the module unloads, it
 prints its counters, in this order: `eviction:` (only if a sweep ran),
 `forced yield of vcpu ...` (the first few, only if there were any), `watch
 timer:` (ticks, upcalls, voluntary yields), `kicks:` (kick IPIs and the
@@ -249,9 +261,9 @@ requires 0 live in each of the last three.
 ## Signals, stops and memory
 
 - **Signals.** Every signal that can be ignored is ignored by every carrier:
-  when the root carrier execs the `.klet` file, the endovisor sets all of
-  them but `SIGKILL` and `SIGSTOP` to `SIG_IGN` and clears the signal mask,
-  and the vCPU carriers inherit both. An ignored signal is discarded when it
+  when the holder's child executes its exec descriptor, the endovisor sets
+  all of them but `SIGKILL` and `SIGSTOP` to `SIG_IGN` and clears the signal
+  mask. An ignored signal is discarded when it
   is sent, so an operator's `SIGTERM`, a `SIGQUIT` or `SIGABRT`, a `SIGTSTP`,
   `SIGTTIN` or `SIGTTOU`, never becomes pending on a carrier. Draining them
   on the way to user mode would not be enough: the exit loop delivers
@@ -279,12 +291,11 @@ requires 0 live in each of the last three.
   `si_code`, and `SIGSEGV`, `SIGBUS`, `SIGTRAP` and `SIGFPE` with
   `SI_KERNEL`, which is how Linux reports #GP, #TS, #NP, #SS, #BP and the
   legacy #MF; anything else drained is dropped. `SIGKILL` is Linux's, and
-  kills the carrier. `SIGSTOP` stops a vCPU carrier the way it stops any
+  kills the carrier. `SIGSTOP` stops a carrier the way it stops any
   task, and **a stopped carrier is a stopped virtual CPU**: the kernelet's
   tasks on it do not run, a sibling vCPU waiting for one of them waits,
   until `SIGCONT` (which continues a stopped task although it is ignored).
-  The root carrier never returns to user mode and cannot stop; it drains
-  `SIGSTOP` and drops it. A carrier being traced (`ptrace`) is the
+  A carrier being traced (`ptrace`) is the
   exception: Linux queues even ignored signals for a tracer, so a debugger
   attached to a carrier sees them.
 - **Losing a carrier ends the sandbox.** When any carrier dies while the
@@ -304,32 +315,34 @@ requires 0 live in each of the last three.
   carrier that loops in kernelet code without calling a service cannot be
   reached until something else ends the sandbox.
 - **An idle virtual CPU is not load.** A carrier asleep in `vcpu_idle`, or
-  waiting to be booted, sleeps with `TASK_NOLOAD`, so it does not count in
-  the host's load average.
-- **The root's death notice is never late.** A vCPU carrier is cloned from
-  the root and inherits a copy of the root's lifeline, which it closes first
-  thing. If the root dies between the clone and that close, the copy is the
-  lifeline's last reference, and a plain close would defer the release, the
-  root's death notice, until the clone first returned to user mode, after it
-  had booted the kernelet. The clone therefore takes the reference over and
-  drops it synchronously (`__fput_sync`), so the notice runs right there, and
-  the clone, finding the root gone, never starts.
+  waiting for the other carriers or to be booted, sleeps with `TASK_NOLOAD`,
+  so it does not count in the host's load average.
+- **The end of a sandbox is the endovisor's bookkeeping.** Whatever ends it
+  (the kernel proper's power-off, `KLET_KILL`, the last close of its
+  descriptor, a carrier lost while it is live) marks it dying, records why,
+  kills every carrier and arms the eviction sweep, since no root carrier is
+  left to take a spinning virtual CPU's processor back; it has exited when
+  its last carrier is gone, or at once if it had none.
 - **The sandbox's end gives everything back.** When its last carrier dies,
   the endovisor destroys its address spaces, frees every heap block the
   kernelet still held (every block `mem_alloc` hands out is recorded, so
   that a stopped or evicted kernelet's tasks, address spaces and run queues
   do not leak), and returns the whole kernelet-stack pool to `vmalloc`, the
-  stacks still in use included. The grant and the module's own records stay
-  until the module unloads.
+  stacks still in use included. The grant, the exec files, the console and
+  log, the control group and the owner go when the sandbox is destroyed, by
+  `KLET_DESTROY` or by the endovisor once the sandbox has exited and its last
+  descriptor is closed.
 - **Memory.** What the kernelet allocates through the host is charged to the
   memory cgroup of the carrier that asked, which is the sandbox's: its heap
   (`mem_alloc`, `GFP_KERNEL_ACCOUNT`, and the table that records its blocks), its kernelet stacks (`__vmalloc` with
-  `GFP_KERNEL_ACCOUNT`, at most `KLET_MAX_KSTACKS` = 512 of 256 KiB per
-  sandbox; beyond that `kstack_alloc` returns 0 and vOSTD reports
-  `Error::NoMemory`), and the page-table pages of its address spaces, which
-  Linux allocates and charges itself. The grant, the 4 MiB of frames the
-  kernelet maps for its tenants, is not charged: the endovisor allocates it
-  when the module is loaded, before any sandbox or control group exists.
+  `GFP_KERNEL_ACCOUNT`, at most the sandbox's `max_tasks` and one per virtual
+  CPU, of 256 KiB each; beyond that `kstack_alloc` returns 0 and vOSTD reports
+  `Error::NoMemory`), the page-table pages of its address spaces, which
+  Linux allocates and charges itself, and the grant, the 2 or 4 MiB of frames
+  the kernelet maps for its tenants (`alloc_pages` with `GFP_KERNEL_ACCOUNT`,
+  by the first carrier to arrive, which is in the sandbox's group). The
+  memory controller has to be enabled in the parent's `cgroup.subtree_control`
+  for the group to have its own counter; the tests do not enable it.
 
 ## Known problems
 

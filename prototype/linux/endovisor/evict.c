@@ -14,7 +14,10 @@
  *
  * One hrtimer per CPU, because CONFIG_PREEMPT means the carrier may be scheduled
  * away and back between sweeps, possibly on another CPU; the sweep re-arms
- * itself every millisecond until no carrier is left.
+ * itself every millisecond until no dying sandbox has a carrier left. There is
+ * one sweep for every sandbox: klet_sweeping counts the dying sandboxes that
+ * still have carriers, and each sweep evicts whatever carrier of a dying
+ * sandbox it finds in kernelet code, whichever sandbox that is.
  */
 
 #include <linux/hrtimer.h>
@@ -31,41 +34,42 @@
 
 static DEFINE_PER_CPU(struct hrtimer, klet_sweep_timer);
 static bool klet_sweep_ready;
+/* Dying sandboxes that still have a carrier: the sweep runs while it is not 0. */
+atomic_t klet_sweeping = ATOMIC_INIT(0);
 
 static enum hrtimer_restart klet_sweep(struct hrtimer *timer)
 {
-	struct klet_inst *inst = &klet_inst;
 	struct pt_regs *regs = get_irq_regs();
+	struct klet_inst *inst;
 	struct klet_carrier *c;
 
-	atomic_inc(&inst->sweeps);
+	atomic_inc(&klet_totals.sweeps);
 
-	if (atomic_read(&inst->nr_carriers) == 0)
+	if (atomic_read(&klet_sweeping) == 0)
 		return HRTIMER_NORESTART;
 
-	if (!regs || user_mode(regs))
+	if (!regs || user_mode(regs) || !current->carrier_hooks)
 		goto again;
+	c = klet_current_carrier();
+	inst = c->inst;
 	/*
 	 * The one test that matters: the interrupted instruction was kernelet
-	 * code. Anything in Linux's text or the endovisor's own is off limits.
+	 * code, of this carrier's own kind. Anything in Linux's text or the
+	 * endovisor's own is off limits.
 	 */
-	if (!klet_in_image_text(regs->ip))
+	if (!klet_in_image_text(inst, regs->ip))
 		goto again;
-	if (!current->carrier_hooks)
-		goto again;
-
-	c = klet_current_carrier();
-	if (c->inst != inst || !inst->dying)
+	if (!READ_ONCE(inst->dying))
 		goto again;
 	if (c->depth != 0 || c->evicted || c->state != KLET_RUNNING)
 		goto again;
 
 	c->evicted = true;
-	atomic_inc(&inst->evictions);
-	pr_info("kernelet: evicting %s carrier (pid %d) on cpu %d: ip %#lx (+%#lx in the kernelet image, %pS), sweep %d\n",
-		klet_kind_name(c->kind), current->pid, smp_processor_id(),
-		regs->ip, regs->ip - (unsigned long)__klet_image_text_start,
-		(void *)regs->ip, atomic_read(&inst->sweeps));
+	atomic_inc(&inst->n.evictions);
+	pr_info("kernelet: sandbox %d: evicting vcpu carrier (pid %d) on cpu %d: ip %#lx (+%#lx in the kernelet image, %pS), sweep %d\n",
+		inst->slot, current->pid, smp_processor_id(),
+		regs->ip, regs->ip - inst->kind->text_lo,
+		(void *)regs->ip, atomic_read(&klet_totals.sweeps));
 
 	/* The only register the endovisor touches. */
 	regs->ip = (unsigned long)klet_exit_stub;
@@ -84,12 +88,26 @@ static void klet_sweep_arm_local(void *unused)
 			      HRTIMER_MODE_REL_PINNED_HARD);
 }
 
-/* Starts the sweep on every CPU. Called from process context. */
+/*
+ * Starts the sweep on every CPU, for a sandbox just marked dying. Called from
+ * process context. The sandbox is counted in klet_sweeping until its last
+ * carrier is gone (klet_sandbox_exited).
+ */
 void klet_evict_arm(struct klet_inst *inst)
 {
+	bool arm = false;
+
 	if (!klet_sweep_ready)
 		return;
-	if (atomic_read(&inst->nr_carriers) == 0)
+	spin_lock(&inst->lock);
+	if (!inst->sweep_armed && !inst->exit_claimed &&
+	    atomic_read(&inst->nr_carriers) != 0) {
+		inst->sweep_armed = true;
+		atomic_inc(&klet_sweeping);
+		arm = true;
+	}
+	spin_unlock(&inst->lock);
+	if (!arm)
 		return;
 	pr_info("kernelet: arming the eviction sweep every %d us on %d cpu(s)\n",
 		KLET_SWEEP_INTERVAL_NS / 1000, num_online_cpus());

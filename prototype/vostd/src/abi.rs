@@ -28,7 +28,7 @@ use core::{
 use crate::arch::trap::RawUserContext;
 
 /// The ABI version. Bumped whenever any of the tables changes shape.
-pub const KLET_ABI_VERSION: u64 = 5;
+pub const KLET_ABI_VERSION: u64 = 6;
 
 /// What the endovisor tells the kernelet about the machine it was given.
 #[repr(C)]
@@ -63,7 +63,7 @@ pub struct BootArgs {
     /// preemption count. The endovisor's module parameter, for the experiment
     /// that shows what the mirror buys.
     pub mirror_preempt: u64,
-    /// The sandbox's command line, from the `.klet` file: what a bootloader's
+    /// The sandbox's command line, from KLET_CREATE: what a bootloader's
     /// kernel command line is to a machine.
     pub cmdline_ptr: u64,
     pub cmdline_len: u64,
@@ -146,7 +146,8 @@ pub struct MemStats {
 pub struct Services {
     /// Must equal [`KLET_ABI_VERSION`].
     pub abi_version: u64,
-    /// Writes one log line. No trailing newline.
+    /// Writes one line of the kernel log: vOSTD's own lines. No trailing
+    /// newline.
     pub log_write: unsafe extern "C" fn(ptr: *const u8, len: u64),
     /// Allocates `size` bytes aligned to `align` from the host's heap.
     pub mem_alloc: unsafe extern "C" fn(size: u64, align: u64) -> *mut u8,
@@ -207,6 +208,9 @@ pub struct Services {
     pub fpu_load: unsafe extern "C" fn(area: *const u8, len: u64),
     /// Stops the instance. Never returns.
     pub stop: unsafe extern "C" fn(code: u64) -> !,
+    /// Writes one console line, what the kernel proper prints. No trailing
+    /// newline. [`Services::log_write`] is the kernel log, vOSTD's own lines.
+    pub console_write: unsafe extern "C" fn(ptr: *const u8, len: u64),
 }
 
 /// The kernelet functions the host may call.
@@ -253,7 +257,9 @@ pub struct VcpuRec {
     /// interrupts are masked. vOSTD's [`crate::irq::DisabledLocalIrqGuard`] sets
     /// it, and so does the endovisor at the moment it redirects into the upcall
     /// stub — which is what hardware does to IF when it takes an interrupt. The
-    /// stub clears it at the end, as `iret` would.
+    /// stub clears it at the end, as `iret` would. It starts set, as a processor
+    /// comes out of reset with IF clear: vOSTD clears it once it can take an
+    /// interrupt, which is once the record can be found.
     pub irq_off: UnsafeCell<u32>,
     /// Non-zero exactly while the host's per-processor preemption count includes
     /// the kernelet's one. It is *not* the same as "in a critical section": it is

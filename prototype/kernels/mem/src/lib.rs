@@ -1269,7 +1269,7 @@ static X_SPACE: SpinLock<Option<Arc<VmSpace>>> = SpinLock::new(None);
 
 /// vCPU 1: creates the space, so that the carrier that dies is the one that
 /// made the address space (the memory controller's owner must not be it: the
-/// endovisor makes the root carrier the owner of every space), then runs the
+/// endovisor makes the holder's main thread the owner of every space), then runs the
 /// rewind check in user mode until it is killed, while the runtime preempts,
 /// signals, stops and continues its carrier.
 fn kill_victim() {

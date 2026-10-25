@@ -1,42 +1,62 @@
-# runtime: the kernelet runtimes
+# runtime: the kernelet runtime
 
 A kernelet runtime is the user-space program on the host that creates and
-configures sandboxes, as a container runtime does. Here each test has a small
-one, a static C program that `init` runs from `/tests/`: it forks, sets the
-child up, and in the child execs the sandbox's `.klet` file, which the endovisor's binary-format handler
-turns into the sandbox's root carrier. The parent then does whatever the test
-needs around the sandbox, waits for the root carrier to die, and waits for the
-module's reference count to reach zero so that `init` can unload it.
+configures sandboxes, as a container runtime does. Here it is one client of
+the endovisor UAPI (`../../linux/endovisor/uapi/endovisor.h`, chapter 2),
+`sandbox.c`, and one command around it, `holder.c`: the sandbox's **holder**,
+the process that creates the sandbox, keeps its descriptor open while it lives,
+and destroys it. `holder register NAME IMAGE` hands an image file to
+`KLET_KIND_REGISTER`; `holder run [OPTIONS] NAME NR_VCPUS [CMDLINE...]` joins
+the sandbox's control group (`-c`), creates the sandbox, gives it its console
+and log (its own standard output and error, or files: `--console`, `--log`;
+`-k` gives it neither, and the endovisor then writes both to the host's
+kernel log, prefixed `kernelet:`, which is what every test but `hello` uses),
+forks one child per virtual CPU that sets itself up and executes its exec
+descriptor, waits for the end, reaps the carriers, destroys the sandbox, and
+reports the endovisor module's reference count, read once, which must then
+be 0. Its exit status is the kernel proper's exit code, 128 for a panic, 129
+for a kill.
 
-What "sets the child up" means differs. Every runtime sets no new privileges
-(`PR_SET_NO_NEW_PRIVS`) in the child. `run-yield.c` also pins the child to CPU
-0, and `run-sched.c` puts it in its own control group, `/sys/fs/cgroup/klet`,
-on CPUs 0 and 1, which it inherits from the runtime. `run-hello.c`,
-`run-probe.c` and `run-mem.c` do nothing else: no control group, no pinning
-(`run-mem.c`'s `kill` mode pins a running carrier later, from outside),
-except that `run-probe.c`'s `seccomp` mode installs a seccomp filter in the
-child before the exec, which every carrier inherits.
+What a child sets on itself between the `fork` and the `execveat` survives the
+exec and makes the carrier what it is: every child sets no new privileges
+(`PR_SET_NO_NEW_PRIVS`), which the endovisor insists on; `-p` pins virtual CPU
+*i* to processor *i*; `--seccomp-kill NR` installs a seccomp filter that kills
+the process on system call NR (the probe test). Two options end the sandbox
+from outside, after a delay, and report the carrier of virtual CPU 0's signal
+dispositions from `/proc/<pid>/status` first: `--kill-after MS`, a `SIGKILL` to
+that carrier, as an operator would send it, and `--klet-kill-after MS`,
+`KLET_KILL` with reason 1.
 
-A `.klet` file is the sandbox's configuration, written by the Makefile's
-`stage-*` targets: the magic `KLET`, a version (2), the number of virtual CPUs,
-and a command line that the kernel proper reads as its kernel command line.
+The runtimes' report lines (`holder:`, `RUN-MEM:`, `RUN-SCHED:`,
+`UAPI-CHECK:`) are written into the kernel's log through `/dev/kmsg`, so that
+on the serial console they are in order with the endovisor's lines and never
+broken in the middle by one; `init` turns off the rate limit Linux puts on
+such writes.
 
-The book explains the endovisor UAPI, which `holder.c` uses, in chapter 2; creating a sandbox the way the other runtimes still do, with a root carrier, in chapter 6
-(carriers); the runtimes' measurements of native Linux appear in chapter 15.
+init runs every executable under `/tests` with no arguments. A test that is
+a sequence of holder invocations is `run-test`, staged as `/tests/10-<name>`,
+which reads its steps from `/tests/10-<name>.cmd` (`run`, `start`, `wait`,
+`kill`, `sleep`, `pin`, `show`; see the head of `run-test.c`); the Makefile's
+`stage-*` targets write them. The experiment drivers read what they do, how
+many virtual CPUs the sandbox has and its command line from the three lines
+of `/tests/10-<name>.arg`.
+
+The book explains the endovisor UAPI and the holder in chapter 2; the
+runtimes' measurements of native Linux appear in chapter 15.
 
 ## How they are built
 
 `make runtime`, which every `stage-*` target runs: `gcc -static -O2` into
-`.build/run-*`. Each stage target copies the one its test needs to
-`/tests/10-<name>` in the initramfs.
+`.build/`, with `-I linux/endovisor/uapi`.
 
 ## Files
 
 | file | what it is | test |
 |---|---|---|
-| `run-hello.c` | creates the sandbox and waits | `make hello` |
-| `run-probe.c` | creates the sandbox, reads the vCPU carrier's signal dispositions from `/proc/<pid>/status` after the probe's faults, then kills the root carrier from outside, so that the endovisor has to evict the kernelet spinning in kernel mode; with `seccomp` (in `/tests/10-probe.arg`), installs a filter that kills the process on the probe's endless system call, 1000, and kills nothing itself: Linux's kill of the vCPU carrier must end the sandbox | `make probe` |
-| `run-yield.c` | the sandbox and a competitor pinned to one CPU; the competitor computes the same checksum in user space and reports its progress | `make yield` |
-| `run-sched.c` | the sandbox in its own control group; with `coop` two competitors in a sibling group, with `fair` one, and the fairness measurement; with `perf` no competitor, and after the sandbox the same switch and wake-up measurements on native Linux | `make sched-*` |
-| `run-mem.c` | the sandbox; with `pressure` also swap and a memory hog until reclaim has run; with `kill`, a competitor on the processor of vCPU 1's carrier, then the carriers' signal dispositions from `/proc`, a SIGTERM and a SIGUSR1 to it and a SIGTERM to the root carrier, 2000 rounds of SIGQUIT, SIGABRT, SIGTSTP, SIGTTIN and SIGTTOU to it and a SIGQUIT and a SIGTSTP to the root carrier, a SIGSTOP and a SIGCONT, and a SIGKILL; with `killidle` and `killspin`, a SIGKILL to the carrier of vCPU 1 once the kernelet says it is idle in `vcpu_idle` or looping in a kernel task, and the time the sandbox takes to end | `make mem-*` |
-| `holder.c` | the endovisor UAPI's first user: `register` hands an image to `KLET_KIND_REGISTER`; `run` creates a sandbox, forks and configures one child per virtual CPU, each of which executes its exec descriptor, waits for the end and destroys. The endovisor of this prototype does not offer `/dev/endovisor` yet, so it is built but not run; the book reads it in chapter 2 | none yet |
+| `sandbox.h`, `sandbox.c` | the client of the endovisor UAPI: `open_system`, `register_kind`, `find_kind`, `join_cgroup` (which makes the group if it does not exist), `start_carrier`, `wait_sandbox` (`KLET_WAIT`, watching the children through process descriptors too: a child that dies before its exec never became a carrier, so the holder kills the sandbox itself if one does), `run_sandbox`; and what the tests need around them (`KLET_GET_STATS` printed, the module's reference count, `/proc` fields) | every one |
+| `holder.c` | the command: `register` and `run` with its options | `make hello`, `probe`, `yield` |
+| `run-test.c` | a test's steps, from `/tests/10-<name>.cmd`, in place of a shell | `make hello`, `probe`, `yield` |
+| `uapi-check.c` | the UAPI's promises, checked one by one before the hello boot's own sandbox: every refusal the header names that this prototype can reach, the exec descriptor's file, a sandbox that never boots because a virtual CPU never arrives, the destroy the last close does, two sandboxes of two kinds at once, unregistering | `make hello` |
+| `yield-rival.c` | the yield test's two Linux processes: the competitor, pinned to the carrier's processor and computing the same checksum in user space, and the grace-period prodder on the other processor | `make yield` |
+| `run-sched.c` | the scheduler experiments: a holder child runs the sandbox in its own control group, `/sys/fs/cgroup/klet`, on CPUs 0 and 1, while the driver, outside it, counts how many carriers Linux sees runnable; with `coop` two competitors in a sibling group, with `fair` one, and the fairness measurement; with `perf` no competitor, and after the sandbox the same switch and wake-up measurements on native Linux | `make sched-*` |
+| `run-mem.c` | the memory experiments, the sandbox in `/sys/fs/cgroup/sandbox`; with `pressure` also swap and a memory hog until reclaim has run; with `kill`, a competitor on the processor of vCPU 1's carrier, then both carriers' signal dispositions from `/proc`, a SIGTERM and a SIGUSR1 to it and a SIGTERM to the carrier of vCPU 0, 2000 rounds of SIGQUIT, SIGABRT, SIGTSTP, SIGTTIN and SIGTTOU to it and a SIGQUIT and a SIGTSTP to the carrier of vCPU 0, a SIGSTOP and a SIGCONT, and a SIGKILL; with `killidle` and `killspin`, a SIGKILL to the carrier of vCPU 1 once the kernelet says it is idle in `vcpu_idle` or looping in a kernel task, and the time until the sandbox has exited | `make mem-*` |

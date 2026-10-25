@@ -37,6 +37,7 @@
 #include <linux/pfn.h>
 #include <linux/pgtable.h>
 #include <linux/sched.h>
+#include <linux/sched/coredump.h>
 #include <linux/sched/mm.h>
 #include <linux/sched/signal.h>
 #include <linux/sched/task.h>
@@ -123,15 +124,17 @@ static vm_fault_t klet_space_report(struct vm_fault *vmf, bool mkwrite)
 	bool user = !!(vmf->flags & FAULT_FLAG_USER);
 	bool write = mkwrite || !!(vmf->flags & FAULT_FLAG_WRITE);
 	bool exec = !!(vmf->flags & FAULT_FLAG_INSTRUCTION);
-	struct klet_inst *inst = &klet_inst;
+	struct klet_inst *inst;
 
+	if (!sp)
+		return VM_FAULT_SIGBUS;
+	inst = sp->inst;
 	if (mkwrite)
 		KSTAT_INC(inst, mkwrites);
 	else
 		KSTAT_INC(inst, faults);
 
-	if (!sp || !c || c->kind == KLET_ROOT || c->inst != sp->inst ||
-	    c->inst->stopped || c->inst->dying)
+	if (!c || c->inst != inst || inst->stopped || inst->dying)
 		return VM_FAULT_SIGBUS;
 
 	/*
@@ -414,6 +417,13 @@ s64 klet_do_vm_create(struct klet_carrier *c)
 		return -KLET_NOMEM;
 	}
 
+	/*
+	 * Not dumpable, as the carriers are (main.c, klet_load_binary): a
+	 * tenant's memory is reachable through a process whose address space
+	 * this is, and only root may read it. mm_alloc() copied the flags of
+	 * the carrier's own address space already; this does not depend on it.
+	 */
+	set_mask_bits(&mm->flags, MMF_DUMPABLE_MASK, SUID_DUMP_DISABLE);
 	WRITE_ONCE(sp->rec->root_paddr, (u64)__pa(mm->pgd));
 	sp->rec->gen++;
 	atomic_set(&sp->users, 1);	/* the space's own reference */
@@ -619,7 +629,7 @@ int klet_space_adopt(struct klet_carrier *c, u64 id)
 		mmget(sp->mm);
 		old = kernelet_switch_mm(sp->mm);
 		c->cur_mm = sp->mm;
-		atomic_inc(&c->inst->mm_switches);
+		atomic_inc(&c->inst->n.mm_switches);
 		if (old && old != sp->mm)
 			mmput(old);
 		/*

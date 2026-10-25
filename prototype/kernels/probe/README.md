@@ -31,17 +31,22 @@ The book uses it in chapter 5 (seccomp before the syscall hook), chapter 8
 
 ## How it is built and run
 
-`make probe`: `KLET_KERNEL=probe`, the image, the module, `host/runtime/run-probe.c`
-as the test, and two boots. The first is the probe, checked by
-`check-probe-log`. The second runs the same image and tenant with a seccomp
-filter, installed by the runtime before the exec, that kills the process on
-system call 1000, the endless one: seccomp runs before the syscall hook, so the
-kernelet never sees the call, and Linux forces `SIGSYS` on the carrier as a
-fatal signal. `check-probe-seccomp` checks that the resume hook left it for
+`make probe`: `KLET_KERNEL=probe`, the image, the module, the holder run by
+`run-test` as the test, and three boots. The first is the probe, which the
+holder ends a second after the start with a SIGKILL to the carrier
+(`--kill-after 1000`); the carrier is spinning in kernelet code, so the watch
+timer finds the signal and evicts it; checked by `check-probe-log`. The second
+runs the same image and tenant with a seccomp filter, installed by the holder
+between the fork and the exec (`--seccomp-kill 1000`), that kills the process
+on system call 1000, the endless one: seccomp runs before the syscall hook, so
+the kernelet never sees the call, and Linux forces `SIGSYS` on the carrier as
+a fatal signal. `check-probe-seccomp` checks that the resume hook left it for
 Linux to deliver, that the carrier died by it, that its death ended the
-sandbox without anybody killing the root carrier, and that Linux printed no
-warning (a carrier that lived on would hit one in seccomp at its next system
-call).
+sandbox with nobody killing anything, and that Linux printed no warning (a
+carrier that lived on would hit one in seccomp at its next system call). The
+third ends the probe with `KLET_KILL` (`--klet-kill-after 1000`): the sandbox
+is marked dying first, the watch timer stops, and the eviction sweep the kill
+arms takes the processor back; `check-probe-klet-kill`.
 
 ## Files
 

@@ -10,6 +10,13 @@
  * Everything the sandbox does is inside its own control group; the competitors are
  * in a sibling group with the same weight, confined to the same two CPUs. That is
  * the only way a statement about fairness means anything.
+ *
+ * The sandbox is run through the endovisor UAPI (sandbox.c) by a holder: a
+ * child of this driver that registers the kind, joins the sandbox's group
+ * (/sys/fs/cgroup/klet), creates the sandbox and forks its carriers, every one
+ * on CPUs 0 and 1, and waits for it, so that the driver itself stays outside
+ * the sandbox's group, as it was outside it before. The holder hands the
+ * carriers' pids over through the shared page, and the driver watches them.
  */
 
 #define _GNU_SOURCE
@@ -31,20 +38,22 @@
 #include <time.h>
 #include <unistd.h>
 
+#include "sandbox.h"
+
 #define CG "/sys/fs/cgroup"
 #define CG_KLET CG "/klet"
 #define CG_SIB CG "/sib"
 
+/* One report line, through the kernel's log (sandbox_say): in order with the endovisor's. */
 static void say(const char *fmt, ...)
 {
+	char buf[900];
 	va_list ap;
 
-	printf("RUN-SCHED: ");
 	va_start(ap, fmt);
-	vprintf(fmt, ap);
+	vsnprintf(buf, sizeof(buf), fmt, ap);
 	va_end(ap);
-	printf("\n");
-	fflush(stdout);
+	sandbox_say("%s", buf);
 }
 
 static uint64_t rdtsc(void)
@@ -55,13 +64,6 @@ static uint64_t rdtsc(void)
 	return ((uint64_t)hi << 32) | lo;
 }
 
-static uint64_t now_ms(void)
-{
-	struct timespec ts;
-
-	clock_gettime(CLOCK_MONOTONIC, &ts);
-	return (uint64_t)ts.tv_sec * 1000 + ts.tv_nsec / 1000000;
-}
 
 static int write_file(const char *path, const char *value)
 {
@@ -118,7 +120,7 @@ static void setup_cgroups(void)
 	say("control groups up: %s and %s, cpu.weight 100 each", CG_KLET, CG_SIB);
 }
 
-static void join_cgroup(const char *cg)
+static void join_group(const char *cg)
 {
 	char path[256], pid[32];
 
@@ -142,10 +144,45 @@ static void pin_to(int lo, int hi)
 }
 
 /* ------------------------------------------------------------------ */
+/* Competitors                                                        */
+/* ------------------------------------------------------------------ */
+
+struct shared {
+	volatile uint64_t rounds[8];
+	volatile int stop;
+	/* the holder's: the carriers' pids, once every one is forked */
+	volatile pid_t carriers[KLET_MAX_VCPUS];
+	volatile unsigned int nr_carriers;
+	/* for the native ping-pong */
+	volatile uint32_t turn;
+	volatile uint64_t stamp;
+	volatile uint64_t samples;
+};
+
+static struct shared *shm;
+
+/* ------------------------------------------------------------------ */
 /* The sandbox                                                        */
 /* ------------------------------------------------------------------ */
 
-static pid_t spawn_sandbox(void)
+/* In the holder: publish the carriers' pids to the driver. */
+static void publish_carriers(struct sandbox *sb, void *arg)
+{
+	unsigned int i;
+
+	(void)arg;
+	for (i = 0; i < sb->nr_vcpus; i++)
+		shm->carriers[i] = sb->pids[i];
+	__sync_synchronize();
+	shm->nr_carriers = sb->nr_vcpus;
+}
+
+/*
+ * The holder: a child that registers the kind, joins the sandbox's group and
+ * runs the sandbox, every carrier on CPUs 0 and 1. Its exit status is the
+ * holder's, the kernel proper's exit code.
+ */
+static pid_t spawn_holder(unsigned int nr_vcpus, const char *cmdline)
 {
 	pid_t pid = fork();
 
@@ -154,106 +191,38 @@ static pid_t spawn_sandbox(void)
 		exit(1);
 	}
 	if (pid == 0) {
-		char *const argv[] = { "/sched.klet", NULL };
-		char *const envp[] = { NULL };
+		struct sandbox_opts opt;
+		int sys_fd, status;
 
-		join_cgroup(CG_KLET);
-		/* The carriers inherit this, which is how they end up on these CPUs. */
-		pin_to(0, 1);
-		prctl(PR_SET_NO_NEW_PRIVS, 1, 0, 0, 0);
-		execve("/sched.klet", argv, envp);
-		say("execve /sched.klet failed: %s", strerror(errno));
-		_exit(127);
+		sandbox_who = "RUN-SCHED holder";
+		sandbox_opts_init(&opt);
+		opt.cgroup = cgroups_up ? CG_KLET : CG "/sandbox";
+		opt.cpu_lo = 0;
+		opt.cpu_hi = 1;	/* the carriers inherit nothing else */
+		opt.kernel_log = 1;
+		opt.during = publish_carriers;
+		sys_fd = open_system();
+		register_kind(sys_fd, "schedk", "/schedk.image");
+		status = run_sandbox(sys_fd, "schedk", nr_vcpus, cmdline, &opt);
+		close(sys_fd);
+		_exit(status);
 	}
-	say("sandbox root carrier is pid %d, on cpu 0-1, in %s", pid, CG_KLET);
+	say("the holder is pid %d; the sandbox's carriers will be on cpu 0-1, in %s", pid,
+	    cgroups_up ? CG_KLET : CG "/sandbox");
 	return pid;
 }
 
-/* How many of a sandbox's tasks Linux sees as runnable, by reading /proc. */
-static int count_running(pid_t root)
+/* How many of a sandbox's carriers Linux sees as runnable, by reading /proc. */
+static int count_running(void)
 {
-	char path[128], buf[512];
-	int n = 0;
-	pid_t p;
+	unsigned int i, n = shm->nr_carriers;
+	int r = 0;
 
-	/* The carriers are the root's children, and there are never many. */
-	for (p = root; p < root + 64; p++) {
-		int fd;
-		ssize_t r;
-
-		snprintf(path, sizeof(path), "/proc/%d/stat", (int)p);
-		fd = open(path, O_RDONLY);
-		if (fd < 0)
-			continue;
-		r = read(fd, buf, sizeof(buf) - 1);
-		close(fd);
-		if (r <= 0)
-			continue;
-		buf[r] = 0;
-		{
-			char *close_paren = strrchr(buf, ')');
-
-			if (close_paren && close_paren[1] == ' ' && close_paren[2] == 'R')
-				n++;
-		}
-	}
-	return n;
+	for (i = 0; i < n; i++)
+		if (proc_task_state(shm->carriers[i]) == 'R')
+			r++;
+	return r;
 }
-
-static void wait_for_module_idle(void)
-{
-	uint64_t deadline = now_ms() + 8000;
-
-	for (;;) {
-		char buf[4096];
-		int fd = open("/proc/modules", O_RDONLY);
-		ssize_t n = 0;
-		long refs = -1;
-		char *p;
-
-		if (fd >= 0) {
-			n = read(fd, buf, sizeof(buf) - 1);
-			close(fd);
-		}
-		if (n > 0) {
-			buf[n] = 0;
-			p = strstr(buf, "kernelet ");
-			if (p) {
-				char *q = strchr(p, ' ');
-
-				if (q) {
-					q = strchr(q + 1, ' ');
-					if (q)
-						refs = strtol(q + 1, NULL, 10);
-				}
-			}
-		}
-		if (refs == 0) {
-			say("no carrier left (module references: 0)");
-			return;
-		}
-		if (now_ms() > deadline) {
-			say("module references still %ld after 8 s", refs);
-			return;
-		}
-		usleep(20000);
-	}
-}
-
-/* ------------------------------------------------------------------ */
-/* Competitors                                                        */
-/* ------------------------------------------------------------------ */
-
-struct shared {
-	volatile uint64_t rounds[8];
-	volatile int stop;
-	/* for the native ping-pong */
-	volatile uint32_t turn;
-	volatile uint64_t stamp;
-	volatile uint64_t samples;
-};
-
-static struct shared *shm;
 
 static uint64_t mix_round(uint64_t x)
 {
@@ -270,7 +239,7 @@ static pid_t spawn_competitor(int slot)
 	if (pid == 0) {
 		uint64_t x = 0x1234567 + slot;
 
-		join_cgroup(CG_SIB);
+		join_group(CG_SIB);
 		pin_to(0, 1);
 		while (!shm->stop) {
 			int i;
@@ -337,7 +306,7 @@ static void native_process_yield(void)
 		_exit(0);
 	}
 	pin_to(0, 0);
-	while (n < PERF_N && now_ms() < deadline) {
+	while (n < PERF_N && (uint64_t)now_ms() < deadline) {
 		uint64_t t0 = rdtsc();
 
 		sched_yield();
@@ -385,7 +354,7 @@ static void native_pipe_wake(int same_cpu)
 	pin_to(0, 0);
 	close(up[1]);
 	close(down[0]);
-	while (n < PERF_N && now_ms() < deadline) {
+	while (n < PERF_N && (uint64_t)now_ms() < deadline) {
 		char c = 'x';
 		uint64_t t0;
 
@@ -413,32 +382,19 @@ static void native_pipe_wake(int same_cpu)
 /* main                                                               */
 /* ------------------------------------------------------------------ */
 
-/* init runs the tests without arguments, so the mode is staged beside the test. */
-static const char *staged_mode(void)
+int main(void)
 {
-	static char buf[32];
-	int fd = open("/tests/10-sched.arg", O_RDONLY);
-	ssize_t n;
-
-	if (fd < 0)
-		return "policy";
-	n = read(fd, buf, sizeof(buf) - 1);
-	close(fd);
-	if (n <= 0)
-		return "policy";
-	buf[n] = 0;
-	while (n > 0 && (buf[n - 1] == '\n' || buf[n - 1] == ' '))
-		buf[--n] = 0;
-	return buf;
-}
-
-int main(int argc, char **argv)
-{
-	const char *mode = argc > 1 ? argv[1] : staged_mode();
-	pid_t sandbox, comp[2] = { -1, -1 };
+	static char mode[32], cmdline[KLET_CMDLINE_MAX];
+	pid_t holder, comp[2] = { -1, -1 };
 	uint64_t t_start, sib_usec0 = 0;
 	int status, i, max_running = 0;
+	unsigned int nr_vcpus;
 
+	/* init runs the tests without arguments, so the mode is staged beside the test. */
+	sandbox_read_staged("/tests/10-sched.arg", mode, sizeof(mode), &nr_vcpus,
+			    cmdline, sizeof(cmdline));
+
+	sandbox_who = "RUN-SCHED";
 	shm = mmap(NULL, sizeof(*shm), PROT_READ | PROT_WRITE,
 		   MAP_SHARED | MAP_ANONYMOUS, -1, 0);
 	memset(shm, 0, sizeof(*shm));
@@ -457,11 +413,11 @@ int main(int argc, char **argv)
 	}
 
 	t_start = now_ms();
-	sandbox = spawn_sandbox();
+	holder = spawn_holder(nr_vcpus, cmdline);
 
 	/* Watch how many of the sandbox's tasks Linux ever sees runnable at once. */
-	while (waitpid(sandbox, &status, WNOHANG) == 0) {
-		int r = count_running(sandbox);
+	while (waitpid(holder, &status, WNOHANG) == 0) {
+		int r = count_running();
 
 		if (r > max_running)
 			max_running = r;
@@ -469,10 +425,10 @@ int main(int argc, char **argv)
 	}
 
 	/*
-	 * Take every measurement first, and print nothing until the module has
-	 * no carrier left: the other carriers are still dying, and their kernel
-	 * messages would otherwise interleave with these lines on the serial
-	 * console and break the lines the checks parse.
+	 * Take every measurement first: the holder has reaped every carrier and
+	 * destroyed the sandbox by now, so no kernel message of the sandbox's
+	 * can interleave with these lines on the serial console and break the
+	 * lines the checks parse.
 	 */
 	{
 		uint64_t elapsed = now_ms() - t_start;
@@ -490,12 +446,13 @@ int main(int argc, char **argv)
 				total += shm->rounds[i];
 		}
 
-		wait_for_module_idle();
+		i = module_references("endovisor");
+		say("no carrier left (module references: %d)", i < 0 ? 0 : i);
 
 		if (WIFEXITED(status))
-			say("root carrier (pid %d) exited %d", sandbox, WEXITSTATUS(status));
+			say("the holder (pid %d) exited %d", holder, WEXITSTATUS(status));
 		else if (WIFSIGNALED(status))
-			say("root carrier (pid %d) killed by signal %d", sandbox,
+			say("the holder (pid %d) killed by signal %d", holder,
 			    WTERMSIG(status));
 
 		say("the host saw at most %d runnable task(s) of the sandbox at once",

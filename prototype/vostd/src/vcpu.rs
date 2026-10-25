@@ -250,10 +250,11 @@ pub(crate) fn has_pending() -> bool {
 //   S-24 .. S-136       rax rcx rdx rbx rbp rsi rdi r8 .. r15
 // ```
 global_asm!(
-    // Its own section, and not plain `.text`: gcc puts an empty `.text` at the
-    // head of image_start.S, `ld -r` merges every input `.text` into that one,
-    // and the result would sit *below* __klet_image_text_start — which is
-    // exactly what the module's load-time bounds check caught the first time.
+    // Its own section, and not plain `.text`: when the image was linked into
+    // the module, gcc put an empty `.text` at the head of image_start.S, `ld -r`
+    // merged every input `.text` into that one, and the result sat *below*
+    // __klet_image_text_start. The endovisor now loads the image itself and
+    // takes the text's bounds from its sections; the section stays.
     ".pushsection .text.klet_virq_entry, \"ax\", @progbits",
     ".globl klet_virq_entry",
     ".type klet_virq_entry, @function",

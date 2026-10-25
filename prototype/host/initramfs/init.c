@@ -388,6 +388,23 @@ int main(void)
 {
 	mount_one("proc", "/proc", "proc");
 	mount_one("sysfs", "/sys", "sysfs");
+	/* The unified hierarchy: the endovisor refuses a sandbox in its root group. */
+	mount_one("cgroup2", "/sys/fs/cgroup", "cgroup2");
+	/*
+	 * The runtimes write their report lines into the kernel's log through
+	 * /dev/kmsg, so that they are in order with the endovisor's on the
+	 * serial console; by default Linux rate-limits those writes to ten
+	 * every five seconds.
+	 */
+	{
+		int fd = open("/proc/sys/kernel/printk_devkmsg", O_WRONLY | O_CLOEXEC);
+
+		if (fd >= 0) {
+			if (write(fd, "on\n", 3) != 3)
+				out("INIT: cannot turn printk_devkmsg on\n");
+			close(fd);
+		}
+	}
 	mount_one("devtmpfs", "/dev", "devtmpfs");
 	ensure_console();
 

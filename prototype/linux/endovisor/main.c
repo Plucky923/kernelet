@@ -1,26 +1,34 @@
 // SPDX-License-Identifier: GPL-2.0
 /*
- * Module init and exit, the grant, the carrier lifeline, the four host offsets
- * the kernelet needs in order to find its own vCPU record and Linux's
- * preemption count without a call, and the binary-format handler that turns a
- * Linux task into the root carrier of a sandbox and sets every signal it can
- * to ignored, for the root and for every carrier cloned from it.
+ * Module init and exit; the device, /dev/endovisor, and its system operations
+ * (the kinds: KLET_KIND_REGISTER, KLET_KIND_LIST, KLET_KIND_UNREGISTER;
+ * KLET_CREATE is sandbox.c's); the carrier lifeline; the four host offsets the
+ * kernelet needs in order to find its own vCPU record and Linux's preemption
+ * count without a call; and the binary-format handler that turns a process
+ * executing an exec descriptor into the carrier of its virtual CPU, with every
+ * signal it can ignore ignored.
  *
  * Also here: the module parameters (klet_mirror; klet_test_hooks and
  * klet_test_sleep_ms, the test hook; klet_watch is in watch.c), the refusal
  * to load on a kernel that emulates the vsyscall page, and the counters
- * printed at unload, which end with "endovisor unloaded" and which the tests
- * read: the watch timer's ticks and upcalls, the kicks, STATS, MEMSTATS, the
- * kills, the heap, the kernelet stacks and the carrier records.
+ * printed at unload, the totals of every sandbox, which end with "endovisor
+ * unloaded" and which the tests read: the watch timer's ticks and upcalls,
+ * the kicks, STATS, MEMSTATS, the kills, the heap, the kernelet stacks and
+ * the carrier records.
  */
 
 #include <linux/anon_inodes.h>
 #include <linux/binfmts.h>
+#include <linux/bitops.h>
+#include <linux/capability.h>
+#include <linux/cgroup.h>
 #include <linux/file.h>
 #include <linux/fs.h>
 #include <linux/gfp.h>
 #include <linux/init.h>
 #include <linux/kernel.h>
+#include <linux/kernel_read_file.h>
+#include <linux/miscdevice.h>
 #include <linux/mm.h>
 #include <linux/module.h>
 #include <linux/moduleparam.h>
@@ -28,13 +36,18 @@
 #include <linux/preempt.h>
 #include <linux/ptrace.h>
 #include <linux/sched.h>
+#include <linux/sched/coredump.h>
+#include <linux/sched/mm.h>
 #include <linux/sched/signal.h>
 #include <linux/sched/task.h>
 #include <linux/sched/task_stack.h>
+#include <linux/security.h>
 #include <linux/signal.h>
 #include <linux/slab.h>
 #include <linux/string.h>
 #include <linux/thread_info.h>
+#include <linux/uaccess.h>
+#include <linux/vmalloc.h>
 
 #include <asm/current.h>
 #include <asm/io.h>
@@ -45,7 +58,13 @@
 
 #include "kernelet.h"
 
-struct klet_inst klet_inst;
+struct klet_totals klet_totals;
+struct workqueue_struct *klet_wq;
+
+/* The kinds and the sandboxes; KLET_CREATE, KLET_DESTROY and the exec lookup. */
+DEFINE_MUTEX(klet_table_lock);
+struct klet_kind klet_kinds[KLET_MAX_KINDS];
+struct klet_inst *klet_sandboxes[KLET_MAX_SANDBOXES];
 
 static struct linux_binfmt klet_format;
 
@@ -125,9 +144,9 @@ struct file *klet_lifeline_create(struct klet_carrier *c)
  * The `gs:`-relative offsets are derived at run time from the segment base rather
  * than from the linkage value of the per-cpu symbol, and then checked: a wrong
  * offset here would have the kernelet reading and writing arbitrary host memory, so
- * the module refuses to load if the check fails.
+ * the sandbox does not start if the check fails.
  */
-static int klet_publish_host_offsets(struct klet_inst *inst)
+int klet_publish_host_offsets(struct klet_inst *inst)
 {
 	unsigned long gsbase, hot, off_cur, off_pc;
 	struct task_struct *seen;
@@ -152,14 +171,14 @@ static int klet_publish_host_offsets(struct klet_inst *inst)
 	inst->boot.hooks_vrec_off = offsetof(struct klet_carrier, vrec) -
 				   offsetof(struct klet_carrier, hooks);
 
-	pr_info("kernelet: host offsets: gs:current %#llx, gs:preempt_count %#llx, task->carrier_hooks +%llu, hooks->vrec +%llu\n",
-		inst->boot.gs_current_task, inst->boot.gs_preempt_count,
+	pr_info("kernelet: sandbox %d: host offsets: gs:current %#llx, gs:preempt_count %#llx, task->carrier_hooks +%llu, hooks->vrec +%llu\n",
+		inst->slot, inst->boot.gs_current_task, inst->boot.gs_preempt_count,
 		inst->boot.task_hooks_off, inst->boot.hooks_vrec_off);
 	return 0;
 }
 
 /* How big a floating-point save area the enabled features need. */
-static u64 klet_fpu_area_size(void)
+u64 klet_fpu_area_size(void)
 {
 	u32 eax, ebx, ecx, edx;
 
@@ -222,174 +241,167 @@ static void klet_personality_64bit(void)
 }
 
 /*
- * A `.klet` file is the sandbox's configuration: the magic, an ABI version, and
- * how many virtual CPUs the sandbox has.
+ * Every signal that can be ignored is ignored, and the carrier keeps it so for
+ * its whole life; the mask is cleared too, because a blocked signal is
+ * queued even when it is ignored. SIGKILL and SIGSTOP cannot be ignored, and
+ * keep their meaning.
+ *
+ * Draining is not enough. The resume hook drains the queue and returns, but in
+ * the same pass of the exit loop Linux goes on to deliver signals if the work
+ * flags it read before the hook said one was pending, and a signal that
+ * arrives between the drain and that delivery would be Linux's to act on: a
+ * SIGQUIT or SIGABRT would dump core and end the carrier, and with it the
+ * sandbox, a SIGTSTP, SIGTTIN or SIGTTOU would stop it. And a signal whose
+ * default action is to terminate without a core dump (SIGTERM, SIGPIPE, ...)
+ * never reaches the queue at all: it is fatal at the moment it is sent
+ * (complete_signal() turns it into SIGKILL). An ignored signal is discarded
+ * when it is sent, so none of them ever becomes pending.
+ *
+ * The fault signals are ignored as well, and still arrive: a fault of the
+ * tenant's is sent with force_sig_info_to_task(), which first sets an ignored
+ * or blocked signal back to SIG_DFL, so it is queued, and the hook drains it
+ * before Linux can deliver it, because it was queued before the exit loop
+ * began. The drain then ignores it again (klet_drain_signals), so that the
+ * next one is forced, and drained, in the same way, and the same signal sent
+ * by a process in the meantime is discarded.
+ *
+ * kernel_sigaction() is documented for kernel threads only, and not for a task
+ * that shares its sighand (CLONE_SIGHAND), because it skips do_sigaction()'s
+ * checks and would change the action of a whole thread group. The carrier is
+ * single-threaded: begin_new_exec() has killed every other thread of the
+ * process and given it a sighand of its own (unshare_sighand()).
  */
-static int klet_read_config(struct klet_inst *inst, struct linux_binprm *bprm,
-			    unsigned int *nr_vcpus)
+static void klet_ignore_signals(void)
 {
-	u32 version, vcpus;
-	const char *line;
-	size_t len;
+	sigset_t none;
+	int sig;
 
-	if (memcmp(bprm->buf, KLET_MAGIC, KLET_MAGIC_LEN) != 0)
-		return -ENOEXEC;
-
-	memcpy(&version, bprm->buf + 4, sizeof(version));
-	memcpy(&vcpus, bprm->buf + 8, sizeof(vcpus));
-
-	if (version != 2) {
-		pr_err("kernelet: .klet version %u, expected 2\n", version);
-		return -ENOEXEC;
-	}
-	if (vcpus < 1 || vcpus > KLET_MAX_VCPUS) {
-		pr_err("kernelet: .klet asks for %u virtual CPUs (1..%d)\n", vcpus,
-		       KLET_MAX_VCPUS);
-		return -ENOEXEC;
-	}
-	*nr_vcpus = vcpus;
-
-	/*
-	 * The rest of the header, up to a newline, is the sandbox's command line:
-	 * what a bootloader's kernel command line is to a machine, and how the
-	 * runtime tells one kernel proper which scenario to run.
-	 */
-	line = bprm->buf + 12;
-	len = strnlen(line, sizeof(bprm->buf) - 12);
-	if (len > 0) {
-		const char *nl = memchr(line, '\n', len);
-
-		if (nl)
-			len = nl - line;
-	}
-	kfree(inst->cmdline);
-	inst->cmdline = NULL;
-	inst->boot.cmdline_ptr = 0;
-	inst->boot.cmdline_len = 0;
-	if (len > 0) {
-		inst->cmdline = kmemdup_nul(line, len, GFP_KERNEL);
-		if (!inst->cmdline)
-			return -ENOMEM;
-		inst->boot.cmdline_ptr = (u64)(unsigned long)inst->cmdline;
-		inst->boot.cmdline_len = len;
-	}
-	return 0;
+	sigemptyset(&none);
+	sigprocmask(SIG_SETMASK, &none, NULL);
+	for (sig = 1; sig <= _NSIG; sig++)
+		if (!sig_kernel_only(sig))
+			kernel_sigaction(sig, SIG_IGN);
 }
 
+/*
+ * The binary-format handler: an exec of one of the endovisor's exec
+ * descriptors (sandbox.c) makes the executing process the carrier of that
+ * virtual CPU. The first bytes of the file only turn other files away quickly;
+ * the file is recognized by its inode (klet_exec_lookup), because the exec
+ * opened the file afresh.
+ *
+ * Before the point of no return, the checks of KLET_VCPU_GET_EXEC_FD, in this
+ * order: the sandbox has not been killed (ESRCH), this virtual CPU has not
+ * been started (EBUSY), and the process is in the sandbox's control group with
+ * no-new-privileges set (EPERM). Then what every loader does, with an address
+ * space left empty, because only the kernelet may put anything in it. The
+ * first arrival starts the sandbox (klet_sandbox_start); on the way out to
+ * user mode the resume hook takes the carrier, waits for the others, and the
+ * carrier never reaches the user mode the exec was heading for.
+ */
 static int klet_load_binary(struct linux_binprm *bprm)
 {
-	struct klet_inst *inst = &klet_inst;
-	struct klet_carrier *root;
-	unsigned int nr_vcpus;
-	int err;
+	struct klet_inst *inst;
+	struct klet_carrier *c;
+	char comm[TASK_COMM_LEN];
+	unsigned int vcpu;
+	int err, dumpable;
+	bool first;
 
-	err = klet_read_config(inst, bprm, &nr_vcpus);
-	if (err)
-		return err;
-	if (inst->stopped || inst->dying || inst->root_gone)
+	if (memcmp(bprm->buf, KLET_EXEC_MAGIC, KLET_EXEC_MAGIC_LEN) != 0)
 		return -ENOEXEC;
-	if (atomic_read(&inst->nr_carriers) != 0)
-		return -EBUSY;	/* exactly one instance in this prototype */
+	inst = klet_exec_lookup(bprm, &vcpu);
+	if (!inst)
+		return -ENOEXEC;	/* the bytes, but not one of our files */
+	err = klet_exec_claim(inst, vcpu);
+	if (err)
+		goto out;
 
 	err = begin_new_exec(bprm);
-	if (err)
-		return err;
+	if (err) {
+		klet_exec_unclaim(inst, vcpu);
+		goto out;
+	}
+	/* The point of no return: from here on, a failure kills the process. */
 
 	klet_personality_64bit();
 	setup_new_exec(bprm);
 	klet_empty_mm();
 	set_binfmt(&klet_format);
 	finalize_exec(bprm);
-
-	/*
-	 * The root carrier never runs tenant code, but its pt_regs are the template
-	 * copy_thread() gives every carrier cloned from it, so they must be valid
-	 * 64-bit user-mode registers.
-	 */
 	start_thread(current_pt_regs(), 0, 0);
-
-	err = klet_publish_host_offsets(inst);
-	if (err) {
-		force_sig(SIGSEGV);
-		return err;
-	}
-
-	inst->nr_vcpus = nr_vcpus;
-	inst->boot.nr_vcpus = nr_vcpus;
-	/* The owner of every address space the sandbox will have. */
-	if (inst->owner)
-		put_task_struct(inst->owner);
-	inst->owner = get_task_struct(current);
-
-	root = klet_carrier_new(inst, KLET_ROOT, -1);
-	if (!root) {
-		force_sig(SIGSEGV);
-		return -ENOMEM;
-	}
-	err = klet_carrier_attach(root);
-	if (err) {
-		klet_carrier_lifeline_closed(root);
-		force_sig(SIGSEGV);
-		return err;
-	}
+	klet_ignore_signals();
 
 	/*
-	 * Every signal that can be ignored is, here, and the vCPU carriers
-	 * inherit it from the root, since a clone copies its parent's
-	 * dispositions; the mask is cleared too, because a blocked signal is
-	 * queued even when it is ignored. SIGKILL and SIGSTOP cannot be ignored,
-	 * and keep their meaning. SIGCHLD ignored also means the children are
-	 * reaped without anybody waiting for them.
-	 *
-	 * Draining is not enough. The resume hook drains the queue and returns,
-	 * but in the same pass of the exit loop Linux goes on to deliver signals
-	 * if the work flags it read before the hook said one was pending, and a
-	 * signal that arrives between the drain and that delivery would be
-	 * Linux's to act on: a SIGQUIT or SIGABRT would dump core and end the
-	 * carrier, and with it the sandbox, a SIGTSTP, SIGTTIN or SIGTTOU would
-	 * stop it. And a signal whose default action is to terminate without a
-	 * core dump (SIGTERM, SIGPIPE, ...) never reaches the queue at all: it is
-	 * fatal at the moment it is sent (complete_signal() turns it into
-	 * SIGKILL). An ignored signal is discarded when it is sent, so none of
-	 * them ever becomes pending.
-	 *
-	 * The fault signals are ignored as well, and still arrive: a fault of
-	 * the tenant's is sent with force_sig_info_to_task(), which first sets
-	 * an ignored or blocked signal back to SIG_DFL, so it is queued, and the
-	 * hook drains it before Linux can deliver it, because it was queued
-	 * before the exit loop began. The drain then ignores it again
-	 * (klet_drain_signals), so that the next one is forced, and drained, in
-	 * the same way, and the same signal sent by a process in the meantime
-	 * is discarded.
+	 * Not dumpable. begin_new_exec() makes a process that executed a file
+	 * it cannot read non-dumpable (would_dump(), BINPRM_FLAGS_ENFORCE_NONDUMP,
+	 * then set_dumpable(suid_dumpable)), and the exec file is execute-only;
+	 * but a holder with CAP_DAC_OVERRIDE, root, *can* read it, so for root
+	 * the rule leaves the carrier dumpable, and for anyone it depends on
+	 * fs.suid_dumpable. set_dumpable() is not exported: its one line here.
 	 */
-	{
-		sigset_t none;
-		int sig;
+	dumpable = get_dumpable(current->mm);
+	set_mask_bits(&current->mm->flags, MMF_DUMPABLE_MASK, SUID_DUMP_DISABLE);
 
-		/*
-		 * kernel_sigaction() is documented for kernel threads only, and
-		 * not for a task that shares its sighand (CLONE_SIGHAND), because
-		 * it skips do_sigaction()'s checks and would change the action of
-		 * a whole thread group. The root carrier is single-threaded, and
-		 * each carrier is cloned from it without CLONE_SIGHAND, so every
-		 * one has its own copy of the actions set here.
-		 */
-		sigemptyset(&none);
-		sigprocmask(SIG_SETMASK, &none, NULL);
-		for (sig = 1; sig <= _NSIG; sig++)
-			if (!sig_kernel_only(sig))
-				kernel_sigaction(sig, SIG_IGN);
+	/* __set_task_comm() is not exported (and so no perf comm event is sent). */
+	snprintf(comm, sizeof(comm), "kernelet/%d/%u", inst->slot, vcpu);
+	task_lock(current);
+	strscpy_pad(current->comm, comm, sizeof(current->comm));
+	task_unlock(current);
+
+	c = klet_carrier_new(inst, vcpu);
+	if (!c) {
+		err = READ_ONCE(inst->dying) ? -ESRCH : -ENOMEM;
+		goto kill;
 	}
+	err = klet_carrier_attach(c);
+	if (err) {
+		klet_carrier_lifeline_closed(c);
+		goto kill;
+	}
+	/* The carrier's own, empty address space, to fall back to. */
+	mmget(current->mm);
+	c->blank_mm = current->mm;
+	c->cur_mm = current->mm;
 
-	pr_info("kernelet: root carrier exec (pid %d), address space emptied, %u virtual CPU(s), cmdline \"%s\"\n",
-		current->pid, nr_vcpus, inst->cmdline ? inst->cmdline : "");
+	spin_lock(&inst->lock);
+	inst->vcpus[vcpu] = c;
+	inst->vslot[vcpu].pid = current->pid;
+	first = !inst->started;
+	inst->started = true;
+	spin_unlock(&inst->lock);
+
+	klet_sched_attach(c);
+	pr_info("kernelet: sandbox %d: vcpu %u carrier (pid %d) arrived as %s: address space emptied, every signal ignored, dumpable %d -> 0\n",
+		inst->slot, vcpu, current->pid, comm, dumpable);
+
+	/* The first arrival starts the sandbox: its data, its grant, its offsets. */
+	if (first) {
+		err = klet_sandbox_start(inst);
+		if (err) {
+			pr_err("kernelet: sandbox %d cannot start: %d\n", inst->slot, err);
+			goto kill;	/* its death ends the sandbox */
+		}
+	}
+	spin_lock(&inst->lock);
+	inst->arrived++;
+	inst->vslot[vcpu].state = KLET_VCPU_WAITING;
+	spin_unlock(&inst->lock);
+	wake_up_all(&inst->arrive_wq);
 
 	/*
-	 * On the way out to user mode the resume hook runs, and for the root carrier
-	 * it never returns: it brings up the vCPU carriers and then waits to die.
+	 * On the way out to user mode the resume hook runs, which waits until
+	 * this virtual CPU may enter the image and then enters it.
 	 */
 	set_thread_flag(TIF_NOTIFY_RESUME);
+	klet_inst_put(inst);
 	return 0;
+
+kill:
+	force_sig(SIGKILL);
+out:
+	klet_inst_put(inst);
+	return err;
 }
 
 static struct linux_binfmt klet_format = {
@@ -398,67 +410,176 @@ static struct linux_binfmt klet_format = {
 };
 
 /* ------------------------------------------------------------------ */
+/* The system descriptor: /dev/endovisor                              */
+/* ------------------------------------------------------------------ */
+
+/* An image file is at most this big. */
+#define KLET_IMAGE_MAX (64 << 20)
+
+/*
+ * What loading a module asks (init_module, finit_module): CAP_SYS_MODULE in the
+ * initial user namespace, module loading not disabled, and, because an image
+ * carries no signature, neither signature enforcement nor lockdown in force.
+ * modules_disabled is not exported; the patch exports it.
+ */
+static int klet_may_load_code(void)
+{
+	if (!capable(CAP_SYS_MODULE) || READ_ONCE(modules_disabled))
+		return -EPERM;
+	if (is_module_sig_enforced())
+		return -EPERM;
+	return security_locked_down(LOCKDOWN_MODULE_SIGNATURE);
+}
+
+static long klet_kind_register(struct klet_kind_register __user *uarg)
+{
+	struct klet_kind_register reg;
+	struct klet_kind *kind = NULL;
+	void *buf = NULL;
+	ssize_t len;
+	int i, err, id = -1;
+
+	if (copy_from_user(&reg, uarg, sizeof(reg)))
+		return -EFAULT;
+	if (reg.flags || !reg.name[0] || strnlen(reg.name, KLET_NAME_LEN) == KLET_NAME_LEN)
+		return -EINVAL;
+	err = klet_may_load_code();
+	if (err)
+		return err;
+	/* Read as a module file is read, so that the host's security modules see it. */
+	len = kernel_read_file_from_fd(reg.image_fd, 0, &buf, KLET_IMAGE_MAX, NULL,
+				       READING_MODULE);
+	if (len < 0)
+		return len;
+
+	mutex_lock(&klet_table_lock);
+	err = 0;
+	for (i = 0; i < KLET_MAX_KINDS; i++) {
+		if (klet_kinds[i].used && strcmp(klet_kinds[i].name, reg.name) == 0)
+			err = -EEXIST;
+		else if (!klet_kinds[i].used && !kind) {
+			kind = &klet_kinds[i];
+			id = i;
+		}
+	}
+	if (!err && !kind)
+		err = -ENOSPC;
+	if (!err)
+		err = klet_image_load(kind, buf, len);
+	if (!err) {
+		strscpy(kind->name, reg.name, sizeof(kind->name));
+		kind->nr_sandboxes = 0;
+		kind->used = true;
+		pr_info("kernelet: kind %d \"%s\" registered: an image of %zd bytes, text [%#lx, %#lx), %zu bytes shared\n",
+			id, kind->name, len, kind->text_lo, kind->text_hi, kind->text_size);
+	}
+	mutex_unlock(&klet_table_lock);
+	vfree(buf);
+	return err ? err : id;
+}
+
+static long klet_kind_list(struct klet_kind_list __user *uarg)
+{
+	struct klet_kind_list list;
+	struct klet_kind_info __user *out;
+	u32 n = 0;
+	int i, err = 0;
+
+	if (copy_from_user(&list, uarg, sizeof(list)))
+		return -EFAULT;
+	out = u64_to_user_ptr(list.kinds);
+	mutex_lock(&klet_table_lock);
+	for (i = 0; i < KLET_MAX_KINDS; i++) {
+		struct klet_kind *kind = &klet_kinds[i];
+		struct klet_kind_info info = { .id = i };
+
+		if (!kind->used)
+			continue;
+		if (n < list.capacity) {
+			info.nr_sandboxes = kind->nr_sandboxes;
+			info.text_bytes = kind->text_size;
+			strscpy_pad(info.name, kind->name, sizeof(info.name));
+			if (copy_to_user(&out[n], &info, sizeof(info))) {
+				err = -EFAULT;
+				break;
+			}
+		}
+		n++;
+	}
+	mutex_unlock(&klet_table_lock);
+	if (err)
+		return err;
+	list.count = n;
+	if (copy_to_user(uarg, &list, sizeof(list)))
+		return -EFAULT;
+	return 0;
+}
+
+static long klet_kind_unregister(u32 __user *uarg)
+{
+	struct klet_kind *kind;
+	u32 id;
+	int err;
+
+	if (get_user(id, uarg))
+		return -EFAULT;
+	err = klet_may_load_code();
+	if (err)
+		return err;
+	mutex_lock(&klet_table_lock);
+	kind = id < KLET_MAX_KINDS ? &klet_kinds[id] : NULL;
+	if (!kind || !kind->used)
+		err = -ENOENT;
+	else if (kind->nr_sandboxes)
+		err = -EBUSY;
+	else {
+		pr_info("kernelet: kind %u \"%s\" unregistered\n", id, kind->name);
+		klet_image_free(kind);
+		kind->used = false;
+	}
+	mutex_unlock(&klet_table_lock);
+	return err;
+}
+
+static long klet_dev_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
+{
+	void __user *uarg = (void __user *)arg;
+
+	switch (cmd) {
+	case KLET_GET_API_VERSION:
+		return KLET_API_VERSION;
+	case KLET_KIND_REGISTER:
+		return klet_kind_register(uarg);
+	case KLET_KIND_LIST:
+		return klet_kind_list(uarg);
+	case KLET_KIND_UNREGISTER:
+		return klet_kind_unregister(uarg);
+	case KLET_CREATE:
+		return klet_sandbox_create(uarg);
+	default:
+		return -ENOTTY;
+	}
+}
+
+static const struct file_operations klet_dev_fops = {
+	.owner = THIS_MODULE,
+	.unlocked_ioctl = klet_dev_ioctl,
+	.llseek = noop_llseek,
+};
+
+static struct miscdevice klet_misc = {
+	.minor = MISC_DYNAMIC_MINOR,
+	.name = "endovisor",
+	.fops = &klet_dev_fops,
+	.mode = 0600,
+};
+
+/* ------------------------------------------------------------------ */
 /* Module init and exit                                               */
 /* ------------------------------------------------------------------ */
 
-static void klet_grant_free(struct klet_inst *inst)
-{
-	if (inst->grant_pages) {
-		__free_pages(inst->grant_pages, KLET_GRANT_ORDER);
-		inst->grant_pages = NULL;
-	}
-}
-
-static int klet_grant_alloc(struct klet_inst *inst)
-{
-	inst->grant_pages = alloc_pages(GFP_KERNEL | __GFP_ZERO, KLET_GRANT_ORDER);
-	if (!inst->grant_pages)
-		return -ENOMEM;
-
-	inst->boot.abi_version = KLET_ABI_VERSION;
-	inst->boot.grant_paddr = page_to_phys(inst->grant_pages);
-	inst->boot.grant_len = KLET_GRANT_LEN;
-	inst->boot.linear_map_base = (u64)(unsigned long)__va(0);
-	inst->boot.nr_vcpus = 1;
-	inst->boot.fpu_area_size = klet_fpu_area_size();
-	inst->boot.fpu_area_align = 64;
-	inst->boot.tsc_khz = tsc_khz;
-	inst->boot.mirror_preempt = klet_mirror ? 1 : 0;
-	inst->boot.image_text_lo = (u64)(unsigned long)__klet_image_text_start;
-	inst->boot.image_text_hi = (u64)(unsigned long)__klet_image_text_end;
-	inst->boot.pgtable_levels = pgtable_l5_enabled() ? 5 : 4;
-	return 0;
-}
-
-/*
- * The eviction sweep and the watch timer decide what is kernelet code by the two
- * symbols that image_start.S and image_end.S put around the pre-linked image.
- * Check it rather than assume it.
- */
-static int klet_check_image_text(void)
-{
-	unsigned long lo = (unsigned long)__klet_image_text_start;
-	unsigned long hi = (unsigned long)__klet_image_text_end;
-	unsigned long entry = (unsigned long)kernelet_entry_table.kernelet_entry;
-	unsigned long vcpu_entry = (unsigned long)kernelet_entry_table.vcpu_entry;
-	unsigned long virq = (unsigned long)kernelet_entry_table.virq_entry;
-	unsigned long ours = (unsigned long)klet_coro_main;
-
-	if (lo >= hi || !klet_in_image_text(entry) ||
-	    !klet_in_image_text(vcpu_entry) || !klet_in_image_text(virq) ||
-	    klet_in_image_text(ours)) {
-		pr_err("kernelet: the image text bounds are wrong: [%#lx, %#lx), entry %#lx, vcpu_entry %#lx, virq_entry %#lx, endovisor %#lx\n",
-		       lo, hi, entry, vcpu_entry, virq, ours);
-		return -ELIBBAD;
-	}
-	pr_info("kernelet: kernelet image text [%#lx, %#lx), %lu bytes; virq_entry at +%#lx\n",
-		lo, hi, hi - lo, virq - lo);
-	return 0;
-}
-
 static int __init klet_init(void)
 {
-	struct klet_inst *inst = &klet_inst;
 	int err;
 
 	/*
@@ -475,142 +596,92 @@ static int __init klet_init(void)
 	return -EINVAL;
 #endif
 
-	if (kernelet_entry_table.abi_version != KLET_ABI_VERSION) {
-		pr_err("kernelet: image ABI %llu, endovisor ABI %llu\n",
-		       kernelet_entry_table.abi_version, KLET_ABI_VERSION);
-		return -EINVAL;
-	}
-
-	err = klet_check_image_text();
-	if (err)
-		return err;
-
-	spin_lock_init(&inst->lock);
-	INIT_LIST_HEAD(&inst->carriers);
-	INIT_LIST_HEAD(&inst->kstack_all);
-	klet_heap_init(inst);
-	init_waitqueue_head(&inst->root_wq);
-	atomic_set(&inst->nr_carriers, 0);
-	atomic_set(&inst->sweeps, 0);
-	atomic_set(&inst->evictions, 0);
-	atomic_set(&inst->ticks, 0);
-	atomic_set(&inst->watch_fires, 0);
-	atomic_set(&inst->kick_ipis, 0);
-	atomic_set(&inst->fires_redirected, 0);
-	atomic_set(&inst->fires_elsewhere, 0);
-	atomic_set(&inst->fires_masked, 0);
-	atomic_set(&inst->virqs, 0);
-	atomic_set(&inst->deferrals, 0);
-	atomic_set(&inst->longest_defer_us, 0);
-	atomic_set(&inst->longest_tick_gap_us, 0);
-	atomic_set(&inst->forced_yields, 0);
-	atomic_set(&inst->forced_recorded, 0);
-	atomic_set(&inst->yields, 0);
-	atomic_set(&inst->bad_preempt, 0);
-	atomic_set(&inst->on_spins, 0);
-	atomic_set(&inst->yield_tos, 0);
-	atomic_set(&inst->mm_switches, 0);
-	atomic_set(&inst->fpu_swaps, 0);
-	atomic_set(&inst->fpu_rejects, 0);
-	atomic_set(&inst->mirror_faults, 0);
-	atomic_set(&inst->kills_in_service, 0);
-	atomic_set(&inst->kills_in_kernelet, 0);
-	atomic_set(&inst->carriers_made, 0);
-	atomic_set(&inst->carriers_freed, 0);
-	atomic_set(&inst->stolen_ms, 0);
-	inst->root_lifeline_fd = -1;
-	inst->nr_vcpus = 1;
-
-	err = klet_grant_alloc(inst);
-	if (err) {
-		pr_err("kernelet: cannot allocate a %lu KiB grant: %d\n",
-		       (unsigned long)(KLET_GRANT_LEN >> 10), err);
-		return err;
-	}
-	err = klet_spaces_init(inst);
-	if (err) {
-		klet_grant_free(inst);
-		return err;
-	}
+	/* The console and log drains, and the destroys release leaves behind. */
+	klet_wq = alloc_workqueue("endovisor", WQ_UNBOUND, 0);
+	if (!klet_wq)
+		return -ENOMEM;
 
 	klet_evict_init();
 	klet_watch_init();
 	klet_sched_init();
 	register_binfmt(&klet_format);
+	err = misc_register(&klet_misc);
+	if (err) {
+		unregister_binfmt(&klet_format);
+		klet_sched_exit();
+		klet_watch_exit();
+		klet_evict_exit();
+		destroy_workqueue(klet_wq);
+		return err;
+	}
 
-	pr_info("kernelet: endovisor loaded: grant %lu KiB at %#llx, linear map %#llx, watch %s, mirror %s, fpu area %llu B, tsc %llu kHz%s\n",
-		(unsigned long)(KLET_GRANT_LEN >> 10), inst->boot.grant_paddr,
-		inst->boot.linear_map_base, klet_watch ? "on" : "off",
-		klet_mirror ? "on" : "off", inst->boot.fpu_area_size,
-		inst->boot.tsc_khz,
+	pr_info("kernelet: endovisor loaded: /dev/endovisor, API %d, image ABI %llu, watch %s, mirror %s, fpu area %llu B, tsc %u kHz%s\n",
+		KLET_API_VERSION, KLET_ABI_VERSION, klet_watch ? "on" : "off",
+		klet_mirror ? "on" : "off", klet_fpu_area_size(), tsc_khz,
 		klet_test_hooks ? ", TEST HOOK on" : "");
 	return 0;
 }
 
 static void __exit klet_exit(void)
 {
-	struct klet_inst *inst = &klet_inst;
+	struct klet_totals *t = &klet_totals;
+	int i;
 
+	misc_deregister(&klet_misc);
 	unregister_binfmt(&klet_format);
+	/* Waits for a destroy that a release left to the exit path, and the drains. */
+	destroy_workqueue(klet_wq);
 	klet_watch_exit();
 	klet_evict_exit();
 	klet_sched_exit();
-	/*
-	 * What the sandbox held was freed when its last carrier died
-	 * (klet_sandbox_gone); these find something only if no sandbox ever
-	 * got that far, or a carrier record was kept.
-	 */
-	klet_spaces_free(inst);
-	{
-		unsigned long bytes;
-		unsigned long blocks = klet_heap_destroy(inst, &bytes);
-		unsigned int stacks = klet_kstack_pool_destroy(inst, NULL);
 
-		if (blocks || stacks)
-			pr_info("kernelet: at unload: %lu heap block(s) (%lu bytes) and %u kernelet stack(s) were left, and are freed now\n",
-				blocks, bytes, stacks);
-	}
-	klet_grant_free(inst);
-	kfree(inst->cmdline);
-	inst->cmdline = NULL;
-	if (atomic_read(&inst->sweeps))
+	for (i = 0; i < KLET_MAX_SANDBOXES; i++)
+		if (klet_sandboxes[i])
+			pr_warn("kernelet: at unload: sandbox %d was never destroyed\n", i);
+	for (i = 0; i < KLET_MAX_KINDS; i++)
+		if (klet_kinds[i].used) {
+			klet_image_free(&klet_kinds[i]);
+			klet_kinds[i].used = false;
+		}
+
+	if (atomic_read(&t->sweeps))
 		pr_info("kernelet: eviction: %d sweep(s), %d eviction(s)\n",
-			atomic_read(&inst->sweeps), atomic_read(&inst->evictions));
+			atomic_read(&t->sweeps), atomic_read(&t->n.evictions));
 	{
-		int i, n = min(atomic_read(&inst->forced_recorded), KLET_FORCED_RECORDS);
+		int n = min(atomic_read(&t->forced_recorded), KLET_FORCED_RECORDS);
 
 		for (i = 0; i < n; i++) {
-			struct klet_forced_rec *r = &inst->forced_rec[i];
+			struct klet_forced_rec *r = &t->forced_rec[i];
 
-			pr_info("kernelet: forced yield of vcpu %d (pid %d) on cpu %d at ip %#lx (%pS), guards %u, irq_off %u\n",
-				r->vcpu, r->pid, r->cpu, r->ip, (void *)r->ip,
-				r->guards, r->irq_off);
+			pr_info("kernelet: forced yield of vcpu %d (pid %d) on cpu %d at ip %#lx, guards %u, irq_off %u\n",
+				r->vcpu, r->pid, r->cpu, r->ip, r->guards, r->irq_off);
 		}
 	}
 	pr_info("kernelet: watch timer: %d tick(s), %d upcall(s), %d voluntary yield(s)\n",
-		atomic_read(&inst->ticks), atomic_read(&inst->virqs),
-		atomic_read(&inst->yields));
+		atomic_read(&t->n.ticks), atomic_read(&t->n.virqs),
+		atomic_read(&t->n.yields));
 	pr_info("kernelet: kicks: %d IPI(s), %d requested firing(s): %d delivered an upcall, %d found user mode or a service, %d a critical section\n",
-		atomic_read(&inst->kick_ipis), atomic_read(&inst->watch_fires),
-		atomic_read(&inst->fires_redirected),
-		atomic_read(&inst->fires_elsewhere),
-		atomic_read(&inst->fires_masked));
-	pr_info("kernelet: STATS deferrals=%d longest_defer_us=%d longest_tick_gap_us=%d forced_yields=%d bad_preempt=%d on_spin=%d yield_to=%d mm_switch=%d fpu_swap=%d fpu_reject=%d mirror_fault=%d stolen_ms=%d kstacks=%u\n",
-		atomic_read(&inst->deferrals),
-		atomic_read(&inst->longest_defer_us),
-		atomic_read(&inst->longest_tick_gap_us),
-		atomic_read(&inst->forced_yields),
-		atomic_read(&inst->bad_preempt),
-		atomic_read(&inst->on_spins),
-		atomic_read(&inst->yield_tos),
-		atomic_read(&inst->mm_switches),
-		atomic_read(&inst->fpu_swaps),
-		atomic_read(&inst->fpu_rejects),
-		atomic_read(&inst->mirror_faults),
-		atomic_read(&inst->stolen_ms),
-		inst->kstack_total);
+		atomic_read(&t->n.kick_ipis), atomic_read(&t->n.watch_fires),
+		atomic_read(&t->n.fires_redirected),
+		atomic_read(&t->n.fires_elsewhere),
+		atomic_read(&t->n.fires_masked));
+	pr_info("kernelet: STATS sandboxes=%d deferrals=%d longest_defer_us=%d longest_tick_gap_us=%d forced_yields=%d bad_preempt=%d on_spin=%d yield_to=%d mm_switch=%d fpu_swap=%d fpu_reject=%d mirror_fault=%d stolen_ms=%d kstacks=%d\n",
+		atomic_read(&t->sandboxes),
+		atomic_read(&t->n.deferrals),
+		atomic_read(&t->longest_defer_us),
+		atomic_read(&t->longest_tick_gap_us),
+		atomic_read(&t->n.forced_yields),
+		atomic_read(&t->n.bad_preempt),
+		atomic_read(&t->n.on_spins),
+		atomic_read(&t->n.yield_tos),
+		atomic_read(&t->n.mm_switches),
+		atomic_read(&t->n.fpu_swaps),
+		atomic_read(&t->n.fpu_rejects),
+		atomic_read(&t->n.mirror_faults),
+		atomic_read(&t->n.stolen_ms),
+		atomic_read(&t->kstack_total));
 	{
-		struct klet_mem_stats *m = inst->mem_stats;
+		struct klet_mem_stats *m = &t->mem;
 
 		pr_info("kernelet: MEMSTATS faults=%lld mkwrites=%lld reported=%lld kernel_faults=%lld maps=%lld unmaps=%lld unmapped=%lld protects=%lld protected=%lld flushes=%lld flush_alls=%lld waits=%lld wait_sleeps=%lld wakes=%lld spaces=%lld\n",
 			atomic64_read(&m->faults), atomic64_read(&m->mkwrites),
@@ -621,31 +692,28 @@ static void __exit klet_exit(void)
 			atomic64_read(&m->flushes), atomic64_read(&m->flush_alls),
 			atomic64_read(&m->waits), atomic64_read(&m->wait_sleeps),
 			atomic64_read(&m->wakes), atomic64_read(&m->spaces));
-		kfree(m);
-		inst->mem_stats = NULL;
 	}
 	pr_info("kernelet: kills: %d found in a service, %d in kernelet code by the watch timer\n",
-		atomic_read(&inst->kills_in_service),
-		atomic_read(&inst->kills_in_kernelet));
+		atomic_read(&t->n.kills_in_service),
+		atomic_read(&t->n.kills_in_kernelet));
 	{
-		s64 allocs = atomic64_read(&inst->heap_allocs);
-		s64 frees = atomic64_read(&inst->heap_frees);
-		s64 reaped = atomic64_read(&inst->heap_reaped);
-
-		s64 bad = atomic64_read(&inst->heap_bad_frees);
+		s64 allocs = atomic64_read(&t->heap_allocs);
+		s64 frees = atomic64_read(&t->heap_frees);
+		s64 reaped = atomic64_read(&t->heap_reaped);
+		s64 bad = atomic64_read(&t->heap_bad_frees);
 
 		pr_info("kernelet: heap: %lld blocks allocated, %lld freed by the kernelet, %lld freed at teardown, %lld live\n",
 			allocs, frees, reaped, allocs - frees - reaped);
 		if (bad)
 			pr_warn("kernelet: heap: %lld mem_free call(s) refused: not a block mem_alloc handed out\n",
 				bad);
-		pr_info("kernelet: kernelet stacks: %u made, %u returned, %u live\n",
-			inst->kstack_total, inst->kstack_returned,
-			inst->kstack_total - inst->kstack_returned);
+		pr_info("kernelet: kernelet stacks: %d made, %d returned, %d live\n",
+			atomic_read(&t->kstack_total), atomic_read(&t->kstack_returned),
+			atomic_read(&t->kstack_total) - atomic_read(&t->kstack_returned));
 	}
 	pr_info("kernelet: carrier records: %d made, %d freed, %d live\n",
-		atomic_read(&inst->carriers_made), atomic_read(&inst->carriers_freed),
-		atomic_read(&inst->carriers_made) - atomic_read(&inst->carriers_freed));
+		atomic_read(&t->carriers_made), atomic_read(&t->carriers_freed),
+		atomic_read(&t->carriers_made) - atomic_read(&t->carriers_freed));
 	pr_info("kernelet: endovisor unloaded\n");
 }
 

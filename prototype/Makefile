@@ -12,10 +12,14 @@
 # One test each (every one builds what it needs, boots, and checks the log):
 #
 #   make hello        the unedited 100-line kernel: Hello, world
+#   make hello        (also) uapi-check, the endovisor UAPI's refusals, and
+#                     two sandboxes of two kinds at once
 #   make probe        demand paging, a 4 MiB write the heap refuses,
 #                     exceptions other than page faults (ud2 twice, int3,
-#                     hlt), eviction; then a second boot under a seccomp
-#                     filter that kills the carrier
+#                     hlt), eviction of a spinner by the watch timer after a
+#                     SIGKILL; then a second boot under a seccomp filter that
+#                     kills the carrier; then a third ended by KLET_KILL,
+#                     which leaves the spinner to the eviction sweep
 #   make yield        the watch timer: two boots under preempt=none, off and on
 #   make sched-policy the sched kernel's own scheduler obeys its policy
 #   make sched-coop   the mirror: with it, without it, and with an overstayer
@@ -39,10 +43,10 @@
 #   make config       configure the tree: tinyconfig, then linux/config.fragment
 #   make linux        configure (once) and build bzImage, modules and
 #                     modules_prepare
-#   make image        build the kernelet image (vostd + a kernel proper) and
-#                     pre-link it; KLET_KERNEL names the kernel proper
-#   make endovisor-module  the image, then linux/endovisor/endovisor.ko
-#   make runtime      the static runtimes, .build/run-*
+#   make image        build the kernelet image (vostd + a kernel proper),
+#                     .build/<kernel>.image; KLET_KERNEL names the kernel proper
+#   make endovisor-module  linux/endovisor/endovisor.ko, which carries no image
+#   make runtime      the static runtimes: the holder, run-test, the drivers
 #   make initramfs    compile init and pack .build/initramfs.cpio.gz
 #   make run          boot the kernel under QEMU, serial log to .build/serial.log
 #   make clean        remove the harness artifacts (keeps the kernel build)
@@ -107,13 +111,14 @@ KERNEL_PROPER_DEP := $(CURDIR)/kernels/mem/mem
 else
 $(error KLET_KERNEL=$(KLET_KERNEL) is not a kernel proper of this repository: hello, probe, yieldk, schedk or mem)
 endif
-IMAGE      := $(CURDIR)/linux/endovisor/image.o_shipped
+IMAGE      := $(BUILD)/$(KLET_KERNEL).image
 HELLO_ELF  := $(CURDIR)/kernels/hello/hello
 PROBE_ELF  := $(CURDIR)/kernels/probe/probe
 YIELD_ELF  := $(CURDIR)/kernels/yield/yield
 SCHED_ELF  := $(CURDIR)/kernels/sched/sched
 ENDOVISOR_KO := $(CURDIR)/linux/endovisor/endovisor.ko
-RUNTIME    := $(BUILD)/run-hello
+HOLDER     := $(BUILD)/holder
+RUNTEST    := $(BUILD)/run-test
 
 # `-Z plt=yes` is not cosmetic: the x86_64-unknown-none target sets
 # plt-by-default=false, which makes LLVM reach its own libcalls (memcpy,
@@ -128,7 +133,7 @@ KLET_BUILD_STD := -Zbuild-std=core,alloc,compiler_builtins \
 .PHONY: all linux config initramfs run clean distclean module stage-module
 .PHONY: patch kernel-proper-check image endovisor-module runtime
 .PHONY: stage-hello stage-probe stage-yield hello probe yield
-.PHONY: check-log check-probe-log check-probe-seccomp check-yield-log
+.PHONY: check-log check-probe-log check-probe-seccomp check-probe-klet-kill check-yield-log
 
 all: linux initramfs
 
@@ -290,40 +295,38 @@ kernel-proper-check:
 $(HELLO_ELF): $(CURDIR)/kernels/hello/hello.S
 	gcc -static -nostdlib $< -o $@
 
-# vostd + the kernel proper -> one relocatable object for kbuild to swallow.
+# vostd + the kernel proper -> one relocatable object, the kernelet image: a
+# file of its own, which the holder registers as a kind (KLET_KIND_REGISTER)
+# and the endovisor loads and relocates itself.
 #
-# image_start.o and image_end.o bracket the image's text with two symbols the
-# eviction sweep needs; they have to be the first and the last object of the
-# link, and `--gc-sections` has to be told to keep them.
 # The kernelet-stack size the endovisor's pool hands out (KLET_STACK_SIZE, 256 KiB)
 # and the one OSTD's task layer asks for have to be the same number.
 KLET_STACK_PAGES := 64
 
-# compiler_builtins gives the image weak global definitions of the memory
-# functions. Left global, they would also satisfy the endovisor's own calls
-# when Kbuild links image.o into the module, and Linux code would run kernelet
-# code; made local, the image keeps them and the endovisor gets Linux's.
-IMAGE_LOCAL := memcpy memmove memset memcmp bcmp
-
+# The checks the endovisor repeats on the file: no GOT relocation (its loader
+# applies none), no undefined symbol (an image can name nothing outside
+# itself), and exactly one global symbol, kernelet_entry_table: `objcopy
+# --keep-global-symbol` makes every other one local, so that nothing of
+# compiler_builtins' or the Rust crates' is exported.
 image: $(CRATES_STAMP) $(KERNEL_PROPER_DEP)
 	cd $(CURDIR) && CARGO_TARGET_DIR=$(CARGO_DIR) RUSTFLAGS="$(KLET_RUSTFLAGS)" \
 	  OSTD_TASK_STACK_SIZE_IN_PAGES=$(KLET_STACK_PAGES) \
 	  $(CARGO) build --offline --release -p $(KLET_KERNEL) \
 	    --target $(RUST_TARGET) $(KLET_BUILD_STD) || \
 	  { echo "image: the build failed; it is --offline, so if a crate is missing, run make crates (once, with a network)"; exit 1; }
-	gcc -c -o $(BUILD)/image_start.o linux/endovisor/image_start.S
-	gcc -c -o $(BUILD)/image_end.o linux/endovisor/image_end.S
-	ld -r --gc-sections \
-	  -u kernelet_entry_table -u __klet_image_text_start -u __klet_image_text_end \
-	  -o $(IMAGE) $(BUILD)/image_start.o \
-	  --whole-archive $(STATICLIB) --no-whole-archive $(BUILD)/image_end.o
-	objcopy $(foreach f,$(IMAGE_LOCAL),--localize-symbol=$(f)) $(IMAGE)
+	ld -r --gc-sections -u kernelet_entry_table -o $(IMAGE).o \
+	  --whole-archive $(STATICLIB) --no-whole-archive
+	objcopy --keep-global-symbol=kernelet_entry_table $(IMAGE).o $(IMAGE)
+	rm -f $(IMAGE).o
 	@if readelf -rW $(IMAGE) | grep -q GOT; then \
-	   echo "image.o has GOT relocations, which the module loader rejects"; \
+	   echo "$(IMAGE) has GOT relocations, which the endovisor's loader does not apply"; \
 	   readelf -rW $(IMAGE) | grep GOT | head; exit 1; fi
 	@if nm -u $(IMAGE) | grep -q .; then \
-	   echo "image.o has undefined symbols:"; nm -u $(IMAGE); exit 1; fi
-	@echo "image: $$(stat -c %s $(IMAGE)) bytes, relocations:" \
+	   echo "$(IMAGE) has undefined symbols:"; nm -u $(IMAGE); exit 1; fi
+	@g=$$(nm -g --defined-only $(IMAGE) | awk '{print $$3}' | tr '\n' ' '); \
+	 if [ "$$g" != "kernelet_entry_table " ]; then \
+	   echo "$(IMAGE) exports more than kernelet_entry_table: $$g" | cut -c1-300; exit 1; fi
+	@echo "image: $(IMAGE), $$(stat -c %s $(IMAGE)) bytes, relocations:" \
 	  "$$(readelf -rW $(IMAGE) | awk '$$3 ~ /^R_X86_64/ { print $$3 }' | sort -u | tr '\n' ' ')"
 	@readelf -rW $(IMAGE) | awk '{print $$3}' | grep -E '^R_' | sort | uniq -c
 
@@ -339,17 +342,23 @@ $(SCHED_ELF): $(CURDIR)/kernels/sched/sched.S
 $(CURDIR)/kernels/mem/mem: $(CURDIR)/kernels/mem/mem.S
 	gcc -static -nostdlib $< -o $@
 
-endovisor-module: image
+# One module for every kernel proper: the images are files of their own.
+endovisor-module:
 	$(MAKE) module DIR=linux/endovisor
-	@echo "endovisor.ko built with the $(KLET_KERNEL) kernel proper"
+	@echo "endovisor.ko built; it carries no kernelet image"
 
-runtime: host/runtime/run-hello.c host/runtime/run-probe.c host/runtime/run-yield.c host/runtime/run-sched.c host/runtime/run-mem.c host/runtime/holder.c linux/endovisor/uapi/endovisor.h
-	gcc -static -O2 -Wall -Wextra -o $(RUNTIME) host/runtime/run-hello.c
-	gcc -static -O2 -Wall -Wextra -I linux/endovisor/uapi -o $(BUILD)/holder host/runtime/holder.c
-	gcc -static -O2 -Wall -Wextra -o $(BUILD)/run-probe host/runtime/run-probe.c
-	gcc -static -O2 -Wall -Wextra -o $(BUILD)/run-yield host/runtime/run-yield.c
-	gcc -static -O2 -Wall -Wextra -o $(BUILD)/run-sched host/runtime/run-sched.c -lpthread
-	gcc -static -O2 -Wall -Wextra -o $(BUILD)/run-mem host/runtime/run-mem.c
+RT_SRC := host/runtime
+RT_CC  := gcc -static -O2 -Wall -Wextra -I linux/endovisor/uapi
+runtime: $(RT_SRC)/sandbox.c $(RT_SRC)/sandbox.h $(RT_SRC)/holder.c $(RT_SRC)/run-test.c \
+         $(RT_SRC)/yield-rival.c $(RT_SRC)/run-sched.c $(RT_SRC)/run-mem.c \
+         $(RT_SRC)/uapi-check.c linux/endovisor/uapi/endovisor.h
+	@mkdir -p $(BUILD)
+	$(RT_CC) -o $(HOLDER) $(RT_SRC)/holder.c $(RT_SRC)/sandbox.c
+	$(RT_CC) -o $(RUNTEST) $(RT_SRC)/run-test.c
+	$(RT_CC) -o $(BUILD)/yield-rival $(RT_SRC)/yield-rival.c
+	$(RT_CC) -o $(BUILD)/uapi-check $(RT_SRC)/uapi-check.c $(RT_SRC)/sandbox.c
+	$(RT_CC) -o $(BUILD)/run-sched $(RT_SRC)/run-sched.c $(RT_SRC)/sandbox.c -lpthread
+	$(RT_CC) -o $(BUILD)/run-mem $(RT_SRC)/run-mem.c $(RT_SRC)/sandbox.c
 
 # --- initramfs ----------------------------------------------------------
 
@@ -385,51 +394,87 @@ $(INITRAMFS): host/initramfs/init.c $(GEN_INIT_CPIO)
 
 # --- staging the prototype ----------------------------------------------
 
-# Only one test runs per boot, because the module carries one kernelet image.
-stage-hello: endovisor-module runtime
+# Every boot stages the one endovisor.ko, with the module parameters of its
+# test, the image of its kernel proper as /<kernel>.image, the holder, and the
+# test itself as /tests/10-<name>. A test that is a sequence of holder
+# invocations is run-test, which reads its steps from /tests/10-<name>.cmd.
+# The sandbox's control group is /sys/fs/cgroup/sandbox (made by the holder's
+# -c): the endovisor refuses one in the root group.
+SANDBOX_CG := /sys/fs/cgroup/sandbox
+
+# $(call stage_base,<module parameters>)
+define stage_base
 	mkdir -p $(STAGE)/modules $(STAGE)/tests
-	rm -f $(STAGE)/tests/* $(STAGE)/*.klet
+	rm -f $(STAGE)/tests/* $(STAGE)/*.klet $(STAGE)/*.image $(STAGE)/*.console $(STAGE)/*.log
+	rm -f $(STAGE)/holder $(STAGE)/yield-rival $(STAGE)/uapi-check
 	cp $(ENDOVISOR_KO) $(STAGE)/modules/
-	printf 'endovisor.ko\n' > $(STAGE)/modules/order
-	cp $(RUNTIME) $(STAGE)/tests/10-hello
-	chmod +x $(STAGE)/tests/10-hello
-	printf 'KLET\002\000\000\000\001\000\000\000\n' > $(STAGE)/hello.klet
-	chmod +x $(STAGE)/hello.klet
-	@echo "staged: endovisor.ko (hello), /tests/10-hello, /hello.klet"
+	printf 'endovisor.ko $(1)\n' > $(STAGE)/modules/order
+	cp $(IMAGE) $(STAGE)/$(KLET_KERNEL).image
+	cp $(HOLDER) $(STAGE)/holder
+endef
+
+# $(call stage_cmd,<test>): run-test as /tests/10-<test>; the caller writes the .cmd.
+define stage_cmd
+	cp $(RUNTEST) $(STAGE)/tests/10-$(1)
+	chmod +x $(STAGE)/tests/10-$(1)
+endef
+
+# The hello boot runs uapi-check, the endovisor UAPI's errors, first; then the
+# 100-line kernel with its console and log in files, which are shown after it.
+stage-hello: endovisor-module image runtime
+	$(call stage_base,)
+	cp $(BUILD)/uapi-check $(STAGE)/uapi-check
+	$(call stage_cmd,hello)
+	printf '%s\n' \
+	  'run /uapi-check /hello.image' \
+	  'run /holder register hello /hello.image' \
+	  'run /holder run -c $(SANDBOX_CG) --console /hello.console --log /hello.log hello 1' \
+	  'show /hello.console' \
+	  'show /hello.log' > $(STAGE)/tests/10-hello.cmd
+	@echo "staged: endovisor.ko, /hello.image, /tests/10-hello"
 
 # WATCH=0 loads the module with the per-processor watch timer turned off, which
-# is the control for the yield test.
+# is the control for the yield test. The carrier of the sandbox's one virtual
+# CPU is pinned to CPU 0 (-p), with the competitor; the prodder and run-test
+# itself are on CPU 1.
 WATCH ?= 1
-stage-yield: endovisor-module runtime
-	mkdir -p $(STAGE)/modules $(STAGE)/tests
-	rm -f $(STAGE)/tests/* $(STAGE)/*.klet
-	cp $(ENDOVISOR_KO) $(STAGE)/modules/
-	printf 'endovisor.ko klet_watch=$(WATCH)\n' > $(STAGE)/modules/order
-	cp $(BUILD)/run-yield $(STAGE)/tests/10-yield
-	chmod +x $(STAGE)/tests/10-yield
-	printf 'KLET\002\000\000\000\001\000\000\000\n' > $(STAGE)/yield.klet
-	chmod +x $(STAGE)/yield.klet
-	@echo "staged: endovisor.ko (yield, klet_watch=$(WATCH)), /tests/10-yield, /yield.klet"
+stage-yield: endovisor-module image runtime
+	$(call stage_base,klet_watch=$(WATCH))
+	cp $(BUILD)/yield-rival $(STAGE)/yield-rival
+	$(call stage_cmd,yield)
+	printf '%s\n' \
+	  'pin 1' \
+	  'run /holder register yieldk /yieldk.image' \
+	  'start prodder /yield-rival prodder' \
+	  'start rival /yield-rival competitor' \
+	  'sleep 300' \
+	  'run /holder run -k -p -c $(SANDBOX_CG) yieldk 1' \
+	  'wait rival' \
+	  'kill prodder' > $(STAGE)/tests/10-yield.cmd
+	@echo "staged: endovisor.ko (klet_watch=$(WATCH)), /yieldk.image, /tests/10-yield"
 
-# PROBE_RUNMODE is the word run-probe reads from /tests/10-probe.arg: empty
-# for the probe's own boot, `seccomp` for the boot under a seccomp filter.
-PROBE_RUNMODE ?=
-stage-probe: endovisor-module runtime
-	mkdir -p $(STAGE)/modules $(STAGE)/tests
-	rm -f $(STAGE)/tests/* $(STAGE)/*.klet
-	cp $(ENDOVISOR_KO) $(STAGE)/modules/
-	printf 'endovisor.ko\n' > $(STAGE)/modules/order
-	cp $(BUILD)/run-probe $(STAGE)/tests/10-probe
-	chmod +x $(STAGE)/tests/10-probe
-	printf '$(PROBE_RUNMODE)\n' > $(STAGE)/tests/10-probe.arg
-	printf 'KLET\002\000\000\000\001\000\000\000\n' > $(STAGE)/probe.klet
-	chmod +x $(STAGE)/probe.klet
-	@echo "staged: endovisor.ko (probe), /tests/10-probe, /probe.klet"
+# PROBE_RUNMODE says how the probe's sandbox ends: `kill`, a SIGKILL to the
+# carrier of vCPU 0 a second after the start, which the watch timer finds in
+# kernelet code and evicts; `seccomp`, a filter that kills the process on the
+# probe's endless system call; `klet-kill`, KLET_KILL a second after the start,
+# which leaves the spinning carrier to the eviction sweep.
+PROBE_RUNMODE ?= kill
+PROBE_HOW_kill      := --kill-after 1000
+PROBE_HOW_seccomp   := --seccomp-kill 1000
+PROBE_HOW_klet-kill := --klet-kill-after 1000
+stage-probe: endovisor-module image runtime
+	$(call stage_base,)
+	$(call stage_cmd,probe)
+	printf '%s\n' \
+	  'run /holder register probe /probe.image' \
+	  'run /holder run -k -c $(SANDBOX_CG) $(PROBE_HOW_$(PROBE_RUNMODE)) probe 1' > $(STAGE)/tests/10-probe.cmd
+	@echo "staged: endovisor.ko, /probe.image, /tests/10-probe ($(PROBE_RUNMODE))"
 
 # --- the scheduler experiments ------------------------------------------
 
-# A .klet file is the sandbox's configuration: magic, ABI version, how many
-# virtual CPUs, and a command line that the kernel proper reads through
+# The driver, run-sched, reads three lines from /tests/10-sched.arg: what it
+# does around the sandbox, how many virtual CPUs the sandbox has, and the
+# command line the kernel proper reads through
 # ostd::boot::boot_info().kernel_cmdline.
 SCHED_VCPUS   ?= 2
 SCHED_MODE    ?= policy
@@ -438,19 +483,13 @@ SCHED_ARGS    ?=
 SCHED_RUNMODE ?= policy
 MIRROR        ?= 1
 
-stage-sched: endovisor-module runtime
-	mkdir -p $(STAGE)/modules $(STAGE)/tests
-	rm -f $(STAGE)/tests/* $(STAGE)/*.klet
-	cp $(ENDOVISOR_KO) $(STAGE)/modules/
-	printf 'endovisor.ko klet_watch=$(WATCH) klet_mirror=$(MIRROR)\n' > $(STAGE)/modules/order
+stage-sched: endovisor-module image runtime
+	$(call stage_base,klet_watch=$(WATCH) klet_mirror=$(MIRROR))
 	cp $(BUILD)/run-sched $(STAGE)/tests/10-sched
 	chmod +x $(STAGE)/tests/10-sched
-	printf 'KLET\002\000\000\000' > $(STAGE)/sched.klet
-	printf "$$(printf '\\%03o' $(SCHED_VCPUS))\000\000\000" >> $(STAGE)/sched.klet
-	printf 'mode=$(SCHED_MODE) dur=$(SCHED_DUR) $(SCHED_ARGS)\n' >> $(STAGE)/sched.klet
-	chmod +x $(STAGE)/sched.klet
-	printf '$(SCHED_RUNMODE)\n' > $(STAGE)/tests/10-sched.arg
-	@echo "staged: endovisor.ko (sched), /tests/10-sched $(SCHED_RUNMODE), /sched.klet mode=$(SCHED_MODE)"
+	printf '%s\n%s\n%s\n' '$(SCHED_RUNMODE)' '$(SCHED_VCPUS)' \
+	  'mode=$(SCHED_MODE) dur=$(SCHED_DUR) $(SCHED_ARGS)' > $(STAGE)/tests/10-sched.arg
+	@echo "staged: endovisor.ko, /schedk.image, /tests/10-sched $(SCHED_RUNMODE), mode=$(SCHED_MODE)"
 
 # One boot of the sched kernel. Everything about it comes from the variables above.
 .PHONY: sched-boot
@@ -524,20 +563,28 @@ sched-perf:
 	@test -n "$(BOOTS_ONLY)" || $(MAKE) --no-print-directory check-sched-perf
 
 # A clean end of the sandbox and a clean module unload, in the log $(1): when
-# the last carrier died, the endovisor gave back what the sandbox held
-# ("the sandbox is gone"); init's delete_module succeeded (it prints
-# "delete_module kernelet failed" if not); the endovisor printed its counters
+# the last carrier died, the endovisor gave back what the kernelet held
+# ("sandbox N is gone"); the sandbox was destroyed; the holder, with every
+# carrier reaped and every descriptor closed, found the module's reference
+# count at 0, read once; init's delete_module succeeded (it prints
+# "delete_module endovisor failed" if not); the endovisor printed its counters
 # on the way out (kernelet: STATS); init got to the end; and nothing the
 # endovisor allocated for the sandbox is left: no heap block, no kernelet
 # stack, no carrier record ("0 live" in each count).
 CHECK_UNLOAD = \
-	if grep -qF 'delete_module kernelet failed' $(1) || \
+	if grep -qF 'delete_module endovisor failed' $(1) || \
 	   ! grep -qF 'kernelet: STATS' $(1) || ! grep -qF 'INIT: done' $(1); then \
 	  echo "  BAD     $$(basename $(1)): the module did not unload cleanly"; rc=1; \
 	else echo "  ok      $$(basename $(1)): clean module unload"; fi; \
-	if grep -qF 'kernelet: the sandbox is gone: ' $(1); then \
-	  echo "  ok      $$(basename $(1)): $$(grep -oE 'the sandbox is gone: .*' $(1) | head -1 | tr -d '\r')"; \
+	if grep -qE 'kernelet: sandbox [0-9]+ is gone: ' $(1); then \
+	  echo "  ok      $$(basename $(1)): $$(grep -oE 'sandbox [0-9]+ is gone: .*' $(1) | tail -1 | tr -d '\r')"; \
 	else echo "  BAD     $$(basename $(1)): the sandbox's end never gave back what it held"; rc=1; fi; \
+	if grep -qE 'kernelet: sandbox [0-9]+ destroyed' $(1); then \
+	  echo "  ok      $$(basename $(1)): the sandbox was destroyed"; \
+	else echo "  BAD     $$(basename $(1)): the sandbox was never destroyed"; rc=1; fi; \
+	if grep -qE ': no carrier left \(module references: 0\)' $(1); then \
+	  echo "  ok      $$(basename $(1)): no carrier left, module references 0, once the holder was done"; \
+	else echo "  BAD     $$(basename $(1)): $$(grep -oE 'no carrier left.*' $(1) | head -1 | tr -d '\r')"; rc=1; fi; \
 	for what in 'heap: [0-9]+ blocks allocated, [0-9]+ freed by the kernelet, [0-9]+ freed at teardown, 0 live' \
 	            'kernelet stacks: [0-9]+ made, [0-9]+ returned, 0 live' \
 	            'carrier records: [0-9]+ made, [0-9]+ freed, 0 live'; do \
@@ -692,19 +739,12 @@ SWAP_IMG      := $(MEM_LOGDIR)/swap.img
 .PHONY: stage-mem mem-boot mem mem-func mem-r2 mem-conc mem-kill mem-pressure mem-perf
 .PHONY: check-mem-log check-mem-r2 check-mem-perf check-mem-kill check-mem-kill-quiet
 
-stage-mem: endovisor-module runtime
-	mkdir -p $(STAGE)/modules $(STAGE)/tests
-	rm -f $(STAGE)/tests/* $(STAGE)/*.klet
-	cp $(ENDOVISOR_KO) $(STAGE)/modules/
-	printf 'endovisor.ko $(MEM_MODPARAMS)\n' > $(STAGE)/modules/order
+stage-mem: endovisor-module image runtime
+	$(call stage_base,$(MEM_MODPARAMS))
 	cp $(BUILD)/run-mem $(STAGE)/tests/10-mem
 	chmod +x $(STAGE)/tests/10-mem
-	printf 'KLET\002\000\000\000' > $(STAGE)/mem.klet
-	printf "$$(printf '\\%03o' $(MEM_VCPUS))\000\000\000" >> $(STAGE)/mem.klet
-	printf '$(MEM_ARGS)\n' >> $(STAGE)/mem.klet
-	chmod +x $(STAGE)/mem.klet
-	printf '$(MEM_RUNMODE)\n' > $(STAGE)/tests/10-mem.arg
-	@echo "staged: endovisor.ko (mem) $(MEM_MODPARAMS), /mem.klet $(MEM_ARGS)"
+	printf '%s\n%s\n%s\n' '$(MEM_RUNMODE)' '$(MEM_VCPUS)' '$(MEM_ARGS)' > $(STAGE)/tests/10-mem.arg
+	@echo "staged: endovisor.ko $(MEM_MODPARAMS), /mem.image $(MEM_ARGS)"
 
 # MEM_LOG names the copy of the serial log this boot leaves in .build/mem.
 mem-boot:
@@ -795,7 +835,8 @@ check-mem-kill-quiet:
 	for pat in 'MEM-KILL-READY' 'RUN-MEM: the carrier of vcpu 1' \
 	           'vcpu 1 carrier (pid' 'killed in $(KILL_WHERE)' \
 	           'a carrier is gone, the sandbox is dying' \
-	           'root carrier (pid' 'RUN-MEM: no carrier left (module references: 0)'; do \
+	           'vcpu 0 carrier (pid' 'RUN-MEM: sandbox 0 was killed: reason 0x80000001' \
+	           'RUN-MEM: no carrier left (module references: 0)'; do \
 	  if grep -qF "$$pat" $$f; then echo "  ok      $$pat"; else echo "  MISSING $$pat"; rc=1; fi; \
 	done; \
 	if [ "$(KILL_WHERE)" = "a service" ]; then want='kills: 1 found in a service, 0 in kernelet code'; \
@@ -823,19 +864,25 @@ check-mem-kill:
 	if [ "$${cp:-0}" -ge 1000 ] && [ "$${rw:-1}" = 0 ]; then \
 	  echo "  ok      the rewind check made $$cp checkpoints across the preemption, the signals and the stop, and none found the tenant's registers put back"; \
 	else echo "  BAD     the rewind check: $${n:-no report}"; rc=1; fi; \
+	if grep -qE 'vcpu 1 carrier \(pid [0-9]+\) lifeline closed, the sandbox is dying' $$f; then \
+	  echo "  ok      the kill of vcpu 1's carrier was noticed on its way to user mode: Linux killed it, and its lifeline ended the sandbox"; \
+	elif grep -qE 'vcpu 1 carrier \(pid [0-9]+\) has a fatal signal pending in a service' $$f && \
+	     grep -qE 'vcpu 1 carrier \(pid [0-9]+\) dying, killed in a service' $$f; then \
+	  echo "  ok      the kill of vcpu 1's carrier was noticed in a service ($$(grep -oE 'pending in a service \([0-9]+\)' $$f | head -1)), which ended the sandbox"; \
+	else echo "  BAD     nothing noticed the kill of vcpu 1's carrier"; rc=1; fi; \
 	for pat in 'RUN-MEM: preempted the carrier of vcpu 1' \
-	           'is alive (state ' 'the root carrier alive' \
+	           'is alive (state ' 'the carrier of vcpu 0 alive' \
 	           'MEM-KILL survivor rounds=' \
-	           'lifeline closed, the sandbox is dying' \
 	           'a carrier is gone, the sandbox is dying' \
+	           'RUN-MEM: sandbox 0 was killed: reason 0x80000001' \
 	           'RUN-MEM: no carrier left (module references: 0)' 'INIT: done'; do \
 	  if grep -qF "$$pat" $$f; then echo "  ok      $$pat"; else echo "  MISSING $$pat"; rc=1; fi; \
 	done; \
 	ign=fffffffffffbfeff; \
-	if grep -qF "signal dispositions: vcpu 1 carrier SigIgn $$ign SigBlk 0000000000000000, root carrier SigIgn $$ign" $$f; then \
+	if grep -qF "signal dispositions: vcpu 1 carrier SigIgn $$ign SigBlk 0000000000000000, vcpu 0 carrier SigIgn $$ign" $$f; then \
 	  echo "  ok      both carriers ignore every signal but SIGKILL and SIGSTOP, and block none (SigIgn $$ign)"; \
 	else echo "  BAD     the carriers' signal dispositions: $$(grep -o 'signal dispositions: .*' $$f | tr -d '\r')"; rc=1; fi; \
-	if grep -q 'after 2000 rounds of SIGQUIT, SIGABRT, SIGTSTP, SIGTTIN and SIGTTOU the carrier of vcpu 1 is alive (state [RS]), the root carrier alive' $$f; then \
+	if grep -q 'after 2000 rounds of SIGQUIT, SIGABRT, SIGTSTP, SIGTTIN and SIGTTOU the carrier of vcpu 1 is alive (state [RS]), the carrier of vcpu 0 alive' $$f; then \
 	  echo "  ok      2000 rounds of SIGQUIT, SIGABRT, SIGTSTP, SIGTTIN and SIGTTOU left both carriers alive and running"; \
 	else echo "  BAD     the core-dump and stop signals: $$(grep -o 'after 2000 rounds.*' $$f | tr -d '\r')"; rc=1; fi; \
 	n=$$(grep -cE 'kernelet: signal (3|6|20|21|22|15|10) ' $$f); \
@@ -844,8 +891,8 @@ check-mem-kill:
 	if grep -q 'vcpu 1 carrier state [RS], after SIGSTOP T, after SIGCONT [RS]' $$f; then \
 	  echo "  ok      SIGSTOP stopped the carrier of vcpu 1 (state T) and SIGCONT let it go on"; \
 	else echo "  BAD     the carrier of vcpu 1 did not stop and go on"; rc=1; fi; \
-	if grep -q 'root carrier (pid [0-9]*) lifeline closed' $$f; then echo "  ok      the root carrier died"; \
-	else echo "  MISSING the root carrier's death"; rc=1; fi; \
+	if grep -q 'vcpu 0 carrier (pid [0-9]*) lifeline closed' $$f; then echo "  ok      the carrier of vcpu 0 died with the sandbox"; \
+	else echo "  MISSING the death of the carrier of vcpu 0"; rc=1; fi; \
 	if grep -qF 'MEM-DONE' $$f; then echo "  BAD     the sandbox outlived the kill of a carrier"; rc=1; fi; \
 	$(call CHECK_UNLOAD,$$f); \
 	for pat in $(CHECK_BAD); do \
@@ -934,21 +981,28 @@ hello:
 	cp $(SERIAL) $(BUILD)/serial-hello.log
 	@$(MAKE) --no-print-directory check-log
 
-# Two boots of the same image: the probe itself, and then the same tenant
-# under a seccomp filter that kills it on its endless system call.
-PROBE_LOG         := $(BUILD)/serial-probe.log
-PROBE_SECCOMP_LOG := $(BUILD)/serial-probe-seccomp.log
+# Three boots of the same image: the probe itself, ended by a SIGKILL to its
+# carrier; then the same tenant under a seccomp filter that kills it on its
+# endless system call; then the probe ended by KLET_KILL, which leaves the
+# spinning carrier to the eviction sweep.
+PROBE_LOG          := $(BUILD)/serial-probe.log
+PROBE_SECCOMP_LOG  := $(BUILD)/serial-probe-seccomp.log
+PROBE_KLETKILL_LOG := $(BUILD)/serial-probe-klet-kill.log
 probe:
-	rm -f $(PROBE_LOG) $(PROBE_SECCOMP_LOG)
+	rm -f $(PROBE_LOG) $(PROBE_SECCOMP_LOG) $(PROBE_KLETKILL_LOG)
 	$(MAKE) KLET_KERNEL=probe linux stage-probe initramfs
 	$(MAKE) run
 	cp $(SERIAL) $(PROBE_LOG)
 	$(MAKE) KLET_KERNEL=probe PROBE_RUNMODE=seccomp stage-probe initramfs
 	$(MAKE) run
 	cp $(SERIAL) $(PROBE_SECCOMP_LOG)
+	$(MAKE) KLET_KERNEL=probe PROBE_RUNMODE=klet-kill stage-probe initramfs
+	$(MAKE) run
+	cp $(SERIAL) $(PROBE_KLETKILL_LOG)
 	@rc=0; \
 	$(MAKE) --no-print-directory check-probe-log || rc=1; \
 	$(MAKE) --no-print-directory check-probe-seccomp || rc=1; \
+	$(MAKE) --no-print-directory check-probe-klet-kill || rc=1; \
 	if [ $$rc -eq 0 ]; then echo "make probe: PASS"; else echo "make probe: FAIL"; fi; exit $$rc
 
 # Two boots, both with preempt=none so that Linux will not preempt kernel code:
@@ -1047,9 +1101,9 @@ check-probe-log:
 	n=$$(grep -c 'is trap [0-9]* -> exception; ignored again' $(PROBE_LOG)); \
 	if [ "$$n" -eq 4 ]; then echo "  ok      each of the four fault signals was ignored again after the drain took it"; \
 	else echo "  BAD     $$n fault signal(s) ignored again, not 4"; rc=1; fi; \
-	if grep -qF 'RUN-PROBE: vcpu 0 carrier SigIgn fffffffffffbfeff SigBlk 0000000000000000 SigPnd 0000000000000000' $(PROBE_LOG); then \
+	if grep -qE 'holder: vcpu 0 carrier \(pid [0-9]+\) SigIgn fffffffffffbfeff SigBlk 0000000000000000 SigPnd 0000000000000000' $(PROBE_LOG); then \
 	  echo "  ok      after the faults, the vCPU carrier ignores every signal but SIGKILL and SIGSTOP again"; \
-	else echo "  BAD     the vCPU carrier's signals after the faults: $$(grep -o 'RUN-PROBE: vcpu 0 carrier Sig.*' $(PROBE_LOG) | tr -d '\r')"; rc=1; fi; \
+	else echo "  BAD     the vCPU carrier's signals after the faults: $$(grep -o 'holder: vcpu 0 carrier .*Sig.*' $(PROBE_LOG) | tr -d '\r')"; rc=1; fi; \
 	if grep -qF 'probe: a write of 4194304 bytes refused: no memory for its buffer' $(PROBE_LOG); then \
 	  echo "  ok      a 4 MiB write was refused for want of a buffer: the endovisor refused the allocation, and kmalloc never saw it"; \
 	else echo "  MISSING probe: a write of 4194304 bytes refused: no memory for its buffer"; rc=1; fi; \
@@ -1057,7 +1111,14 @@ check-probe-log:
 	           'probe: breakpoint before' \
 	           'probe: general protection fault at' \
 	           'probe: spinning inside the kernelet at depth 0' \
-	           'kernelet: evicting vcpu carrier' \
+	           'holder: sandbox 0 before the end: state 3 (running)' \
+	           'holder: SIGKILL to the carrier of vcpu 0 (pid' \
+	           'dying, killed in kernelet code' \
+	           'kernelet: kills: 0 found in a service, 1 in kernelet code by the watch timer' \
+	           'a carrier is gone, the sandbox is dying' \
+	           'kernelet: sandbox 0 exited: killed, reason 0x80000001 (a carrier is gone)' \
+	           'holder: sandbox 0 was killed: reason 0x80000001' \
+	           'RUN-TEST: /holder run -k -c /sys/fs/cgroup/sandbox --kill-after 1000 probe 1 exited 129' \
 	           'INIT: unloading endovisor' 'INIT: done'; do \
 	  if grep -qF "$$pat" $(PROBE_LOG); then echo "  ok      $$pat"; \
 	  else echo "  MISSING $$pat"; rc=1; fi; \
@@ -1084,15 +1145,15 @@ check-probe-seccomp:
 	@sed -n '/INIT: loading endovisor.ko/,$$p' $(PROBE_SECCOMP_LOG) | sed 's/\r$$//'
 	@echo "----------------------------------------------------------------"
 	@f=$(PROBE_SECCOMP_LOG); rc=0; \
-	for pat in 'RUN-PROBE: seccomp filter installed: system call 1000 kills the process' \
+	for pat in 'holder: carrier of vcpu 0: seccomp filter installed: system call 1000 kills the process' \
 	           'probe: demand paging: read back "PROBE-OK"' \
 	           'probe: general protection fault at' \
-	           'kernelet: vcpu 0 carrier (pid' \
+	           'kernelet: sandbox 0: vcpu 0 carrier (pid' \
 	           'has signal 31 pending that Linux made fatal (seccomp killed it); left for Linux to deliver' \
 	           'ended by signal 31' \
 	           'a carrier is gone, the sandbox is dying' \
-	           'RUN-PROBE: the sandbox ended by itself' \
-	           'RUN-PROBE: no carrier left (module references: 0)' \
+	           'holder: sandbox 0 was killed: reason 0x80000001' \
+	           'holder: no carrier left (module references: 0)' \
 	           'INIT: unloading endovisor' 'INIT: done'; do \
 	  if grep -qF "$$pat" $$f; then echo "  ok      $$pat"; \
 	  else echo "  MISSING $$pat"; rc=1; fi; \
@@ -1113,6 +1174,41 @@ check-probe-seccomp:
 	if [ $$rc -eq 0 ]; then echo "make probe, boot probe-seccomp: PASS"; else echo "make probe, boot probe-seccomp: FAIL"; fi; \
 	exit $$rc
 
+# uapi-check's checks, every one of which must pass (host/runtime/uapi-check.c).
+UAPI_CHECKS := 67
+# The probe ended by KLET_KILL: the sandbox is marked dying first, so the
+# watch timer stops and leaves the carrier spinning in kernelet code to the
+# eviction sweep, which the kill arms because no root carrier is left to.
+check-probe-klet-kill:
+	@test -f $(PROBE_KLETKILL_LOG) || { echo "check-log: no $(PROBE_KLETKILL_LOG)"; exit 1; }
+	@echo "--- $$(basename $(PROBE_KLETKILL_LOG)), from the module load to the end ---"
+	@sed -n '/INIT: loading endovisor.ko/,$$p' $(PROBE_KLETKILL_LOG) | sed 's/\r$$//' | grep -vE 'kernelet: signal|probe: '
+	@echo "----------------------------------------------------------------"
+	@f=$(PROBE_KLETKILL_LOG); rc=0; \
+	for pat in 'probe: spinning inside the kernelet at depth 0' \
+	           'holder: KLET_KILL(1) after 1000 ms' \
+	           'kernelet: sandbox 0: killed by its holder, the sandbox is dying; 1 carrier(s) left' \
+	           'kernelet: arming the eviction sweep' \
+	           'evicting vcpu carrier' \
+	           'dying (evicted)' \
+	           'kernelet: sandbox 0 exited: killed, reason 0x1 (killed by its holder)' \
+	           'holder: sandbox 0 was killed: reason 0x1' \
+	           'RUN-TEST: /holder run -k -c /sys/fs/cgroup/sandbox --klet-kill-after 1000 probe 1 exited 129' \
+	           'kernelet: kills: 0 found in a service, 0 in kernelet code by the watch timer' \
+	           'INIT: unloading endovisor' 'INIT: done'; do \
+	  if grep -qF "$$pat" $$f; then echo "  ok      $$pat"; \
+	  else echo "  MISSING $$pat"; rc=1; fi; \
+	done; \
+	$(call CHECK_UNLOAD,$$f); \
+	for pat in $(CHECK_BAD); do \
+	  if grep -qF "$$pat" $$f; then \
+	    echo "  BAD     the log contains $$pat"; \
+	    grep -nF "$$pat" $$f | head -3; rc=1; \
+	  else echo "  ok      no $$pat"; fi; \
+	done; \
+	if [ $$rc -eq 0 ]; then echo "make probe, boot probe-klet-kill: PASS"; else echo "make probe, boot probe-klet-kill: FAIL"; fi; \
+	exit $$rc
+
 check-log:
 	@test -f $(SERIAL) || { echo "check-log: no $(SERIAL)"; exit 1; }
 	@echo "--- serial log, from the module load to the end -----------------"
@@ -1125,11 +1221,24 @@ check-log:
 	heap=$$(grep -o 'heap: a 64-byte allocation and its free, [0-9]* cycles the pair' $(SERIAL) | head -1); \
 	if [ -n "$$heap" ]; then echo "  ok      $$heap"; \
 	else echo "  MISSING the heap measurement"; rc=1; fi; \
-	for pat in 'Hello, world' 'kernelet: stopped, exit code 0' \
+	u=$$(grep -oE 'UAPI-CHECK: done: [0-9]+ ok, [0-9]+ failed' $(SERIAL) | head -1); \
+	if [ "$$u" = "UAPI-CHECK: done: $(UAPI_CHECKS) ok, 0 failed" ]; then echo "  ok      $$u"; \
+	else echo "  BAD     uapi-check: $${u:-no summary}, expected $(UAPI_CHECKS) ok"; \
+	  grep -F 'UAPI-CHECK: FAIL' $(SERIAL) | head; rc=1; fi; \
+	for pat in 'RUN-TEST: /hello.console: Hello, world' 'RUN-TEST: /hello.log: vOSTD up: grant' \
+	           'kernelet: stopped, exit code 0' \
+	           'arrived as kernelet/0/0: address space emptied, every signal ignored, dumpable 1 -> 0' \
+	           'every virtual CPU' \
+	           'holder: sandbox 0 at its end: state 5 (exited), 1 vcpu(s), 4096 KiB granted' \
+	           'holder: sandbox 0 exited: the kernel proper powered off, exit code 0' \
+	           'RUN-TEST: /holder run -c /sys/fs/cgroup/sandbox --console /hello.console --log /hello.log hello 1 exited 0' \
 	           'INIT: unloading endovisor' 'INIT: done'; do \
 	  if grep -qF "$$pat" $(SERIAL); then echo "  ok      $$pat"; \
 	  else echo "  MISSING $$pat"; rc=1; fi; \
 	done; \
+	if grep -qF 'kernelet: Hello, world' $(SERIAL); then \
+	  echo "  BAD     the console line went to the kernel log, not to the console file"; rc=1; \
+	else echo "  ok      the kernel proper's console line went to the console file, not to the kernel log"; fi; \
 	$(call CHECK_UNLOAD,$(SERIAL)); \
 	for pat in $(CHECK_BAD); do \
 	  if grep -qF "$$pat" $(SERIAL); then \
@@ -1145,9 +1254,9 @@ check-log:
 clean:
 	rm -rf $(STAGE) $(INIT) $(INITRAMFS) $(SERIAL)
 	-$(KBUILD) M=$(CURDIR)/linux/endovisor clean
-	rm -f $(IMAGE) $(HELLO_ELF) $(PROBE_ELF) $(YIELD_ELF) $(SCHED_ELF) $(CURDIR)/kernels/mem/mem $(RUNTIME)
-	rm -f $(BUILD)/run-probe $(BUILD)/run-yield $(BUILD)/run-sched $(BUILD)/run-mem $(BUILD)/holder
-	rm -f $(BUILD)/image_start.o $(BUILD)/image_end.o $(INITRAMFS_LIST)
+	rm -f $(BUILD)/*.image $(HELLO_ELF) $(PROBE_ELF) $(YIELD_ELF) $(SCHED_ELF) $(CURDIR)/kernels/mem/mem
+	rm -f $(HOLDER) $(RUNTEST) $(BUILD)/yield-rival $(BUILD)/uapi-check $(BUILD)/run-sched $(BUILD)/run-mem
+	rm -f $(INITRAMFS_LIST)
 	rm -f $(BUILD)/*.log $(BUILD)/*.out
 	rm -rf $(CARGO_DIR) $(MEM_LOGDIR) $(BENCH_OUT)
 

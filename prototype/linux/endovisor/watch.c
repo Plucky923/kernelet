@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0
 /*
- * The per-processor watch timer: this sandbox's timer interrupt, the delivery
+ * The per-processor watch timer: a sandbox's timer interrupt, the delivery
  * point for its virtual interrupts, and the bound on how long the kernelet may
  * keep a processor it has said it is not ready to give up.
  *
@@ -113,7 +113,7 @@ bool klet_virq_redirect(struct klet_carrier *c, struct pt_regs *regs)
 {
 	u64 limit;
 
-	if (user_mode(regs) || !klet_in_image_text(regs->ip))
+	if (user_mode(regs) || !klet_in_image_text(c->inst, regs->ip))
 		return false;
 	if (!klet_in_kernelet(c))
 		return false;
@@ -133,34 +133,52 @@ bool klet_virq_redirect(struct klet_carrier *c, struct pt_regs *regs)
 	WRITE_ONCE(c->vrec.virq_ip, regs->ip);
 	/* Order: mask first, then divert, so the stub always sees it masked. */
 	WRITE_ONCE(c->vrec.irq_off, 1);
-	regs->ip = (unsigned long)kernelet_entry_table.virq_entry;
-	atomic_inc(&c->inst->virqs);
+	regs->ip = (unsigned long)c->inst->kind->entry->virq_entry;
+	atomic_inc(&c->inst->n.virqs);
 	return true;
 }
 
 static enum hrtimer_restart klet_watch_fn(struct hrtimer *timer)
 {
-	struct klet_inst *inst = &klet_inst;
 	struct pt_regs *regs = get_irq_regs();
+	struct klet_inst *inst;
 	struct klet_carrier *c;
-	bool tick = true;
+	bool tick = true, requested;
 	u64 now;
 
 	/*
 	 * A requested firing is a tick as well only if the period it cut short
 	 * has run out in the meantime.
 	 */
-	if (this_cpu_read(klet_watch_requested)) {
+	requested = this_cpu_read(klet_watch_requested);
+	if (requested) {
 		this_cpu_write(klet_watch_requested, false);
-		atomic_inc(&inst->watch_fires);
 		if (ktime_before(hrtimer_cb_get_time(timer),
 				 this_cpu_read(klet_watch_period_end)))
 			tick = false;
 	}
+
+	/*
+	 * The timer lives exactly as long as this processor is running a carrier of
+	 * a live sandbox, whichever sandbox that is. Nothing else has to be tracked.
+	 */
+	if (!current->carrier_hooks) {
+		this_cpu_write(klet_watch_last_tick, 0);
+		return HRTIMER_NORESTART;
+	}
+	c = klet_current_carrier();
+	inst = c->inst;
+	if (c->state == KLET_DEAD || inst->dying || inst->stopped) {
+		this_cpu_write(klet_watch_last_tick, 0);
+		return HRTIMER_NORESTART;
+	}
+
+	if (requested)
+		atomic_inc(&inst->n.watch_fires);
 	if (tick) {
 		u64 t = ktime_get_mono_fast_ns(), last = this_cpu_read(klet_watch_last_tick);
 
-		atomic_inc(&inst->ticks);
+		atomic_inc(&inst->n.ticks);
 		if (last && t > last) {
 			u32 gap_us = (u32)((t - last) / 1000);
 
@@ -168,21 +186,6 @@ static enum hrtimer_restart klet_watch_fn(struct hrtimer *timer)
 				atomic_set(&inst->longest_tick_gap_us, gap_us);
 		}
 		this_cpu_write(klet_watch_last_tick, t);
-	}
-
-	/*
-	 * The timer lives exactly as long as this processor is running a carrier of
-	 * a live sandbox. Nothing else has to be tracked.
-	 */
-	if (!current->carrier_hooks) {
-		this_cpu_write(klet_watch_last_tick, 0);
-		return HRTIMER_NORESTART;
-	}
-	c = klet_current_carrier();
-	if (c->kind == KLET_ROOT || c->inst != inst || c->state == KLET_DEAD ||
-	    inst->dying || inst->stopped) {
-		this_cpu_write(klet_watch_last_tick, 0);
-		return HRTIMER_NORESTART;
 	}
 
 	/*
@@ -194,12 +197,12 @@ static enum hrtimer_restart klet_watch_fn(struct hrtimer *timer)
 	 * included, is abandoned with it, as on any eviction. A carrier asleep or
 	 * in a service is left to klet_svc_body, one in user mode to Linux.
 	 */
-	if (regs && !user_mode(regs) && klet_in_image_text(regs->ip) &&
+	if (regs && !user_mode(regs) && klet_in_image_text(inst, regs->ip) &&
 	    klet_in_kernelet(c) && fatal_signal_pending(current)) {
 		c->evicted = true;
 		c->doomed = true;
 		c->killed_in = "kernelet code";
-		atomic_inc(&inst->kills_in_kernelet);
+		atomic_inc(&inst->n.kills_in_kernelet);
 		regs->ip = (unsigned long)klet_exit_stub;
 		this_cpu_write(klet_watch_last_tick, 0);
 		return HRTIMER_NORESTART;
@@ -213,12 +216,12 @@ static enum hrtimer_restart klet_watch_fn(struct hrtimer *timer)
 		goto again;
 
 	/* 2. Delivery, and 3. the bound. */
-	if (user_mode(regs) || !klet_in_image_text(regs->ip) ||
+	if (user_mode(regs) || !klet_in_image_text(inst, regs->ip) ||
 	    !klet_in_kernelet(c)) {
 		/* User mode, a service, or Linux's own code. Leave it pending. */
 		c->strike1_ns = 0;
 		if (!tick)
-			atomic_inc(&inst->fires_elsewhere);
+			atomic_inc(&inst->n.fires_elsewhere);
 		goto again;
 	}
 
@@ -226,7 +229,7 @@ static enum hrtimer_restart klet_watch_fn(struct hrtimer *timer)
 		c->strike1_ns = 0;
 		if (klet_virq_redirect(c, regs)) {
 			if (!tick)
-				atomic_inc(&inst->fires_redirected);
+				atomic_inc(&inst->n.fires_redirected);
 			goto again;
 		}
 		/*
@@ -248,7 +251,7 @@ static enum hrtimer_restart klet_watch_fn(struct hrtimer *timer)
 	 * bound is the ticks', so a requested firing leaves it alone.
 	 */
 	if (!tick) {
-		atomic_inc(&inst->fires_masked);
+		atomic_inc(&inst->n.fires_masked);
 		goto again;
 	}
 	if (!need_resched()) {
@@ -257,7 +260,7 @@ static enum hrtimer_restart klet_watch_fn(struct hrtimer *timer)
 	}
 
 	now = ktime_get_mono_fast_ns();
-	atomic_inc(&inst->deferrals);
+	atomic_inc(&inst->n.deferrals);
 	if (!c->strike1_ns) {
 		c->strike1_ns = now;
 		goto again;
@@ -337,7 +340,7 @@ void klet_watch_arm(struct klet_carrier *c)
 {
 	struct hrtimer *timer;
 
-	if (!klet_watch || !klet_watch_ready || c->kind == KLET_ROOT)
+	if (!klet_watch || !klet_watch_ready)
 		return;
 
 	timer = this_cpu_ptr(&klet_watch_timer);

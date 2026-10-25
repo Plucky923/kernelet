@@ -34,8 +34,9 @@ a processor) and 13 (what vOSTD adds on top of Linux's page tables).
 Never on its own: the top-level `make image` builds it together with one
 kernel proper (`KLET_KERNEL=hello`, the default) for `x86_64-unknown-none`,
 with `-Zbuild-std`, a static relocation model, the kernel code model and no
-red zone, and pre-links the result into `linux/endovisor/image.o_shipped`, which the
-endovisor module links in. `OSTD_TASK_STACK_SIZE_IN_PAGES` is set to 64 so
+red zone, and pre-links the result into the image, `.build/<kernel>.image`, a
+file of its own, which the holder registers as a kind and the endovisor loads
+and relocates. `OSTD_TASK_STACK_SIZE_IN_PAGES` is set to 64 so
 that OSTD's task layer asks for exactly the 256 KiB kernelet stacks the
 endovisor's pool hands out.
 

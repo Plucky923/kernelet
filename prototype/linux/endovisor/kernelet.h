@@ -1,24 +1,29 @@
 /* SPDX-License-Identifier: GPL-2.0 */
 /*
- * The endovisor: the service half of the kernelet image ABI, and the stub of the
- * component that would create, schedule and mediate many kernelets.
+ * The endovisor: the service half of the kernelet image ABI, the endovisor
+ * UAPI (uapi/endovisor.h, /dev/endovisor), and everything between them.
  *
- * Exactly one kernelet instance exists here, statically linked into this module
- * as image.o (the Rust staticlib of vostd + the kernel proper, pre-linked with
- * `ld -r`).
+ * Kernelet images are files, registered as *kinds* (KLET_KIND_REGISTER) and
+ * loaded and relocated by the endovisor itself (image.c); a kind's one loaded
+ * copy serves one live sandbox at a time, because the image is
+ * position-dependent and its text reaches its data at addresses fixed when it
+ * was loaded. A sandbox is one struct klet_inst, in a table of
+ * KLET_MAX_SANDBOXES slots (sandbox.c).
  *
  * Vocabulary, as in the book: a *carrier* is a Linux task that carries one of
- * the sandbox's virtual CPUs for the sandbox's whole life. A carrier does *not*
+ * the sandbox's virtual CPUs for the sandbox's whole life, a child the holder
+ * forked that executed the virtual CPU's exec descriptor. A carrier does *not*
  * carry an OSTD task: OSTD tasks are the kernelet's own objects on their own
  * kernelet stacks, and the kernelet's own scheduler multiplexes them onto the
- * vCPUs. Linux schedules the N vCPU carriers and never sees a kernelet task. The *root carrier* is the sandbox's first Linux task, the
- * one that exec'd the `.klet` file; it runs no kernelet code.
+ * vCPUs. Linux schedules the N carriers and never sees a kernelet task.
  */
 #ifndef _KLET_ENDOVISOR_H
 #define _KLET_ENDOVISOR_H
 
 #include <linux/atomic.h>
 #include <linux/hrtimer.h>
+#include <linux/kfifo.h>
+#include <linux/workqueue.h>
 #include <linux/kernelet.h>
 #include <linux/list.h>
 #include <linux/mutex.h>
@@ -29,11 +34,13 @@
 #include <linux/types.h>
 #include <linux/wait.h>
 
+#include "uapi/endovisor.h"
+
 /* ------------------------------------------------------------------ */
 /* The image ABI. Mirrors vostd/src/abi.rs; keep the two in step.     */
 /* ------------------------------------------------------------------ */
 
-#define KLET_ABI_VERSION 5ULL
+#define KLET_ABI_VERSION 6ULL
 
 /* Errors of the vm_* services, returned negated. */
 #define KLET_INVALID	1	/* an address outside the area, a bad argument, a space not this kernelet's, an entry already present */
@@ -101,9 +108,6 @@ struct klet_mem_stats {
 	atomic64_t lifted;		/* vm_* entered with the kernelet's mirror raised, lifted */
 };
 
-/* The largest number of virtual CPUs a sandbox may have here. */
-#define KLET_MAX_VCPUS 8
-
 struct klet_boot_args {
 	u64 abi_version;
 	u64 grant_paddr;
@@ -123,7 +127,7 @@ struct klet_boot_args {
 	u64 fpu_area_align;
 	u64 tsc_khz;
 	u64 mirror_preempt;
-	/* The sandbox's command line, from the .klet file. */
+	/* The sandbox's command line, from KLET_CREATE. */
 	u64 cmdline_ptr;
 	u64 cmdline_len;
 	/* The bounds of the image's text, for the stub's own range check. */
@@ -172,7 +176,8 @@ struct klet_vcpu_rec {
 	 * The virtual interrupt flag, inverted. vOSTD sets it for a critical
 	 * section; the endovisor sets it at the moment it redirects into the upcall
 	 * stub, which is what hardware does to IF; the stub clears it at the end, as
-	 * iret would.
+	 * iret would. It starts at 1, as a processor comes out of reset with IF
+	 * clear, and vOSTD clears it once it can take a virtual interrupt.
 	 */
 	u32 irq_off;
 	/*
@@ -245,6 +250,8 @@ struct klet_services {
 	void (*fpu_save)(void *area, u64 len);
 	void (*fpu_load)(const void *area, u64 len);
 	void (*stop)(u64 code);
+	/* The console, what the kernel proper prints; log_write is vOSTD's log. */
+	void (*console_write)(const char *ptr, u64 len);
 };
 
 struct klet_entry_table {
@@ -256,13 +263,6 @@ struct klet_entry_table {
 	void (*virq_entry)(void);
 };
 
-/* Defined by image.o: vostd/src/abi.rs. */
-extern const struct klet_entry_table kernelet_entry_table;
-
-/* Defined by image_start.S / image_end.S, inside image.o. */
-extern char __klet_image_text_start[];
-extern char __klet_image_text_end[];
-
 /* Return values of the user_run service. */
 #define KLET_RUN_SYSCALL	0ULL
 #define KLET_RUN_EXCEPTION	1ULL
@@ -272,13 +272,33 @@ extern char __klet_image_text_end[];
 /* Endovisor-internal types                                           */
 /* ------------------------------------------------------------------ */
 
-/* The magic and header of every *.klet file: "KLET", version, nr_vcpus. */
-#define KLET_MAGIC "KLET"
-#define KLET_MAGIC_LEN 4
+/* The tables of the UAPI: registered kinds and live sandboxes. */
+#define KLET_MAX_KINDS		8
+#define KLET_MAX_SANDBOXES	8
 
-/* One physically contiguous run, order 10: 4 MiB. */
-#define KLET_GRANT_ORDER 10
-#define KLET_GRANT_LEN (PAGE_SIZE << KLET_GRANT_ORDER)
+/*
+ * The grant is one physically contiguous run, allocated at the sandbox's start,
+ * of memory_initial bytes in whole 2 MiB units: at most order 10, 4 MiB, the
+ * largest run the page allocator gives (MAX_PAGE_ORDER).
+ */
+#define KLET_GRANT_UNIT		(2UL << 20)
+#define KLET_GRANT_MAX		(PAGE_SIZE << MAX_PAGE_ORDER)
+
+/*
+ * The first bytes of an exec descriptor's file, which the binary-format handler
+ * uses only to turn other files away quickly: the file is recognized by its
+ * inode, never by these bytes (sandbox.c).
+ */
+#define KLET_EXEC_MAGIC		"KLET-EXEC"
+#define KLET_EXEC_MAGIC_LEN	10	/* with its NUL */
+struct klet_exec_head {
+	char magic[KLET_EXEC_MAGIC_LEN];
+	u16 slot;
+	u32 vcpu;
+} __packed;
+
+/* Each of the console and log rings. */
+#define KLET_OUT_RING		(64 * 1024)
 
 /*
  * Every kernelet stack is this big, and they all come from one per-sandbox pool
@@ -291,11 +311,11 @@ extern char __klet_image_text_end[];
 #define KLET_STACK_SIZE (256 * 1024)
 
 /*
- * The bound on the pool: at most this many kernelet stacks per sandbox (128
- * MiB of them). Every one is charged to the sandbox's memory cgroup, and the
- * bound keeps a kernel proper that spawns tasks without end from taking more.
+ * The bound on the pool is the sandbox's max_tasks (KLET_CREATE) plus one
+ * bootstrap stack per virtual CPU. Every stack is charged to the sandbox's
+ * memory cgroup, and the bound keeps a kernel proper that spawns tasks without
+ * end from taking more.
  */
-#define KLET_MAX_KSTACKS 512
 
 /* The lowest address of a space's area: the tree's VMAR_LOWEST_ADDR, 64 KiB. */
 #define KLET_WINDOW_START 0x10000UL
@@ -312,12 +332,8 @@ extern char __klet_image_text_end[];
 /* And never for less than this, or arming the timer costs more than the sleep. */
 #define KLET_IDLE_MIN_NS (50 * 1000)
 
-enum klet_kind {
-	KLET_ROOT,	/* exec'd the .klet file; runs no kernelet code */
-	KLET_VCPU,	/* carries one virtual CPU */
-};
-
-enum klet_state {
+/* What a carrier is doing. (The sandbox's own states are the UAPI's.) */
+enum klet_cstate {
 	KLET_NEW,	/* the vCPU has not entered the image yet */
 	KLET_RUNNING,	/* the carrier is running kernelet code */
 	KLET_USER,	/* the carrier is in, or on its way to, user mode */
@@ -354,10 +370,9 @@ struct klet_carrier {
 	/* The shared record. Its offset from `hooks` is in the boot arguments. */
 	struct klet_vcpu_rec vrec;
 
-	struct klet_inst *inst;
+	struct klet_inst *inst;		/* a reference, for as long as the record lives */
 	struct task_struct *task;
-	enum klet_kind kind;
-	enum klet_state state;
+	enum klet_cstate state;
 	int vcpu;
 
 	/* the bootstrap coroutine of this vCPU */
@@ -468,16 +483,97 @@ struct klet_forced_rec {
 	u32 guards, irq_off;
 };
 
+/*
+ * Counters, per sandbox, and added into the module's totals (klet_totals) when
+ * the sandbox is destroyed; the module prints the totals when it unloads, which
+ * is what the tests read. Every field is an atomic_t that is summed.
+ */
+struct klet_counters {
+	atomic_t evictions;
+	atomic_t ticks;
+	atomic_t watch_fires;		/* requested firings of the watch timer (kicks) */
+	atomic_t kick_ipis;		/* kick IPIs that found their carrier running */
+	atomic_t fires_redirected;	/* requested firings that delivered an upcall */
+	atomic_t fires_elsewhere;	/* ... that found user mode, a service or Linux code */
+	atomic_t fires_masked;		/* ... that found a critical section */
+	atomic_t virqs;			/* upcalls delivered by redirect */
+	atomic_t deferrals;		/* ticks that found the vCPU masked */
+	atomic_t forced_yields;
+	atomic_t yields;		/* voluntary vcpu_yield service calls */
+	atomic_t bad_preempt;		/* involuntary switch-out while masked */
+	atomic_t on_spins;
+	atomic_t yield_tos;
+	atomic_t mm_switches;
+	atomic_t fpu_swaps;
+	atomic_t fpu_rejects;
+	atomic_t mirror_faults;
+	/* Where a fatal signal to a carrier of the live sandbox was acted on. */
+	atomic_t kills_in_service;
+	atomic_t kills_in_kernelet;
+	atomic_t stolen_ms;
+};
+
+/* One registered image (image.c). */
+struct klet_kind {
+	bool used;
+	char name[KLET_NAME_LEN];
+	/*
+	 * The text and read-only data, in one executable allocation near the
+	 * kernel's text (execmem), read-only and executable once relocated; the
+	 * writable data and bss in another, and a pristine copy of the writable
+	 * data as it was relocated, which every sandbox of the kind starts from.
+	 */
+	void *text;
+	size_t text_size;		/* the allocation */
+	unsigned long text_lo, text_hi;	/* the executable sections within it */
+	void *data;
+	size_t data_size;
+	void *pristine;
+	const struct klet_entry_table *entry;
+	/* Sandboxes that exist (created, not destroyed): 0 or 1 in this prototype. */
+	unsigned int nr_sandboxes;
+};
+
+/* The sandbox's view of one virtual CPU, for KLET_GET_STATS. */
+struct klet_vcpu_slot {
+	u32 state;			/* enum klet_vcpu_state, the UAPI's */
+	bool claimed;			/* an exec of its descriptor got past the checks */
+	pid_t pid;
+	u64 run_ns, stolen_ns;		/* frozen when the carrier is gone */
+	struct file *exec_file;		/* the exec descriptor's file, made lazily */
+};
+
+/* One of the console and the log: the holder's file and the ring before it. */
+struct klet_out {
+	struct file *file;
+	struct kfifo fifo;
+	spinlock_t lock;
+};
+
 struct klet_inst {
+	refcount_t refs;		/* the sandbox file's, and each carrier record's */
+	struct klet_kind *kind;
+	int slot;
+	struct mutex mutex;		/* the sandbox operations, against each other */
+
+	/* KLET_CREATE */
+	u64 memory_initial, memory_max, max_tasks;
+	struct cgroup *cgrp;		/* the sandbox's control group, held */
+
 	/* the grant */
 	struct page *grant_pages;
+	unsigned int grant_order;
 	struct klet_boot_args boot;
 
 	unsigned int nr_vcpus;
 	struct klet_carrier *vcpus[KLET_MAX_VCPUS];
+	struct klet_vcpu_slot vslot[KLET_MAX_VCPUS];
 
 	spinlock_t lock;
-	wait_queue_head_t root_wq;
+	/* vCPU 0 waits here until every carrier has arrived */
+	wait_queue_head_t arrive_wq;
+	unsigned int arrived;
+	bool started;			/* the first carrier has arrived */
 
 	/* carriers */
 	struct list_head carriers;
@@ -492,16 +588,18 @@ struct klet_inst {
 	struct klet_mem_stats *mem_stats;
 
 	/*
-	 * The memory controller's owner of every tenant address space: the root
-	 * carrier, pinned from the sandbox's start to its destroy, and cleared
-	 * from every remaining mm before it is unpinned.
+	 * The memory controller's owner of every tenant address space: the
+	 * holder's group leader, pinned from KLET_CREATE until the sandbox's
+	 * spaces are gone, and cleared from every remaining mm before it is
+	 * unpinned.
 	 */
 	struct task_struct *owner;
 
 	/* the kernelet-stack pool: every stack ever made, busy or free */
 	struct list_head kstack_all;
+	unsigned int kstack_max;	/* the pool's bound: max_tasks + nr_vcpus */
 	unsigned int kstack_made;	/* the pool's size, against its bound */
-	unsigned int kstack_total;	/* stacks made over the module's life */
+	unsigned int kstack_total;	/* stacks made over the sandbox's life */
 	unsigned int kstack_returned;	/* ... and given back to vmalloc */
 
 	/*
@@ -521,47 +619,38 @@ struct klet_inst {
 	atomic64_t heap_reaped;		/* ... freed when the sandbox ended */
 	atomic64_t heap_bad_frees;	/* mem_free of an address that is not a block */
 
-	bool stopped;	/* the kernelet asked to power off */
-	bool dying;	/* the sandbox is being destroyed from outside */
-	bool root_gone;	/* the root carrier's lifeline is closed: no carrier may start */
-	u64 exit_code;
+	/*
+	 * The end (sandbox.c, klet_end). `stopped`: the kernel proper powered
+	 * off. `dying`: the sandbox has been marked dying, for whatever reason,
+	 * stop included; no carrier may arrive after it. `exited`: every carrier
+	 * is gone since, and `exit` is final. `released`: the last copy of the
+	 * sandbox descriptor is closed. `destroyed`: everything is given back.
+	 */
+	bool stopped;
+	bool dying;
+	bool exited;
+	bool released;
+	bool destroyed;
+	bool exit_claimed;		/* someone is running klet_sandbox_exited() */
+	bool sweep_armed;
+	struct klet_exit exit;
+	wait_queue_head_t exit_wq;
+	struct work_struct destroy_work;
 
-	int root_lifeline_fd;
-
-	/* the sandbox's command line, from the .klet file */
+	/* the sandbox's command line, from KLET_CREATE */
 	char *cmdline;
 
-	/* statistics, for the log */
-	atomic_t sweeps;
-	atomic_t evictions;
-	atomic_t ticks;
-	atomic_t watch_fires;		/* requested firings of the watch timer (kicks) */
-	atomic_t kick_ipis;		/* kick IPIs that found their carrier running */
-	atomic_t fires_redirected;	/* requested firings that delivered an upcall */
-	atomic_t fires_elsewhere;	/* ... that found user mode, a service or Linux code */
-	atomic_t fires_masked;		/* ... that found a critical section */
-	atomic_t virqs;			/* upcalls delivered by redirect */
-	atomic_t deferrals;		/* ticks that found the vCPU masked */
-	atomic_t longest_defer_us;	/* the longest such run, in microseconds */
+	/* the console and the log, drained by out_work */
+	struct klet_out console, log;
+	struct work_struct out_work;
+	atomic64_t log_dropped;
+
+	atomic64_t service_calls;
+	struct klet_counters n;
+	atomic_t longest_defer_us;	/* the longest deferral, in microseconds */
 	atomic_t longest_tick_gap_us;	/* the longest gap between two ticks of a running watch timer */
-	atomic_t forced_yields;
 	atomic_t forced_recorded;
 	struct klet_forced_rec forced_rec[KLET_FORCED_RECORDS];
-	atomic_t yields;		/* voluntary vcpu_yield service calls */
-	atomic_t bad_preempt;		/* involuntary switch-out while masked */
-	atomic_t on_spins;
-	atomic_t yield_tos;
-	atomic_t mm_switches;
-	atomic_t fpu_swaps;
-	atomic_t fpu_rejects;
-	atomic_t mirror_faults;
-	/* Where a fatal signal to a carrier of the live sandbox was acted on. */
-	atomic_t kills_in_service;
-	atomic_t kills_in_kernelet;
-	/* Carrier records allocated and freed: equal once every carrier is gone. */
-	atomic_t carriers_made;
-	atomic_t carriers_freed;
-	atomic_t stolen_ms;
 
 	/* What one service costs, measured on the first log line (carrier.c). */
 	u64 stub_cycles;
@@ -569,7 +658,23 @@ struct klet_inst {
 	bool stub_reported;
 };
 
-extern struct klet_inst klet_inst;
+/* The module's totals, of every sandbox destroyed (main.c). */
+struct klet_totals {
+	struct klet_counters n;
+	atomic_t sweeps;
+	atomic_t longest_defer_us;
+	atomic_t longest_tick_gap_us;
+	atomic_t forced_recorded;
+	struct klet_forced_rec forced_rec[KLET_FORCED_RECORDS];
+	atomic64_t heap_allocs, heap_frees, heap_reaped, heap_bad_frees;
+	atomic_t kstack_total, kstack_returned;
+	/* Carrier records allocated and freed: equal once every carrier is gone. */
+	atomic_t carriers_made, carriers_freed;
+	atomic_t sandboxes;
+	struct klet_mem_stats mem;
+};
+extern struct klet_totals klet_totals;
+
 extern const struct klet_services klet_services;
 extern bool klet_mirror;
 
@@ -619,7 +724,7 @@ static inline bool klet_mirrored(struct klet_carrier *c)
  */
 static inline bool klet_in_kernelet(struct klet_carrier *c)
 {
-	return c->kind != KLET_ROOT && READ_ONCE(c->state) == KLET_RUNNING &&
+	return READ_ONCE(c->state) == KLET_RUNNING &&
 	       READ_ONCE(c->depth) == 0 && !READ_ONCE(c->idle) && !c->evicted;
 }
 
@@ -629,13 +734,17 @@ static inline bool klet_in_grant(struct klet_inst *inst, u64 paddr, u64 len)
 	       paddr + len <= inst->boot.grant_paddr + inst->boot.grant_len;
 }
 
-static inline bool klet_in_image_text(unsigned long ip)
+/* Is ip in the executable sections of a kind's loaded image? */
+static inline bool klet_in_kernelet_text(const struct klet_kind *kind, unsigned long ip)
 {
-	return ip >= (unsigned long)__klet_image_text_start &&
-	       ip < (unsigned long)__klet_image_text_end;
+	return ip >= kind->text_lo && ip < kind->text_hi;
 }
 
-const char *klet_kind_name(enum klet_kind kind);
+/* ... of the sandbox's kind? */
+static inline bool klet_in_image_text(struct klet_inst *inst, unsigned long ip)
+{
+	return klet_in_kernelet_text(inst->kind, ip);
+}
 
 /* ------------------------------------------------------------------ */
 /* Services that run on the carrier's Linux stack                     */
@@ -665,6 +774,7 @@ enum klet_svc_op {
 	KLET_SVC_VM_FLUSH,
 	KLET_SVC_VM_WAIT,
 	KLET_SVC_VM_WAKE,
+	KLET_SVC_CONSOLE_WRITE,
 };
 
 /*
@@ -694,19 +804,45 @@ void klet_yield_stub(void);
 void klet_svc_body(struct klet_svc_args *args);
 void klet_evict_leave(void);
 unsigned long klet_yield_body(void);
-struct klet_carrier *klet_carrier_new(struct klet_inst *inst, enum klet_kind kind,
-				      int vcpu);
+struct klet_carrier *klet_carrier_new(struct klet_inst *inst, int vcpu);
 struct klet_carrier *klet_carrier_get(struct klet_carrier *c);
 void klet_carrier_put(struct klet_carrier *c);
 int klet_carrier_attach(struct klet_carrier *c);
 void klet_carrier_lifeline_closed(struct klet_carrier *c);
+void klet_carrier_die(struct klet_carrier *c);
+void klet_kill_carriers(struct klet_inst *inst);
+void klet_sandbox_gone(struct klet_inst *inst);
 void klet_stop_instance(struct klet_inst *inst, u64 code);
-void klet_kill_instance(struct klet_inst *inst);
 void klet_virq_raise(struct klet_carrier *c, u32 bit);
 extern const struct carrier_event_hooks klet_carrier_hooks;
 
 /* main.c */
 struct file *klet_lifeline_create(struct klet_carrier *c);
+int klet_publish_host_offsets(struct klet_inst *inst);
+u64 klet_fpu_area_size(void);
+extern struct workqueue_struct *klet_wq;
+extern struct mutex klet_table_lock;
+extern struct klet_kind klet_kinds[KLET_MAX_KINDS];
+extern struct klet_inst *klet_sandboxes[KLET_MAX_SANDBOXES];
+
+/* image.c: the kernelet image loader */
+int klet_image_load(struct klet_kind *kind, const void *buf, size_t len);
+void klet_image_free(struct klet_kind *kind);
+void klet_image_restore(struct klet_kind *kind);
+
+/* sandbox.c: KLET_CREATE, the sandbox descriptor, the exec descriptors, the end */
+long klet_sandbox_create(struct klet_create __user *uarg);
+struct linux_binprm;
+struct klet_inst *klet_exec_lookup(struct linux_binprm *bprm, unsigned int *vcpu);
+int klet_exec_claim(struct klet_inst *inst, unsigned int vcpu);
+void klet_exec_unclaim(struct klet_inst *inst, unsigned int vcpu);
+int klet_sandbox_start(struct klet_inst *inst);
+void klet_inst_get(struct klet_inst *inst);
+void klet_inst_put(struct klet_inst *inst);
+void klet_end(struct klet_inst *inst, u32 how, s32 code, u32 reason);
+void klet_sandbox_exited(struct klet_inst *inst);
+void klet_out_write(struct klet_inst *inst, struct klet_out *out, const char *ptr, u64 len);
+void klet_check_exited_locked(struct klet_inst *inst, bool *claim);
 
 /* main.c: the test hook (module parameters) */
 extern bool klet_test_hooks;

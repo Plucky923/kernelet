@@ -80,7 +80,7 @@ static void klet_sched_in(struct preempt_notifier *pn, int cpu)
 			u64 stolen = now - c->off_cpu_ns;
 
 			c->vrec.stolen_ns += stolen;
-			atomic_add((int)(stolen / NSEC_PER_MSEC), &c->inst->stolen_ms);
+			atomic_add((int)(stolen / NSEC_PER_MSEC), &c->inst->n.stolen_ms);
 		}
 		c->off_cpu_ns = 0;
 	}
@@ -113,7 +113,7 @@ static void klet_sched_out(struct preempt_notifier *pn, struct task_struct *next
 	if (READ_ONCE(current->__state) != TASK_RUNNING)
 		return;
 
-	atomic_inc(&c->inst->bad_preempt);
+	atomic_inc(&c->inst->n.bad_preempt);
 }
 
 static void klet_sched_out_common(struct preempt_notifier *pn)
@@ -215,7 +215,7 @@ void klet_do_on_spin(struct klet_carrier *c)
 		return;
 	c->last_on_spin = jiffies;
 
-	atomic_inc(&inst->on_spins);
+	atomic_inc(&inst->n.on_spins);
 
 	for (i = 0; i < inst->nr_vcpus; i++) {
 		struct klet_carrier *o;
@@ -243,7 +243,7 @@ void klet_do_on_spin(struct klet_carrier *c)
 			int r = yield_to(t, false);
 
 			if (r > 0) {
-				atomic_inc(&inst->yield_tos);
+				atomic_inc(&inst->n.yield_tos);
 				klet_carrier_put(o);
 				return;
 			}
@@ -281,7 +281,7 @@ static void klet_kick_ipi(void *arg)
 
 	if (!current->carrier_hooks || current->carrier_hooks != &c->hooks)
 		return;
-	atomic_inc(&c->inst->kick_ipis);
+	atomic_inc(&c->inst->n.kick_ipis);
 	klet_watch_fire_now();
 }
 

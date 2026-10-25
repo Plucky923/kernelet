@@ -16,7 +16,7 @@ run on Linux.
 ## How it is built
 
 `make image` (the default `KLET_KERNEL=hello`) builds the crate with vOSTD as
-its `ostd` and pre-links both into the endovisor's `image.o_shipped`.
+its `ostd` and pre-links both into the image, `.build/hello.image`.
 `hello.S` is assembled with `gcc -static -nostdlib` into `kernels/hello/hello`, which
 the kernel embeds with `include_bytes!("../hello")`.
 

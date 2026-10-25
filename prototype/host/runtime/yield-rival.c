@@ -1,23 +1,20 @@
 /*
- * run-yield: the kernelet runtime for the yield kernel.
+ * yield-rival: the two Linux processes the yield test runs beside the
+ * sandbox, started by run-test before the holder (kernels/yield).
  *
- * Two children, both pinned to CPU 0:
+ *  - `yield-rival competitor`: an ordinary Linux process pinned to CPU 0,
+ *    where the holder pins the sandbox's one carrier (-p), doing the *same*
+ *    computation as the yield kernel in user space and printing a progress
+ *    line every quarter second of wall clock. It is both the thing that
+ *    starves and the independent reference for the checksum. If kernelet code
+ *    cannot be preempted, the competitor prints nothing at all while the
+ *    kernelet computes, and the gap in its timestamps is the stall. If the
+ *    watch timer works, it keeps printing, and its final checksum is
+ *    bit-identical to the kernelet's.
+ *  - `yield-rival prodder`: the grace-period prodder, on CPU 1, until it is
+ *    killed.
  *
- *  - the sandbox: it execs /yield.klet, and the kernelet's one task computes for
- *    several seconds inside the kernelet without ever reaching a voluntary
- *    preemption point;
- *  - the competitor: an ordinary Linux process doing the *same* computation in
- *    user space, printing a progress line every quarter second of wall clock.
- *
- * The competitor is both the thing that starves and the independent reference for
- * the checksum. If kernelet code cannot be preempted, the competitor prints
- * nothing at all while the kernelet computes, and the gap in its timestamps is
- * the stall. If the watch timer works, it keeps printing, and its final checksum
- * is bit-identical to the kernelet's.
- *
- * The parent pins itself to CPU 1 so that it can always report.
- *
- * Built static: gcc -static -O2 -o run-yield run-yield.c
+ * Built static: gcc -static -O2 -o yield-rival yield-rival.c
  */
 
 #define _GNU_SOURCE
@@ -36,8 +33,6 @@
 #include <time.h>
 #include <unistd.h>
 
-#define KLET_PATH "/yield.klet"
-#define MODULE_NAME "endovisor"
 
 /* Must match yield/src/lib.rs. */
 #define ROUNDS 800000000ULL
@@ -76,16 +71,6 @@ static void outf(const char *fmt, ...)
 	out(buf);
 }
 
-static void msleep(int ms)
-{
-	struct timespec ts = {
-		.tv_sec = ms / 1000,
-		.tv_nsec = (long)(ms % 1000) * 1000 * 1000,
-	};
-
-	nanosleep(&ts, NULL);
-}
-
 static long long now_ms(void)
 {
 	struct timespec ts;
@@ -103,52 +88,6 @@ static void pin_to(int cpu)
 	if (sched_setaffinity(0, sizeof(set), &set) != 0)
 		outf("RUN-YIELD: sched_setaffinity(cpu %d) failed: %s\n", cpu,
 		     strerror(errno));
-}
-
-static int module_refcount(void)
-{
-	char line[512];
-	FILE *f;
-	int refs = -1;
-
-	f = fopen("/proc/modules", "re");
-	if (!f)
-		return -1;
-	while (fgets(line, sizeof(line), f)) {
-		char name[128];
-		unsigned long size;
-		int n;
-
-		if (sscanf(line, "%127s %lu %d", name, &size, &n) != 3)
-			continue;
-		if (strcmp(name, MODULE_NAME) == 0) {
-			refs = n;
-			break;
-		}
-	}
-	fclose(f);
-	return refs;
-}
-
-static void wait_for_module_idle(int timeout_ms)
-{
-	int waited = 0;
-	int refs;
-
-	for (;;) {
-		refs = module_refcount();
-		if (refs <= 0)
-			break;
-		if (waited >= timeout_ms) {
-			outf("RUN-YIELD: module still has %d reference(s) after %d ms\n",
-			     refs, waited);
-			return;
-		}
-		msleep(5);
-		waited += 5;
-	}
-	outf("RUN-YIELD: no carrier left (module references: %d)\n",
-	     refs < 0 ? 0 : refs);
 }
 
 /*
@@ -247,78 +186,12 @@ static void prodder(void)
 	}
 }
 
-int main(void)
+int main(int argc, char **argv)
 {
-	char *const argv[] = { (char *)KLET_PATH, NULL };
-	char *const envp[] = { NULL };
-	pid_t sandbox, rival, prod, done;
-	int status = 0;
-	long long t0;
-
-	pin_to(1);
-	out("RUN-YIELD: creating a sandbox from " KLET_PATH " on cpu 0\n");
-
-	prod = fork();
-	if (prod < 0) {
-		outf("RUN-YIELD: fork (prodder) failed: %s\n", strerror(errno));
-		return 1;
-	}
-	if (prod == 0)
-		prodder();
-
-	rival = fork();
-	if (rival < 0) {
-		outf("RUN-YIELD: fork (competitor) failed: %s\n", strerror(errno));
-		return 1;
-	}
-	if (rival == 0)
+	if (argc == 2 && strcmp(argv[1], "competitor") == 0)
 		competitor();
-
-	/* Give the competitor a moment to start reporting before the kernelet runs. */
-	msleep(300);
-
-	t0 = now_ms();
-	sandbox = fork();
-	if (sandbox < 0) {
-		outf("RUN-YIELD: fork (sandbox) failed: %s\n", strerror(errno));
-		kill(rival, SIGKILL);
-		return 1;
-	}
-	if (sandbox == 0) {
-		/* The carrier inherits this, so it has to be set before the exec. */
-		pin_to(0);
-		if (prctl(PR_SET_NO_NEW_PRIVS, 1, 0, 0, 0) != 0)
-			outf("RUN-YIELD: PR_SET_NO_NEW_PRIVS failed: %s\n",
-			     strerror(errno));
-		execve(KLET_PATH, argv, envp);
-		outf("RUN-YIELD: execve %s failed: %s\n", KLET_PATH, strerror(errno));
-		_exit(127);
-	}
-
-	do {
-		done = waitpid(sandbox, &status, 0);
-	} while (done < 0 && errno == EINTR);
-
-	if (done < 0)
-		outf("RUN-YIELD: waitpid failed: %s\n", strerror(errno));
-	else if (WIFEXITED(status))
-		outf("RUN-YIELD: root carrier (pid %d) exited %d after %lld ms\n",
-		     sandbox, WEXITSTATUS(status), now_ms() - t0);
-	else if (WIFSIGNALED(status))
-		outf("RUN-YIELD: root carrier (pid %d) killed by signal %d after %lld ms\n",
-		     sandbox, WTERMSIG(status), now_ms() - t0);
-
-	wait_for_module_idle(10000);
-
-	do {
-		done = waitpid(rival, &status, 0);
-	} while (done < 0 && errno == EINTR);
-
-	kill(prod, SIGKILL);
-	do {
-		done = waitpid(prod, &status, 0);
-	} while (done < 0 && errno == EINTR);
-
-	out("RUN-YIELD: done\n");
-	return 0;
+	if (argc == 2 && strcmp(argv[1], "prodder") == 0)
+		prodder();
+	out("usage: yield-rival competitor|prodder\n");
+	return 2;
 }

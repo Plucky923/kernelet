@@ -18,19 +18,38 @@ needs; everything else is the endovisor module. It adds, behind
 - `kernelet_switch_mm()`, which makes the current user task run in another
   address space, modelled on `exec_mmap()` with the concurrency-id brackets
   (`kernel/fork.c`);
-- `kernelet_mm_alloc()`, `mm_alloc()` with the sandbox's root carrier as the
+- `kernelet_mm_alloc()`, `mm_alloc()` with the sandbox's owner task as the
   memory controller's owner of the new address space (`kernel/fork.c`);
 - two exports, of the two functions the endovisor needs that Linux does not
   already export: `kernel_clone` (`kernel/fork.c`), which clones the vCPU
   carriers, and `flush_tlb_mm_range` (`arch/x86/mm/tlb.c`), the synchronous
   flush of `vm_flush`;
-- the Kconfig entry, which selects `PREEMPT_NOTIFIERS` (`init/Kconfig`).
+- the Kconfig entry, which selects `PREEMPT_NOTIFIERS` (`init/Kconfig`);
+- four more exports, for the endovisor's own image loader and its
+  registration of an image: `execmem_alloc` and `execmem_free`
+  (`mm/execmem.c`), which allocate an image's memory where modules live,
+  within 2 GiB of the kernel's text as the image's code model needs;
+  `set_memory_rox` (`arch/x86/mm/pat/set_memory.c`), which makes its text
+  read-only and executable once it is relocated; and the variable
+  `modules_disabled` (`kernel/module/main.c`), which `KLET_KIND_REGISTER`
+  checks as `init_module` does. Each is one `EXPORT_SYMBOL_GPL` line:
 
-It adds 219 lines (198 of them not blank) and removes none, counted with
+  ```text
+  mm/execmem.c                  +EXPORT_SYMBOL_GPL(execmem_alloc);
+  mm/execmem.c                  +EXPORT_SYMBOL_GPL(execmem_free);
+  arch/x86/mm/pat/set_memory.c  +EXPORT_SYMBOL_GPL(set_memory_rox);
+  kernel/module/main.c          +EXPORT_SYMBOL_GPL(modules_disabled);
+  ```
+
+  `kernel_clone` is no longer used: the carriers are the holder's children,
+  made by `fork`; its export stays in the patch.
+
+It adds 223 lines (202 of them not blank) and removes none, counted with
 `git apply --numstat`.
 
 The book explains the patch in chapter 5 (carrier hooks), `kernel_clone` in
-chapter 6 (carriers), and the two address-space helpers in chapter 13.
+chapter 6 (carriers), the two address-space helpers in chapter 13, and the
+image loader's exports in chapter 2.
 
 ## How it is applied
 
@@ -38,4 +57,8 @@ chapter 6 (carriers), and the two address-space helpers in chapter 13.
 idempotent: a reverse dry run that succeeds means the patch is already in. It
 leaves a stamp, `.build/linux-6.12/.carrier-hooks-patch`, so it runs once per
 change of the patch file, and `make source` and `make linux` both go through
-it. The patch was generated with `diff -u` against pristine v6.12 files.
+it. The patch was generated with `diff -u` against pristine v6.12 files. A
+tree that has an older version of the patch applied is not brought up to
+date by `make patch`: the reverse dry run of the new patch fails and the
+forward one finds most of it applied already. Apply the difference by hand
+(the four export hunks were applied so) or start from a pristine tree.

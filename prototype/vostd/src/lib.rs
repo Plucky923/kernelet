@@ -75,6 +75,9 @@ pub(crate) unsafe extern "C" fn kernelet_entry(
     svc: *const abi::Services,
 ) {
     abi::init_tables(boot, svc);
+    // A vCPU starts with its interrupts masked; the record can be found now,
+    // so an upcall can be taken.
+    task::preempt::cpu_local::set_irq_off(false);
 
     let args = &*boot;
     cpu::init(args.nr_vcpus as usize);
@@ -119,6 +122,9 @@ pub(crate) unsafe extern "C" fn kernelet_entry(
 ///
 /// The caller must have entered the image at `kernelet_entry` on vCPU 0 first.
 pub(crate) unsafe extern "C" fn vcpu_entry(id: u64) {
+    // A vCPU starts with its interrupts masked; vCPU 0 has published the host
+    // offsets, so this one's record can be found, and an upcall taken.
+    task::preempt::cpu_local::set_irq_off(false);
     crate::early_println!("vOSTD: virtual CPU {} up", id);
     boot::smp::run_ap_entry();
     task::scheduler::vcpu_idle_loop()
