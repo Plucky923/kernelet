@@ -87,7 +87,7 @@ The record is embedded in the endovisor's per-carrier structure, directly after 
 
 </div>
 
-When it creates the root carrier, the endovisor computes the `%gs`-relative offset of the current-task pointer, checks it by reading the pointer back and comparing it with `current`, and publishes it in the boot arguments together with the offset of the hooks pointer inside `task_struct` and the offset of the record from the hooks. vOSTD then finds its record with two dependent loads and no call:
+When a sandbox starts, the endovisor computes the `%gs`-relative offset of the current-task pointer, checks it by reading the pointer back and comparing it with `current`, and publishes it in the boot arguments together with the offset of the hooks pointer inside `task_struct` and the offset of the record from the hooks. vOSTD then finds its record with two dependent loads and no call:
 
 *Simplified from `prototype/vostd/src/vcpu.rs`: `vrec`.*
 

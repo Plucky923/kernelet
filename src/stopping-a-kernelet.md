@@ -12,7 +12,7 @@ Once a carrier has left the image for good, no code from it runs on that carrier
 
 ## Stopping from inside
 
-The kernel proper's `poweroff` is the service `stop`, and a panic in the kernelet ends in the same service. On the endovisor's side it marks the instance and sends `SIGKILL` to every carrier, the caller included; then the calling carrier leaves its kernelet stack for the last time.
+The kernel proper's `poweroff` is the service `stop`, and a panic in the kernelet ends in the same service. On the endovisor's side it records the exit code for the holder's `KLET_WAIT`, marks the instance as dying, sends `SIGKILL` to every carrier, the caller included, and arms the eviction sweep of the end of this chapter; then the calling carrier leaves its kernelet stack for the last time.
 
 *Simplified from `prototype/linux/endovisor/carrier.c`: `klet_stop_instance`, `klet_svc_stop`, `klet_carrier_die`.*
 
@@ -20,11 +20,8 @@ The kernel proper's `poweroff` is the service `stop`, and a panic in the kernele
 void klet_stop_instance(struct klet_inst *inst, u64 code)
 {
 	inst->stopped = true;
-	inst->exit_code = code;
 	pr_info("kernelet: stopped, exit code %llu\n", code);
-	list_for_each_entry(c, &inst->carriers, link)
-		send_sig(SIGKILL, c->task, 1);          /* every carrier, root included */
-	wake_up_all(&inst->root_wq);               /* and the root carrier; each idle carrier's own queue is woken too */
+	klet_end(inst, KLET_END_EXITED, code, 0);    /* every end of a sandbox goes through klet_end: the next section shows it */
 }
 
 static void klet_svc_stop(u64 code)              /* the service, called by the kernelet */
@@ -55,21 +52,23 @@ Where each carrier is at the moment of the mark decides what stops it:
 
 ## Stopping from outside
 
-The operator kills a carrier, or the out-of-memory killer does, or the test's runtime does it (`make probe`, at the end of this chapter): `kill(pid, SIGKILL)` on the root carrier's process id, or on a virtual CPU's. The root carrier is in its resume hook, sleeping in `wait_event_interruptible`; the signal wakes it, it dies, and Linux closes its descriptors, among them its lifeline. A virtual CPU's carrier dies the same way if the signal finds it in user mode; where Linux's exit path cannot reach it, the endovisor looks for the signal itself, as the end of this section shows. Either lifeline's release is the endovisor's notice:
+The operator kills a carrier, or the out-of-memory killer does, or the holder does it (`make probe`, at the end of this chapter): `kill(pid, SIGKILL)` on a carrier's process id. The carrier dies in Linux's exit path if the signal finds it in user mode, and Linux closes its descriptors, among them its lifeline; where Linux's exit path cannot reach it, the endovisor looks for the signal itself, as the end of this section shows. The lifeline's release is the endovisor's notice:
 
-*Simplified from `prototype/linux/endovisor/carrier.c`: `klet_carrier_lifeline_closed`, `klet_kill_instance`, `klet_sandbox_gone`.*
+*Simplified from `prototype/linux/endovisor/carrier.c`: `klet_carrier_lifeline_closed`.*
 
 ```c
 void klet_carrier_lifeline_closed(struct klet_carrier *c)
 {
-	bool live = !inst->stopped && !inst->dying;  /* the sandbox was running when this carrier died */
-	list_del_init(&c->link);
-	last = atomic_dec_and_test(&inst->nr_carriers);
-	if ((c->kind == KLET_ROOT || live) && !last)
-		klet_kill_instance(inst);                /* a carrier's death is the sandbox's death */
 	/* release what a carrier killed in user mode never detached: its stack, its empty address space */
-	if (last)
-		klet_sandbox_gone(inst);                 /* the address spaces, the heap blocks still held, the stack pool */
+	list_del_init(&c->link);
+	live = !inst->dying;                         /* the sandbox was running when this carrier died */
+	last = atomic_dec_and_test(&inst->nr_carriers);
+	if (!live)
+		klet_check_exited_locked(inst, &claim);  /* the last carrier of a dying sandbox: its exit is this caller's to run */
+	if (live)
+		klet_end(inst, KLET_END_KILLED, 0, KLET_KILLED_CARRIER_LOST);   /* a carrier's death is the sandbox's death */
+	else if (claim)
+		klet_sandbox_exited(inst);               /* the address spaces, the heap blocks still held, the stack pool; KLET_WAIT returns */
 	if (c->task == current) {                    /* undo its attachment, which only its own task may do */
 		current->carrier_hooks = NULL;
 		klet_sched_detach(c);
@@ -79,17 +78,31 @@ void klet_carrier_lifeline_closed(struct klet_carrier *c)
 	else
 		pr_warn("kernelet: carrier record released away from its task; kept\n");
 }
+```
 
-void klet_kill_instance(struct klet_inst *inst)
+*Simplified from `prototype/linux/endovisor/sandbox.c`: `klet_end`.*
+
+```c
+void klet_end(struct klet_inst *inst, u32 how, s32 code, u32 reason)
 {
-	inst->dying = true;                          /* a test-and-set under the lock: the message below prints once */
-	list_for_each_entry(c, &inst->carriers, link)
-		send_sig(SIGKILL, c->task, 1);
-	klet_evict_arm(inst);                        /* for whoever is inside kernelet code */
+	if (!inst->exit.how) {                       /* the first end records why, for KLET_WAIT */
+		inst->exit.how = how;
+		inst->exit.code = code;
+		inst->exit.reason = reason;
+	}
+	first_mark = !inst->dying;                   /* a test-and-set under the lock */
+	inst->dying = true;
+	klet_check_exited_locked(inst, &claim);      /* no carrier left? then the sandbox has exited already */
+	if (first_mark) {
+		klet_kill_carriers(inst);                /* SIGKILL to every carrier, and every sleep of theirs ended */
+		klet_evict_arm(inst);                    /* for whoever is inside kernelet code */
+	}
+	if (claim)
+		klet_sandbox_exited(inst);
 }
 ```
 
-Any carrier's death while the sandbox is running ends it: a sandbox that had lost a virtual CPU would otherwise run on, with the others spinning on whatever locks the lost one held. The root's death ends it even after the kernelet has stopped itself, for a reason the next section makes clear: a virtual CPU that the stop left spinning in kernel mode never passes through a hook again to die, and only the eviction that `klet_kill_instance` arms gets it out.
+Any carrier's death while the sandbox is running ends it: a sandbox that had lost a virtual CPU would otherwise run on, with the others spinning on whatever locks the lost one held. Every end, the kernelet's own stop included, goes through `klet_end` and arms the eviction sweep, for a reason the next section makes clear: a virtual CPU that the stop left spinning in kernel mode never passes through a hook again to die, and only eviction gets it out. The last carrier's death is the sandbox's exit, which releases what the kernelet held and wakes the holder's `KLET_WAIT`.
 
 A carrier of a virtual CPU that the operator kills directly while it is in user mode, before any mark is set, passes through the resume hook once more, since the signal counts as pending work, but the hook, finding no mark and (usually) no virtual interrupt pending, steps aside; Linux kills the task, and `klet_detach` never runs for it. (With a tick pending, the hook enters the kernelet, a service dooms the carrier, and it dies by the route of the next paragraph instead.) The lifeline's release frees what the detach would have: this is why the death notice, not the detach, is the place where a carrier's records are finally released, and, since the sandbox was running, where the rest of the sandbox is told to die. The record itself holds two references, the carrier's own, dropped here, and the lifeline file's, dropped when the file is released, and goes when both are gone. The carrier's own is dropped only if its task no longer points at the record: a lifeline released by some other task, through a copy of the descriptor, would leave the dying task's hooks pointer and preemption notifier aimed at freed memory, so such a record is kept instead, with a warning; the endovisor counts records made and freed at unload, and every test checks that none is left.
 
@@ -165,11 +178,11 @@ A carrier that is not on a processor at that instant is sent nothing; it is caug
 
 ## The test
 
-`make probe` runs the kernel in `prototype/kernels/probe/src/lib.rs`, whose handler for system call number 1000 is `loop {}`. The test's runtime waits a second and then kills the root carrier. The log shows the root's lifeline closing, the sweep being armed, the spinning carrier evicted by an early sweep at an address Linux's symbol lookup places inside the kernelet's user-task function, both carriers dying, and the module unloading with its reference count at zero. The build checks each of those lines and that Linux printed no warning, a check that means something only because the guest kernel is built with `CONFIG_BUG` on, which the minimal configuration it starts from turns off.
+`make probe` runs the kernel in `prototype/kernels/probe/src/lib.rs`, whose handler for system call number 1000 is `loop {}`. The holder waits a second and then sends `SIGKILL` to the carrier of virtual CPU 0, which is spinning in kernelet code. The log shows the watch timer finding the signal on it and killing it there, its lifeline closing and ending the sandbox, and the module unloading with its reference count at zero. A third boot of the test has the holder ask the endovisor instead, with `KLET_KILL`: the log then shows the sweep being armed and the spinning carrier evicted by an early sweep at an address Linux's symbol lookup places inside the kernelet image. The build checks each of those lines and that Linux printed no warning, a check that means something only because the guest kernel is built with `CONFIG_BUG` on, which the minimal configuration it starts from turns off.
 
 The same test exercises the other mechanisms of chapter 8 that the hundred-line kernel never reaches: a demand-paging fault (chapter 13), an illegal instruction (`ud2`, twice, so that the drain's re-ignoring of chapter 8 is exercised), a breakpoint (`int3`) and a privileged instruction (`hlt`), the last two being exceptions Linux reports with `SI_KERNEL`; the kernel proper steps past the three instructions, and the test reads the carrier's signal dispositions back and checks that everything but `SIGKILL` and `SIGSTOP` is ignored. The tenant also asks for a 4 MiB write, which the kernel proper refuses for want of memory rather than letting the host warn, and a second boot of the same test runs the tenant under a seccomp filter that kills on its endless system call, and checks that the sandbox ends by that signal.
 
-One of the memory tests, `make mem-kill`, kills a virtual CPU's carrier instead of the root, while its sibling is taking page faults in the same address space, and checks that the whole sandbox ends cleanly, with the module's reference count at zero. On the way it sends that carrier `SIGTERM` and `SIGUSR1`, and then two thousand rounds of `SIGQUIT`, `SIGABRT`, `SIGTSTP`, `SIGTTIN` and `SIGTTOU`, which chapter 8 said are discarded, and checks that it lives and that none of them reached its queue. Two more boots of the same test kill the carrier where Linux by itself would never act on the signal: once while it is idle in `vcpu_idle` with nothing to run, and once while it runs a kernel task that loops and calls no service. The log must show the sandbox ending within a bounded time after the kill, the endovisor's counter saying which path caught it, no stall report from Linux, and a clean unload.
+One of the memory tests, `make mem-kill`, kills a virtual CPU's carrier while its sibling is taking page faults in the same address space, and checks that the whole sandbox ends cleanly, with the module's reference count at zero. On the way it sends that carrier `SIGTERM` and `SIGUSR1`, and then two thousand rounds of `SIGQUIT`, `SIGABRT`, `SIGTSTP`, `SIGTTIN` and `SIGTTOU`, which chapter 8 said are discarded, and checks that it lives and that none of them reached its queue. Two more boots of the same test kill the carrier where Linux by itself would never act on the signal: once while it is idle in `vcpu_idle` with nothing to run, and once while it runs a kernel task that loops and calls no service. The log must show the sandbox ending within a bounded time after the kill, the endovisor's counter saying which path caught it, no stall report from Linux, and a clean unload.
 
 <div class="recap">
 

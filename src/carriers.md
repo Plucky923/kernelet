@@ -2,9 +2,7 @@
 
 Chapter 5 attached two hooks to a Linux task. This chapter is about those tasks: where they come from, what they inherit, and how the endovisor learns when one dies.
 
-The prototype's runtime does not yet use the interface of chapter 2. It starts a sandbox with one file and one `execve`, and a *root carrier*, a task that carries no virtual CPU, clones the others inside the kernel. This chapter describes the prototype as it is.
-
-A **carrier** is a Linux task that belongs to a sandbox. Linux schedules carriers like any tasks; it does not know what they carry. A sandbox has a fixed number of carriers, chosen when it is created: one **root carrier**, which holds the sandbox together and never runs kernelet code, and one carrier per **virtual CPU**, which runs the kernelet's code and enters user mode on the kernelet's behalf; a virtual CPU is one of the processors the kernelet believes it has. Chapter 9 says what a virtual CPU is in full; for now, a sandbox with one virtual CPU, like the hundred-line kernel's, has a root carrier and one other.
+A **carrier** is a Linux task that carries one of a sandbox's virtual CPUs: it runs the kernelet's code and enters user mode on the kernelet's behalf, and a virtual CPU is one of the processors the kernelet believes it has. Linux schedules carriers like any tasks; it does not know what they carry. A sandbox has a fixed number of them, one per virtual CPU, chosen when it is created, and nothing else of the sandbox is a task: the holder of chapter 2, which created the sandbox, is a process of the runtime and runs no kernelet code. Chapter 9 says what a virtual CPU is in full; for now, a sandbox with one virtual CPU, like the hundred-line kernel's, has one carrier.
 
 ## Why a carrier is not a kernel thread
 
@@ -12,33 +10,17 @@ Linux has a kind of task that runs only kernel code, the *kernel thread*, and it
 
 <div class="linux">
 
-**Linux: how tasks are made.** Almost every task is created by one function, [`kernel_clone()`](https://elixir.bootlin.com/linux/v6.12/source/kernel/fork.c#L2745), which underlies `fork`, `clone` and kernel-thread creation. It copies the parent's task structure and then, depending on flags, shares or copies the address space, open files and so on. Called with a function pointer in its arguments and *without* the kernel-thread flag, it makes a task that starts in that function in kernel mode and, when the function returns, continues to user mode with a copy of its parent's registers in which the instruction pointer, the stack pointer and `ax` are zero. That is how Linux itself starts `init`. The function is not exported to modules; the patch exports it.
-
-The other way to give a task a fresh address space is [`execve`](https://elixir.bootlin.com/linux/v6.12/source/fs/exec.c#L2097): Linux offers the file to each registered **binary-format handler** ([`struct linux_binfmt`](https://elixir.bootlin.com/linux/v6.12/source/include/linux/binfmts.h#L82)) in turn, and the one that recognizes the file replaces the process's address space and sets its starting registers. A module can register a handler of its own.
+**Linux: how tasks are made.** Almost every task is created by one function, [`kernel_clone()`](https://elixir.bootlin.com/linux/v6.12/source/kernel/fork.c#L2745), which underlies `fork`, `clone` and kernel-thread creation. It copies the parent's task structure and then, depending on flags, shares or copies the address space, open files and so on. A child made by `fork` is therefore a copy of its parent in every property Linux keeps on the task: control group, credentials, namespaces, processor mask, priority, resource limits, seccomp filter, and the hooks pointer the patch added. The other way to give a task a fresh address space is [`execve`](https://elixir.bootlin.com/linux/v6.12/source/fs/exec.c#L2097): Linux offers the file to each registered **binary-format handler** ([`struct linux_binfmt`](https://elixir.bootlin.com/linux/v6.12/source/include/linux/binfmts.h#L82)) in turn, and the one that recognizes the file replaces the process's address space and sets its starting registers. A module can register a handler of its own. What `exec` keeps of the task and what it resets is the box of chapter 2.
 
 </div>
 
-## The root carrier is born by exec
+## A carrier is born by fork and exec
 
-The endovisor registers a binary-format handler for files that begin with the four bytes `KLET`. A **sandbox file** is such a file: the magic, an ABI version, the number of virtual CPUs, and a command line for the kernel. The *kernelet runtime*, the host program that creates sandboxes, is in this prototype a tiny C program that forks a child, drops the child's ability to gain privileges, and executes the sandbox file:
-
-*Simplified from `prototype/host/runtime/run-hello.c`: `main`.*
-
-```c
-pid = fork();
-if (pid == 0) {
-	prctl(PR_SET_NO_NEW_PRIVS, 1, 0, 0, 0);
-	execve("/hello.klet", argv, envp);
-	_exit(127);
-}
-waitpid(pid, &status, 0);          /* until the sandbox has ended */
-```
-
-Everything the runtime set up on that child before the `execve`, such as its control group, its user identity and its seccomp filter, is inherited by every carrier, because every carrier descends from it. The prototype sets only the one `prctl`; a real runtime would set them all.
+Chapter 2 showed the user-space half. For each virtual CPU the holder asks the sandbox for an exec descriptor, forks a child, and the child, after arranging itself with ordinary system calls, executes the descriptor with `execveat`. Everything the child set on itself before the exec is what the carrier has, because `exec` keeps the task's properties and replaces only its program: its control group, which the holder joined before creating the sandbox; its processor mask and priority; its seccomp filter, if the runtime installed one. The prototype's holder sets the no-new-privileges bit, which the endovisor insists on, and whatever its options ask for.
 
 <div class="linux">
 
-**Linux: control groups.** A control group is a set of tasks that Linux accounts and limits together: their share of the processors, their memory, and more. A child starts in its parent's group. Containers are built on them, and so is a sandbox: because every carrier is in the sandbox's group, the processor time the kernelet burns is charged to the tenant by machinery Linux already has, and so is any memory allocated on a carrier with the flag that asks for it (`__GFP_ACCOUNT`). Linux charges the tenant's page tables that way by itself, to the carrier whose fault or mapping causes them; the endovisor charges the pages of the kernelet's stacks and its heap with the same flag (`GFP_KERNEL_ACCOUNT`); the one grant is allocated when the module loads, before any sandbox exists, and is not charged to anyone.
+**Linux: control groups.** A control group is a set of tasks that Linux accounts and limits together: their share of the processors, their memory, and more. A child starts in its parent's group, and `exec` does not change it. Containers are built on them, and so is a sandbox: `KLET_CREATE` records the holder's group, the exec of an exec descriptor is refused from any other group, and because every carrier is in the sandbox's group, the processor time the kernelet burns is charged to the tenant by machinery Linux already has, and so is any memory allocated on a carrier with the flag that asks for it (`__GFP_ACCOUNT`). Linux charges the tenant's page tables that way by itself, to the carrier whose fault or mapping causes them; the endovisor charges the grant, the pages of the kernelet's stacks and its heap with the same flag (`GFP_KERNEL_ACCOUNT`), all of them allocated on a carrier of the sandbox.
 
 </div>
 
@@ -48,136 +30,104 @@ Everything the runtime set up on that child before the `execve`, such as its con
 
 </div>
 
-The handler is where the child becomes the root carrier:
+The endovisor's half is the binary-format handler, where the child becomes the carrier:
 
-*Simplified from `prototype/linux/endovisor/main.c`: `klet_load_binary`, `klet_empty_mm`.*
+*Simplified from `prototype/linux/endovisor/main.c`: `klet_load_binary`, `klet_empty_mm`, `klet_ignore_signals`.*
 
 ```c
 static int klet_load_binary(struct linux_binprm *bprm)
 {
-	klet_read_config(inst, bprm, &nr_vcpus);   /* the magic, the version, the vCPU count */
+	if (memcmp(bprm->buf, KLET_EXEC_MAGIC, KLET_EXEC_MAGIC_LEN) != 0)
+		return -ENOEXEC;                        /* not ours: the next handler's turn */
+	inst = klet_exec_lookup(bprm, &vcpu);       /* which sandbox and virtual CPU, by the file's inode */
+	if (!inst)
+		return -ENOEXEC;
+	err = klet_exec_claim(inst, vcpu);          /* not killed; not started; the sandbox's group; no new privileges */
+	if (err)
+		return err;                             /* ESRCH, EBUSY or EPERM: the exec fails and the process lives on */
 
-	begin_new_exec(bprm);                       /* a fresh, empty address space; signal handlers reset (ignored signals stay ignored) */
+	begin_new_exec(bprm);                       /* the point of no return: a fresh address space, signal handlers reset */
 	klet_personality_64bit();
 	setup_new_exec(bprm);
 	klet_empty_mm();                            /* unmap the one area exec left: the argument stack */
 	set_binfmt(&klet_format);
 	finalize_exec(bprm);
+	start_thread(current_pt_regs(), 0, 0);      /* valid 64-bit user registers, though it never uses them */
+	klet_ignore_signals();                      /* every signal that can be ignored is: chapter 8 says why */
+	set_mask_bits(&current->mm->flags, MMF_DUMPABLE_MASK, SUID_DUMP_DISABLE);   /* not dumpable, whoever the holder is */
+	snprintf(comm, sizeof(comm), "kernelet/%d/%u", inst->slot, vcpu);          /* the name ps shows */
+	strscpy_pad(current->comm, comm, sizeof(current->comm));
 
-	start_thread(current_pt_regs(), 0, 0);      /* valid 64-bit user registers, even though it never uses them */
+	c = klet_carrier_new(inst, vcpu);
+	klet_carrier_attach(c);                     /* the hooks and the lifeline */
+	mmget(current->mm);                         /* keep a reference to the empty address space ... */
+	c->blank_mm = current->mm;                  /* ... which chapter 13 drops when a tenant's replaces it */
+	inst->vcpus[vcpu] = c;
 
-	root = klet_carrier_new(inst, KLET_ROOT, -1);
-	klet_carrier_attach(root);                  /* install the hooks and the lifeline */
-	sigprocmask(SIG_SETMASK, &none, NULL);      /* no signal blocked ... */
-	for (sig = 1; sig <= _NSIG; sig++)          /* ... and every one that can be ignored is: chapter 8 says why */
-		if (!sig_kernel_only(sig))              /* (SIGKILL and SIGSTOP cannot be) */
-			kernel_sigaction(sig, SIG_IGN);
+	if (!inst->started)                         /* the first arrival starts the sandbox: */
+		klet_sandbox_start(inst);               /* the image's data restored, the grant, the boot arguments */
+	inst->arrived++;
+	wake_up_all(&inst->arrive_wq);              /* virtual CPU 0 may be waiting for this one */
 
 	set_thread_flag(TIF_NOTIFY_RESUME);         /* make the resume hook run on the way out */
 	return 0;
 }
 ```
 
-Each line does what any program loader does, with one difference. The ELF loader would now map the program and its stack into the new address space; this handler maps nothing, and even unmaps the temporary page that holds the `execve` arguments, so that the address space is empty. Nothing of the host's is left in it for a tenant to read.
+Each line does what any program loader does, with one difference. The ELF loader would now map the program and its stack into the new address space; this handler maps nothing, and even unmaps the temporary page that holds the `execveat` arguments, so that the address space is empty. Nothing of the host's is left in it for a tenant to read.
 
-The call to `start_thread` looks pointless for a task that will never run user code, and is not: a task cloned from this one copies its saved registers, segment selectors and flags included, and those clones *will* run user code. The root carrier's registers are the template.
+Two lines undo what the holder's identity would otherwise leave. Linux makes a process that executed a file it cannot read non-dumpable, but root can read an execute-only file, so for a root holder the rule would leave the carrier dumpable; the handler clears the dumpable bits itself, for the carrier and, later, for every address space the kernelet creates. And `start_thread` gives the task a valid 64-bit user register frame, as every loader must; the resume hook will overwrite it before the task ever reaches user mode.
 
-The last line is the handoff. The root carrier returns from the handler and heads for user mode, as every `execve` does. On the way it passes through the exit loop, and because the flag is set, the resume hook runs. For the root carrier that hook returns only to die: it is where the root carrier does its work.
-
-## The root carrier starts the others
-
-*Simplified from `prototype/linux/endovisor/carrier.c`: `klet_root_loop`, `klet_spawn_vcpu`.*
-
-```c
-static void klet_root_loop(struct klet_carrier *root)
-{
-	for (i = 0; i < inst->nr_vcpus; i++)
-		klet_spawn_vcpu(inst, i);
-
-	for (;;) {                                   /* then sleep until the sandbox ends */
-		wait_event_interruptible(inst->root_wq,
-			inst->stopped || inst->dying || fatal_signal_pending(current));
-		if (inst->stopped || inst->dying || fatal_signal_pending(current))
-			break;
-		klet_drain_signals(root);                /* discard anything but SIGKILL */
-	}
-	klet_carrier_die(root);
-}
-
-static int klet_spawn_vcpu(struct klet_inst *inst, int vcpu)
-{
-	struct kernel_clone_args args = {
-		.flags = CLONE_UNTRACED,
-		.exit_signal = SIGCHLD,
-		.fn = klet_carrier_main,                 /* the child starts here, in kernel mode */
-		.fn_arg = (void *)(long)vcpu,
-	};
-	pid_t pid;
-
-	for (tries = 0; tries < 8; tries++) {
-		klet_drain_signals(klet_current_carrier());   /* kernel_clone refuses while a signal is pending (chapter 8) */
-		pid = kernel_clone(&args);
-		if (pid != -ERESTARTNOINTR)
-			break;
-	}
-	return pid >= 0 ? 0 : -EAGAIN;
-}
-```
-
-`wait_event_interruptible` is Linux's ordinary way to sleep until a condition holds: a waker *wakes* the queue the sleeper named, and the sleeper checks its condition again. An *interruptible* sleep also ends whenever a signal is pending for the task. The clones use the *killable* variant, which ends only for `SIGKILL`, because a `SIGSTOP` sent to a carrier stays pending until the carrier next heads for user mode (chapter 8) and must not end the wait early.
-
-Each clone is a separate process, not a thread: no `CLONE_VM`, no `CLONE_FILES`, no `CLONE_THREAD`. It gets a *copy* of the root's empty address space, a copy of its descriptor table, and, because Linux copies the task structure, the root's hooks pointer, syscall-work bit, control group, credentials and seccomp filter. The control group, the credentials and the seccomp filter it keeps as they came: the endovisor sets none of them up per carrier; `fork` does. The hooks pointer and the lifeline (defined below) it replaces at once: the clone's first act, below, is to clear the inherited pointer, so that nothing it does before it is attached can reach the root's record, then to attach a record of its own, and to close the inherited copy of the root's lifeline and open one of its own.
+The last line is the handoff. The carrier returns from the handler and heads for user mode, as every `execve` does. On the way it passes through the exit loop, and because the flag is set, the resume hook runs. The carrier never arrives in user mode on its own account: from here on it goes there only when the kernelet sends it.
 
 ```mermaid
 flowchart TB
-    rt["kernelet runtime<br/>(run-hello)"] -- "fork + execve(/hello.klet)" --> root["root carrier<br/>(the binary-format handler claimed it)<br/>never runs kernelet code"]
-    root -- "kernel_clone(.fn = klet_carrier_main)" --> v0["carrier of virtual CPU 0<br/>enters the image at kernelet_entry"]
-    root -- "kernel_clone(...)" --> v1["carrier of virtual CPU 1<br/>waits for vcpu_boot"]
-    subgraph inherited[" "]
+    h["the holder<br/>(a process of the runtime)"] -- "fork" --> ch["a child: pins itself,<br/>sets no-new-privileges,<br/>installs a filter if asked"]
+    ch -- "execveat(exec fd i)" --> hd["the binary-format handler:<br/>checks the group and the bit,<br/>empties the address space"]
+    hd --> c["the carrier of virtual CPU i<br/>named kernelet/slot/i"]
+    subgraph kept["kept across the exec, because they belong to the task"]
         direction TB
-        i0["<b>inherited by every clone,<br/>because Linux copies it</b>"] ~~~ i1["hooks pointer<br/>(replaced by its own)"] --- i2[empty address space] --- i3[control group]
-        i3 --- i4[seccomp filter] --- i5["lifeline, see below<br/>(replaced by its own)"]
+        k1[control group] --- k2[seccomp filter] --- k3[processor mask, priority] --- k4[credentials, namespaces]
     end
-    root -. "copied at the clone" .-> inherited
+    subgraph set["set by the handler"]
+        direction TB
+        s1["an empty address space"] --- s2["every signal ignored"] --- s3["not dumpable"] --- s4["the hooks pointer and a lifeline"]
+    end
+    ch -.-> kept
+    hd -.-> set
 ```
 
-The child's start function builds the carrier's record and enters the kernelet:
+## Entering the kernelet
 
-*Simplified from `prototype/linux/endovisor/carrier.c`: `klet_carrier_main`.*
+The resume hook is where a new carrier enters the kernelet, once every carrier of the sandbox has arrived. Its first trip through the hook finds the carrier in the state `NEW`:
+
+*Simplified from `prototype/linux/endovisor/carrier.c`: `klet_on_resume`, `klet_vcpu_await`.*
 
 ```c
-static int klet_carrier_main(void *arg)
-{
-	int vcpu = (int)(long)arg;
-
-	clear_syscall_work(KERNELET);               /* not a carrier until attached: the inherited pointer must not be used */
-	current->carrier_hooks = NULL;
-	f = fget(inst->root_lifeline_fd);           /* the inherited copy of the root's lifeline: close it, and drop */
-	close_fd(inst->root_lifeline_fd);           /* the reference now rather than at the next return to user mode, */
-	__fput_sync(f);                             /* in case the root died meanwhile and this copy was the last */
-	c = klet_carrier_new(inst, KLET_VCPU, vcpu);
-	klet_carrier_attach(c);                     /* this task's own hooks and lifeline */
-	mmget(current->mm);                         /* keep a reference to the empty address space ... */
-	c->blank_mm = current->mm;                  /* ... which chapter 13 drops when a tenant's replaces it */
-	inst->vcpus[vcpu] = c;
-
-	if (vcpu != 0) {                            /* virtual CPU 0 boots; the others wait to be started */
-		wait_event_state(c->idle_wq, c->boot_requested || inst->dying,   /* only SIGKILL cuts the wait short; */
-				 TASK_KILLABLE | TASK_NOLOAD);                                 /* NOLOAD: not counted in the load average */
-		if (!c->boot_requested) {                /* woken because the sandbox is dying */
-			klet_carrier_die(c);
-			return 0;
+		if (c->state == KLET_NEW) {                 /* the carrier's first way out to user mode, from the exec */
+			if (!klet_vcpu_await(c)) {              /* wait until this virtual CPU may enter the image */
+				klet_carrier_die(c);                /* the sandbox died while it waited */
+				return;
+			}
+			klet_enter(c, KLET_RUN_EVENT);          /* switch to a kernelet stack and run kernelet code */
+			continue;
 		}
-	}
 
-	klet_enter(c, KLET_RUN_EVENT);              /* switch to a kernelet stack and run kernelet code */
-
-	set_thread_flag(TIF_NOTIFY_RESUME);         /* when the kernelet first wants user mode: the resume hook applies the registers */
-	return 0;
+static bool klet_vcpu_await(struct klet_carrier *c)
+{
+	if (c->vcpu == 0)                           /* virtual CPU 0 boots the kernelet, once every carrier has arrived */
+		wait_event_state(inst->arrive_wq, inst->arrived == inst->nr_vcpus || inst->dying,
+				 TASK_KILLABLE | TASK_NOLOAD);
+	else                                        /* the others wait for the kernel proper to start their processor */
+		wait_event_state(c->idle_wq, c->boot_requested || inst->dying,
+				 TASK_KILLABLE | TASK_NOLOAD);
+	return !inst->dying && (c->vcpu == 0 ? inst->arrived == inst->nr_vcpus : c->boot_requested);
 }
 ```
 
-`klet_enter` is the subject of the next chapter. For virtual CPU 0 it leads to `kernelet_entry` from chapter 4, and so to the kernel proper's `main`. The carrier returns from `klet_enter` only when the kernelet has asked to run a user program, and then the function returns, Linux's fork-return path takes the task to user mode, and the resume hook, requested by the flag, puts the right registers in place first.
+The kernelet boots only when every virtual CPU's carrier has arrived, because a kernel that starts its other processors expects each of them to answer. `wait_event_state` is Linux's ordinary way to sleep until a condition holds: a waker *wakes* the queue the sleeper named, and the sleeper checks its condition again. The sleep is *killable*, ended only by `SIGKILL`, because a `SIGSTOP` sent to a carrier stays pending until the carrier next heads for user mode (chapter 8) and must not end the wait early; and *no-load*, so that a waiting carrier is not counted in the load average.
+
+`klet_enter` is the subject of the next chapter. For virtual CPU 0 it leads to `kernelet_entry` from chapter 4, and so to the kernel proper's `main`; for the others, to `vcpu_entry`, once the kernel proper has asked for that processor through the service `vcpu_boot`. The carrier returns from `klet_enter` only when the kernelet has asked to run a user program, and then the hook's loop puts the right registers in place and lets Linux return to user mode, which is chapter 8.
 
 ## Lifelines
 
@@ -198,7 +148,7 @@ int klet_carrier_attach(struct klet_carrier *c)
 {
 	struct file *file = anon_inode_getfile("[kernelet-carrier]", &klet_lifeline_fops, c, O_RDWR);
 	int fd = get_unused_fd_flags(0);
-	fd_install(fd, file);
+	fd_install(fd, file);                       /* into this task's own table: the exec gave it a fresh one */
 
 	current->carrier_hooks = &c->hooks;         /* attach the hooks ... */
 	set_syscall_work(KERNELET);                 /* ... and ask for the syscall hook */
@@ -212,12 +162,12 @@ static int klet_lifeline_release(struct inode *inode, struct file *file)
 }
 ```
 
-A clone starts with a copy of its parent's descriptor table, which is why `klet_carrier_main` closes the inherited copy of the root's lifeline first: otherwise the root's death notice would wait until the last carrier died. The close forces the file's release at once, because Linux normally defers a release to the closer's next return to user mode, and a root that died between the clone and the close, leaving this copy as the last reference, would otherwise be noticed only when the new carrier first got there; a clone that finds the root gone does not become a carrier. A tenant cannot close a lifeline, because closing a descriptor is a Linux system call, and the syscall hook takes those.
+The lifeline is installed after the `exec`, so no other task holds a copy of it: the holder's descriptors were the child's before the exec, and the child's table is its own. A tenant cannot close a lifeline, because closing a descriptor is a Linux system call, and the syscall hook takes those.
 
-When a lifeline closes, the endovisor takes the carrier off its lists. If the sandbox was still running, whichever carrier's lifeline it was, the sandbox is over: the endovisor marks the kernelet dying and ends every other carrier, which is chapter 12. The root's lifeline ends it even after the kernelet has stopped itself, for a reason chapter 12 gives.
+When a lifeline closes, the endovisor takes the carrier off its lists. If the sandbox was still running, whichever carrier's lifeline it was, the sandbox is over: the endovisor marks the kernelet dying and ends every other carrier, which is chapter 12. When the last lifeline closes, no carrier is left and the sandbox has exited, which is what the holder's `KLET_WAIT` was waiting for.
 
 <div class="recap">
 
-**Recap.** A carrier is an ordinary Linux user task that runs kernelet code and enters user mode for it. The root carrier is made by `execve` of a sandbox file, which the endovisor's binary-format handler claims, giving it an empty address space and the hooks; it never runs user code and it returns from the resume hook only to die. It clones one carrier per virtual CPU with `kernel_clone`, and each clone inherits the hooks, the empty address space, the control group and the seccomp filter by the ordinary rules of `fork`. Every carrier holds a lifeline, an open file whose release tells the endovisor that the carrier has died.
+**Recap.** A carrier is an ordinary Linux user task that runs kernelet code and enters user mode for it. The holder forks one child per virtual CPU, and each child executes that virtual CPU's exec descriptor, which the endovisor's binary-format handler claims: it checks the child's control group and its no-new-privileges bit, gives it an empty address space, ignores every signal that can be ignored, makes it non-dumpable, names it, and attaches the hooks and a lifeline. The child keeps what it set on itself before the exec, by the ordinary rules of `exec`. On its way out the resume hook holds it until every carrier has arrived, then enters the kernelet. Every carrier holds a lifeline, an open file whose release tells the endovisor that the carrier has died.
 
 </div>

@@ -1,14 +1,16 @@
 # The kernelet ABI
 
-The previous chapter was the view from above the framework: a kernel that allocates frames, maps pages and enters user mode. This chapter is the view from below: what is in the image file that chapter 2 registered, and how the code in it talks to the host. Nothing in it runs yet; it is the shape that the next chapters fill in.
+The previous chapter was the view from above the framework: a kernel that allocates frames, maps pages and enters user mode. This chapter is the view from below: what is in the image file that the holder registered, and how the code in it talks to the host. Nothing in it runs yet; it is the shape that the next chapters fill in.
 
-A kernelet image is three layers of code compiled into one file.
+A kernelet image is two layers of code compiled into one file, held together by a third thing, an interface.
 
 1. **The kernel proper**, the hundred-line kernel of the last chapter: safe Rust, never edited.
 2. **vOSTD**, a Rust crate whose library name is `ostd`, so that the kernel proper's `use ostd::...` lines resolve to it. It offers every type and function the kernel proper uses, with the same names and signatures as the real OSTD. It is in `prototype/vostd/`.
 3. **The image ABI** (an *application binary interface* is the exact layout of what two separately compiled pieces of code pass each other), a few C-layout structures that both vOSTD and the endovisor know: what the host tells the kernelet at start, which functions the kernelet may call, and which functions the host may call. It is in `prototype/vostd/src/abi.rs` on the Rust side and `prototype/linux/endovisor/kernelet.h` on the C side, and the two must agree byte for byte.
 
 The first two are the image's contents; the third is this chapter's subject.
+
+The image file is a relocatable object, the `ld -r` of the kernel proper and vOSTD, built for the kernel's code model so that its code can run where Linux keeps modules. Registering it as a kind, in the endovisor's `image.c`, is a module load without a module: every section is placed in the range modules live in, every relocation is applied as Linux's own module loader applies it, the text is made read-only and executable, and the one symbol looked up is the entry table below, which must be the image's only global symbol. An image that refers to any symbol it does not define is refused, which is the mechanical form of chapter 1's rule that the image calls nothing of the host's.
 
 <div class="linux">
 
@@ -40,6 +42,7 @@ pub struct BootArgs {
 pub struct Services {
     pub abi_version: u64,
     pub log_write: unsafe extern "C" fn(ptr: *const u8, len: u64),
+    // ... console_write, added later in the table
     pub mem_alloc: unsafe extern "C" fn(size: u64, align: u64) -> *mut u8,
     pub mem_free: unsafe extern "C" fn(ptr: *mut u8, size: u64, align: u64),
     pub user_run: unsafe extern "C" fn(ctx: *mut RawUserContext) -> u64,
@@ -84,25 +87,32 @@ pub static kernelet_entry_table: EntryTable = EntryTable {
 };
 ```
 
-The endovisor checks `abi_version` against its own when the module loads, and refuses to load if the two halves were built from different ABIs.
+The endovisor checks the entry table's `abi_version` against its own when an image is registered, and refuses the image if the two halves were built from different ABIs.
 
-In this prototype the image is linked statically into the endovisor's module, so there is one kernelet per module load; registering kinds, as chapter 2 describes, is what a full endovisor does instead, and the shortcut changes nothing below this chapter.
+One loaded copy of an image serves one sandbox at a time in this prototype. The image is linked for fixed addresses, so its code reaches its data where the loader placed it; the loader therefore keeps a pristine copy of the writable data as relocated, and every sandbox of the kind starts from that copy, with the uninitialized data zeroed. A second sandbox of a kind must wait for the first to be destroyed.
 
 ## The grant and the direct map
 
-A kernel needs memory to manage. The endovisor gives a kernelet a **grant**: one physically contiguous block of RAM, 4 MiB in this prototype, taken from Linux's page allocator when the module loads and described in the boot arguments by its physical address and length.
+A kernel needs memory to manage. The endovisor gives a kernelet a **grant**: one physically contiguous block of RAM, the `memory_initial` of the holder's create request (4 MiB unless it asks for less), taken from Linux's page allocator when the sandbox starts, charged to the sandbox's control group, and described in the boot arguments by its physical address and length.
 
-*Simplified from `prototype/linux/endovisor/main.c`: `klet_grant_alloc`.*
+*Simplified from `prototype/linux/endovisor/sandbox.c`: `klet_sandbox_start`.*
 
 ```c
-static int klet_grant_alloc(struct klet_inst *inst)
+int klet_sandbox_start(struct klet_inst *inst)
 {
-	inst->grant_pages = alloc_pages(GFP_KERNEL | __GFP_ZERO, KLET_GRANT_ORDER);  /* 2^10 pages */
-	if (!inst->grant_pages)
+	unsigned int order = get_order(inst->memory_initial);       /* 2^10 pages for 4 MiB */
+
+	klet_image_restore(inst->kind);                              /* the pristine data, the bss zeroed */
+	pages = alloc_pages(GFP_KERNEL_ACCOUNT | __GFP_ZERO | __GFP_NOWARN, order);
+	if (!pages)
 		return -ENOMEM;
-	inst->boot.grant_paddr = page_to_phys(inst->grant_pages);
-	inst->boot.grant_len = KLET_GRANT_LEN;
+	inst->grant_pages = pages;
+	inst->boot.abi_version = KLET_ABI_VERSION;
+	inst->boot.grant_paddr = page_to_phys(pages);
+	inst->boot.grant_len = PAGE_SIZE << order;
 	inst->boot.linear_map_base = (u64)(unsigned long)__va(0);
+	inst->boot.nr_vcpus = inst->nr_vcpus;
+	/* ... the FPU area's size, the cycle counter's rate, the image's text range, and more in later chapters */
 	return 0;
 }
 ```
@@ -172,7 +182,7 @@ unsafe impl GlobalAlloc for HostHeap {
 static HEAP: HostHeap = HostHeap;
 ```
 
-**The console.** `println!` collects a line and hands it to `log_write`, which the endovisor prints with `printk`, prefixed `kernelet:`. That is why every line the kernelet prints appears in the serial log beside Linux's own messages.
+**The console and the log.** `println!` collects a line and hands it to `console_write`, the sandbox's console; vOSTD's own lines, among them a panic's message, go to `log_write`, the sandbox's kernel log. Each arrives at the file the holder set for it, through a ring that a work item drains, because a service may not block on a terminal or a pipe while the kernel proper may hold one of its spin locks. A sandbox given no file for one of the two has its lines printed with `printk`, prefixed `kernelet:`, which is why they then appear in the serial log beside Linux's own messages.
 
 **Power-off.** `poweroff` is the service `stop`, which never returns. What the endovisor does with it is chapter 12.
 

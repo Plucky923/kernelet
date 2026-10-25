@@ -140,7 +140,7 @@ Linux's own notify-resume work goes first because its first act is to clear the 
 
 **Two helper functions.** `kernel/fork.c` gains two functions that the endovisor cannot write itself because everything they touch is private to the core kernel: `kernelet_mm_alloc()`, which creates an empty address space with a chosen owner, and `kernelet_switch_mm()`, which makes the calling task run in a different address space. Both belong to chapter 13, where tenant memory is built; they are mentioned here only so that the patch's contents are complete.
 
-**Two exports.** `kernel_clone` (chapter 6 creates tasks with it) and `flush_tlb_mm_range` (chapter 13 flushes with it): the two functions the endovisor needs that Linux does not already export to modules.
+**Six exports.** Functions the endovisor needs that Linux does not already export to modules, each one `EXPORT_SYMBOL_GPL` line. `flush_tlb_mm_range` is for chapter 13, which flushes with it. Four are for the image loader of chapter 4: `execmem_alloc` and `execmem_free`, which allocate an image's memory where modules live, `set_memory_rox`, which makes its text read-only and executable, and `modules_disabled`, the setting by which an operator forbids module loading, which registering an image checks as `init_module` does. `kernel_clone` is exported too, though this prototype no longer creates tasks with it.
 
 **A configuration option.** `CONFIG_KERNELET` guards all of it. The prototype's kernel configuration turns it on. A kernel built without it behaves exactly as a stock kernel, since every line the patch adds to a function is inside `#ifdef CONFIG_KERNELET`; what remains outside are the include lines, a forward declaration, the new header's two prototypes, the bit's name and a macro that expands to zero.
 
@@ -152,6 +152,6 @@ It adds no new system call, no boot parameter, and no change to Linux's schedule
 
 <div class="recap">
 
-**Recap.** The carrier event hooks are two functions that Linux's generic entry layer calls for a carrier, selected by a pointer in `task_struct` and a syscall-work bit: `on_syscall` runs after seccomp and can answer the call so that Linux's table is skipped; `on_resume` runs on the way back to user mode, before signals are delivered, and gives the kernelet the last word before the tenant runs, for everything that is not a system call: a carrier's first entry, a tenant's fault, a timer or another virtual CPU wanting it. A child inherits the pointer because Linux copies the task structure. The rest of the patch is two helpers and two exports for later chapters.
+**Recap.** The carrier event hooks are two functions that Linux's generic entry layer calls for a carrier, selected by a pointer in `task_struct` and a syscall-work bit: `on_syscall` runs after seccomp and can answer the call so that Linux's table is skipped; `on_resume` runs on the way back to user mode, before signals are delivered, and gives the kernelet the last word before the tenant runs, for everything that is not a system call: a carrier's first entry, a tenant's fault, a timer or another virtual CPU wanting it. A child inherits the pointer because Linux copies the task structure. The rest of the patch is two helpers and six exports for other chapters.
 
 </div>

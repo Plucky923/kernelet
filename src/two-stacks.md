@@ -18,7 +18,7 @@ The resolution is to give kernelet code stacks of its own. A **kernelet stack** 
 flowchart TB
     subgraph L[" "]
         direction TB
-        l0["<b>the carrier's Linux stack, 16 KiB</b>"] ~~~ l1["pt_regs: the user registers"] --> l2["entry code frames"] --> l3["the hook's frame<br/>(klet_carrier_main's, the first time)"] --> l4["klet_enter, parked in klet_switch"]
+        l0["<b>the carrier's Linux stack, 16 KiB</b>"] ~~~ l1["pt_regs: the user registers"] --> l2["entry code frames"] --> l3["the hook's frame"] --> l4["klet_enter, parked in klet_switch"]
     end
     subgraph B[" "]
         direction TB

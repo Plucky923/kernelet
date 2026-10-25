@@ -51,7 +51,7 @@ static u64 klet_svc_user_run(struct klet_user_ctx *ctx)
 }
 ```
 
-The switch lands inside the `klet_enter` that last entered the kernelet on this carrier, which returns into its caller. On the very first trip that caller is `klet_carrier_main`, the carrier's start function from chapter 6, which returns into Linux's fork-return path. On every later trip it is one of the two hooks.
+The switch lands inside the `klet_enter` that last entered the kernelet on this carrier, which returns into its caller. That caller is always one of the two hooks: on the very first trip it is the resume hook, running on the carrier's way out of the `execveat` that made it (chapter 6), and on every later trip it is whichever hook brought the carrier in.
 
 ## Putting the registers where Linux will find them
 
@@ -77,7 +77,7 @@ static void klet_ctx_to_regs(struct klet_carrier *c, struct pt_regs *regs)
 
 Three details keep this safe. The flags are sanitized: the interrupt-enable bit is forced on and the privilege-level bits are cleared, so a tenant cannot talk its kernel into giving it a program that runs with interrupts off. The code and stack segment selectors are fixed to Linux's user segments. And `orig_ax`, Linux's record of which system call is in progress, is set to -1, which switches off Linux's system-call restart logic; restarting is the kernel proper's business.
 
-The first trip has a wrinkle. When `klet_carrier_main` returns, Linux's fork-return path zeroes the `ax` it is about to restore, so registers applied there would not survive. That is why `klet_carrier_main` ends by flagging the carrier: the resume hook then runs last and applies the full register file.
+The first trip needs nothing special. The carrier arrived by a system call, so the registers Linux will restore are the `pt_regs` of that call, and the resume hook overwrites them as it will on every later trip; the registers the exec had prepared for the carrier's own program, which does not exist, are simply never used.
 
 ## Coming back by a system call
 
@@ -90,7 +90,7 @@ static bool klet_on_syscall(struct pt_regs *regs)
 {
 	struct klet_carrier *c = klet_current_carrier();
 
-	if (c->kind == KLET_ROOT || c->state != KLET_USER || !c->ctx)
+	if (c->state != KLET_USER || !c->ctx)
 		return false;                           /* not a carrier in user mode: not ours */
 	if (regs->cs != __USER_CS || in_compat_syscall()) {
 		/* a 32-bit entry instruction: report roughly what a machine would raise, a #GP (general-protection fault) */
@@ -168,9 +168,8 @@ static bool klet_drain_signals(struct klet_carrier *c)
 {
 	sigset_t mask = current->blocked;
 	sigaddset(&mask, SIGKILL);                  /* the two signals nobody may take are left in the queue, */
+	sigaddset(&mask, SIGSTOP);
 	/* ... and so is any signal Linux has made fatal and immutable (SA_IMMUTABLE): a seccomp kill's SIGSYS */
-	if (c->kind != KLET_ROOT)                   /* (the root carrier never returns to user mode, where a stop would act) */
-		sigaddset(&mask, SIGSTOP);
 
 	spin_lock_irq(&current->sighand->siglock);
 	while ((signr = dequeue_signal(&mask, &info, &type)) != 0) {
@@ -196,9 +195,7 @@ A fault signal is recognized by its number and its `si_code` together. The numbe
 
 `SIGKILL` and `SIGSTOP` are left in the queue. The first is how the operator and the endovisor end a carrier, and Linux acts on it in the same loop. The second takes effect at the carrier's next return to user mode, where Linux stops it as it stops any task; a stopped carrier is a stopped virtual CPU until `SIGCONT`, and a virtual CPU that does not return to user mode, because it is idle or runs only kernel tasks, keeps running with the stop pending.
 
-The root carrier is the exception for `SIGSTOP`, and drops it with the rest. It never returns to user mode, so a stop could never act on it; and `kernel_clone` refuses to run while its caller has a signal pending, so a `SIGSTOP` left in the root's queue would make every clone it attempts fail.
-
-Most signals never reach the queue at all, and that is arranged earlier. The binary-format handler of chapter 6 sets every signal but `SIGKILL` and `SIGSTOP`, which cannot be, to be *ignored*, and clears the signal mask; the clones inherit both, since `fork` copies the parent's dispositions. An ignored signal is discarded the moment it is sent, so an operator's `SIGTERM`, `SIGQUIT` or `SIGTSTP` to a carrier does nothing. The drain alone would not do, for two reasons. A signal whose default action is to end the task without a core dump, `SIGTERM`, `SIGINT`, `SIGPIPE` and their kind, is fatal at the moment it is sent: the sender sees that nothing will catch it and turns it into a `SIGKILL` on the spot ([`complete_signal()`](https://elixir.bootlin.com/linux/v6.12/source/kernel/signal.c#L994)), before any drain. And the drain runs at the top of one pass of the exit loop, while Linux delivers signals later in the same pass if one was pending when the pass began, so a `SIGQUIT` that arrived between the two would dump core and end the carrier. The fault signals are ignored too, and still arrive: Linux sends a fault with `force_sig_info_to_task()`, which first sets an ignored signal back to its default action, so the signal is queued and the drain sees it. The drain then ignores it again, so that the next fault is forced the same way and a `SIGSEGV` a process sends in between is discarded.
+Most signals never reach the queue at all, and that is arranged earlier. The binary-format handler of chapter 6 sets every signal but `SIGKILL` and `SIGSTOP`, which cannot be, to be *ignored*, and clears the signal mask, in every carrier, since each arrives by an exec of its own. An ignored signal is discarded the moment it is sent, so an operator's `SIGTERM`, `SIGQUIT` or `SIGTSTP` to a carrier does nothing. The drain alone would not do, for two reasons. A signal whose default action is to end the task without a core dump, `SIGTERM`, `SIGINT`, `SIGPIPE` and their kind, is fatal at the moment it is sent: the sender sees that nothing will catch it and turns it into a `SIGKILL` on the spot ([`complete_signal()`](https://elixir.bootlin.com/linux/v6.12/source/kernel/signal.c#L994)), before any drain. And the drain runs at the top of one pass of the exit loop, while Linux delivers signals later in the same pass if one was pending when the pass began, so a `SIGQUIT` that arrived between the two would dump core and end the carrier. The fault signals are ignored too, and still arrive: Linux sends a fault with `force_sig_info_to_task()`, which first sets an ignored signal back to its default action, so the signal is queued and the drain sees it. The drain then ignores it again, so that the next fault is forced the same way and a `SIGSEGV` a process sends in between is discarded.
 
 The resume hook brings the exception into the kernelet:
 
@@ -209,14 +206,13 @@ static void klet_on_resume(struct pt_regs *regs)
 {
 	struct klet_carrier *c = klet_current_carrier();
 
-	if (c->kind == KLET_ROOT) { klet_root_loop(c); return; }   /* chapter 6 */
-
 	for (;;) {
 		if (c->state == KLET_DEAD || c->inst->stopped || c->inst->dying) {
 			klet_carrier_die(c);                                 /* chapter 12 */
 			return;
 		}
-		if (c->state == KLET_NEW) {                              /* never entered: defensive, the start function enters first */
+		if (c->state == KLET_NEW) {                              /* the first time, out of the exec: wait for the sandbox's start, then enter (chapter 6) */
+			if (!klet_vcpu_await(c)) { klet_carrier_die(c); return; }
 			klet_enter(c, KLET_RUN_EVENT);
 			continue;
 		}
@@ -261,39 +257,51 @@ Page faults on tenant memory take a shorter path through the endovisor's own fau
 
 ## Hello, world
 
-With chapters 4 to 8 built, `make hello` boots Linux in QEMU, loads the module, runs the runtime, and this appears in the serial log (one line of Linux's own about an out-of-tree module, and eight lines of counters at unload, are left out):
+With chapters 4 to 8 built, `make hello` boots Linux in QEMU, loads the module, runs the holder, and this appears in the serial log (one line of Linux's own about an out-of-tree module, the lines of a self-test of the interface that the boot runs first, and the counters printed at unload are left out):
 
 ```
 INIT: loading endovisor.ko
-kernelet: kernelet image text [0xffffffffc018507f, 0xffffffffc0194215), 61846 bytes; virq_entry at +0x710c
-kernelet: endovisor loaded: grant 4096 KiB at 0xc00000, linear map 0xffff9d3900000000, watch on, mirror on, fpu area 1088 B, tsc 3791992 kHz
+kernelet: endovisor loaded: /dev/endovisor, API 1, image ABI 6, watch on, mirror on, fpu area 1088 B, tsc 3791992 kHz
 INIT: running /tests/10-hello
-RUN-HELLO: creating a sandbox from /hello.klet
-kernelet: host offsets: gs:current 0x1fac0, gs:preempt_count 0x1fac8, task->carrier_hooks +1968, hooks->vrec +16
-kernelet: root carrier exec (pid 34), address space emptied, 1 virtual CPU(s), cmdline ""
-kernelet: vcpu 0 carrier starting (pid 35)
-kernelet: service stub: 39 cycles through the stack switch, 29 for the service body alone (least of 7 rounds of 2000, rdtsc, interrupts off)
-kernelet: vOSTD up: grant 0xc00000..0x1000000, linear map 0xffff9d3900000000, 1 vCPU(s), tsc 3791992 kHz, fpu area 1088 B
-kernelet: vOSTD: heap: a 64-byte allocation and its free, 411 cycles the pair (least of 7 rounds of 1000, rdtsc)
-kernelet: space 1 created: root 0x8c5000, area [0x10000, 0x7ffffffff000), its own inode, mm owner a task
-kernelet: Hello, world
-kernelet:
+RUN-TEST: running /holder register hello /hello.image
+kernelet: image loaded: 59877 bytes of text at ffffffffc0207000, 32983 of read-only data, 50656 of data and bss at ffffffffc021f000, 2798 relocations applied
+kernelet: kind 0 "hello" registered: an image of 328680 bytes, text [0xffffffffc0207000, 0xffffffffc02159e5), 94208 bytes shared
+holder: kind 0 registered: hello from /hello.image
+RUN-TEST: running /holder run -c /sys/fs/cgroup/sandbox --console /hello.console --log /hello.log hello 1
+kernelet: sandbox 0 created: kind 0 "hello", 1 vcpu(s), memory 4096 KiB (max 65536 KiB), max_tasks 256, cmdline ""
+holder: sandbox 0 created: kind hello, 1 vcpu(s), cmdline ""
+kernelet: sandbox 0: vcpu 0 carrier (pid 47) arrived as kernelet/0/0: address space emptied, every signal ignored, dumpable 1 -> 0
+kernelet: sandbox 0: host offsets: gs:current 0x1fac0, gs:preempt_count 0x1fac8, task->carrier_hooks +1968, hooks->vrec +16
+kernelet: sandbox 0 started: kind "hello" loaded as its instance (53248 bytes of data restored), grant 4096 KiB at 0x1000000, charged to its control group
+kernelet: sandbox 0: every virtual CPU's carrier has arrived (1); booting the kernelet
+kernelet: service stub: 36 cycles through the stack switch, 24 for the service body alone (least of 7 rounds of 2000, rdtsc, interrupts off)
+kernelet: space 1 created: root 0x7c1000, area [0x10000, 0x7ffffffff000), its own inode, mm owner a task
 kernelet: stopped, exit code 0
-kernelet: vcpu 0 carrier (pid 35) dying
-kernelet: root carrier (pid 34) dying
-kernelet: vcpu 0 carrier (pid 35) lifeline closed
-kernelet: root carrier (pid 34) lifeline closed, the last one
-kernelet: the sandbox is gone: 7 heap block(s) the kernelet still held freed (752 bytes), 2 kernelet stack(s) returned to vmalloc (1 still in use)
-RUN-HELLO: root carrier (pid 34) killed by signal 9
-RUN-HELLO: no carrier left (module references: 0)
-RUN-HELLO: done
+kernelet: arming the eviction sweep every 1000 us on 2 cpu(s)
+kernelet: sandbox 0: vcpu 0 carrier (pid 47) dying
+kernelet: sandbox 0: vcpu 0 carrier (pid 47) lifeline closed, the last one
+kernelet: sandbox 0 is gone: 7 heap block(s) the kernelet still held freed (752 bytes), 2 kernelet stack(s) returned to vmalloc (1 still in use)
+kernelet: sandbox 0 exited: the kernel proper powered off, exit code 0
+holder: sandbox 0 at its end: state 5 (exited), 1 vcpu(s), 4096 KiB granted, 14022 service call(s), 0 virtual interrupt(s), 0 line(s) dropped
+holder: sandbox 0 at its end: vcpu 0 pid 47 state 3 (gone), ran 13 ms, waited 0 ms runnable
+kernelet: sandbox 0 destroyed
+holder: sandbox 0 exited: the kernel proper powered off, exit code 0
+holder: no carrier left (module references: 0)
+RUN-TEST: /holder run -c /sys/fs/cgroup/sandbox --console /hello.console --log /hello.log hello 1 exited 0
+RUN-TEST: /hello.console: Hello, world
+RUN-TEST: /hello.console: 
+RUN-TEST: /hello.console: 2 line(s)
+RUN-TEST: /hello.log: vOSTD up: grant 0x1000000..0x1400000, linear map 0xffff9a7480000000, 1 vCPU(s), tsc 3791992 kHz, fpu area 1088 B
+RUN-TEST: /hello.log: vOSTD: heap: a 64-byte allocation and its free, 449 cycles the pair (least of 7 rounds of 1000, rdtsc)
+RUN-TEST: /hello.log: 2 line(s)
+RUN-TEST: done
 INIT: /tests/10-hello exited 0
 INIT: unloading endovisor
 kernelet: endovisor unloaded
 INIT: done
 ```
 
-Line by line: the endovisor publishes the offsets by which vOSTD will find its way around Linux (chapter 9); the root carrier is made by the handler (chapter 6); it clones the carrier of virtual CPU 0, which enters the image (chapter 4) and, before anything else, times a heap allocation and its free and then, at its first log line, a service call that does nothing (chapter 15); the kernel proper creates its address space (chapter 13); the program's `write` arrives by the syscall hook and the kernel proper prints the message through `log_write`, followed by the message's own newline as an empty line; its `exit` becomes the `stop` service (chapter 12); both carriers die and their lifelines close, and the last release returns what the kernelet held, the stack the stopping carrier was still standing on included (chapter 12); the module's reference count reaches zero and it unloads. The build checks that the log contains the greeting, the exit code, a clean unload, and no Linux error report.
+Line by line: the holder registers the image as a kind, and the endovisor loads it where modules live (chapter 4); the holder creates the sandbox with a console file and a log file, and forks and execs its one carrier, which the handler turns into one (chapter 6); the endovisor publishes the offsets by which vOSTD will find its way around Linux, restores the image's data and allocates the grant (chapter 4), and, every carrier having arrived, boots the kernelet, which enters the image and, before anything else, times a heap allocation and its free and then, at its first log line, a service call that does nothing (the numbers are the subject of the last chapter); the kernel proper creates its address space; the program's `write` arrives by the syscall hook and the kernel proper prints the message through `console_write` to the console file, followed by the message's own newline as an empty line; its `exit` becomes the `stop` service, which arms the sweep that takes a processor back from a virtual CPU left spinning; the carrier dies and its lifeline closes, and the last release returns what the kernelet held, the stack the stopping carrier was still standing on included; the holder reads the sandbox's statistics, destroys it, and the test prints the two files; the module's reference count reaches zero and it unloads. The build checks that the console file holds the greeting, that the log has the exit code, a clean unload, and no Linux error report.
 
 <div class="recap">
 

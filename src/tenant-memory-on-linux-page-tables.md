@@ -43,7 +43,7 @@ Every change to an address space is made under its lock, `mmap_lock`, and the ad
 s64 klet_do_vm_create(struct klet_carrier *c)
 {
 	sp = a free slot in inst->spaces[];                       /* at most 64 spaces per kernelet */
-	sp->mm = kernelet_mm_alloc(inst->owner);                  /* an empty address space; owner: the root carrier */
+	sp->mm = kernelet_mm_alloc(inst->owner);                  /* an empty address space; owner: the holder's main thread */
 	sp->file = anon_inode_create_getfile("[kernelet-space]", &klet_space_fops, sp, O_RDWR, NULL);
 	klet_space_make_area(sp);
 	WRITE_ONCE(sp->rec->root_paddr, __pa(sp->mm->pgd));       /* so that vOSTD can read the table */
@@ -75,7 +75,7 @@ static int klet_space_mmap(struct file *file, struct vm_area_struct *vma)   /* t
 
 Three choices in this code each close a hole.
 
-**The owner.** Linux records in each address space an *owner* task, through which the memory controller finds the control group to charge faults and reclaim to. The function Linux uses to make an address space would store the *creating* task there, without a reference, and that task is a carrier that may die while the space lives on; every later fault would then read a freed task. So the patch's `kernelet_mm_alloc()` takes the owner as an argument, and the endovisor passes the root carrier, which lives as long as the sandbox and which the endovisor pins with a task reference from start to destroy.
+**The owner.** Linux records in each address space an *owner* task, through which the memory controller finds the control group to charge faults and reclaim to. The function Linux uses to make an address space would store the *creating* task there, without a reference, and that task is a carrier that may die while the space lives on; every later fault would then read a freed task. So the patch's `kernelet_mm_alloc()` takes the owner as an argument, and the endovisor passes the main thread of the holder, the process that created the sandbox, which the endovisor pins with a task reference from the sandbox's creation to its destruction.
 
 **The file's inode.** The plain anonymous-inode helper hands every caller one shared inode. Linux keeps, per inode, the list of areas that map it, so every space's area would sit in one list, and an operation on one space's file could reach the others'. Each space gets an inode of its own.
 
@@ -285,6 +285,6 @@ The rule that a kernel-mode access is answered with an error and never reported 
 
 <div class="recap">
 
-**Recap.** A `VmSpace` is a Linux address space: an `mm` the endovisor creates with the patch's `kernelet_mm_alloc()`, owned by the root carrier, holding one raw-frame-number area over the whole user range, backed by a file with an inode of its own. The kernel proper's cursor edits become `vm_map`, `vm_unmap`, `vm_protect` and `vm_flush`, in which the endovisor checks every frame against the grant and calls Linux's own page-table functions under Linux's own lock. A carrier adopts a process's address space with the patch's `kernelet_switch_mm()` on its way to user mode. A tenant's fault is recorded by the area's handler and delivered to the kernel proper through the resume hook, whose `vm_map` puts the entry where the retried instruction will find it.
+**Recap.** A `VmSpace` is a Linux address space: an `mm` the endovisor creates with the patch's `kernelet_mm_alloc()`, owned by the holder's main thread, holding one raw-frame-number area over the whole user range, backed by a file with an inode of its own. The kernel proper's cursor edits become `vm_map`, `vm_unmap`, `vm_protect` and `vm_flush`, in which the endovisor checks every frame against the grant and calls Linux's own page-table functions under Linux's own lock. A carrier adopts a process's address space with the patch's `kernelet_switch_mm()` on its way to user mode. A tenant's fault is recorded by the area's handler and delivered to the kernel proper through the resume hook, whose `vm_map` puts the entry where the retried instruction will find it.
 
 </div>
