@@ -128,6 +128,11 @@ struct kernelet_kind_list {
  * KERNELET_CMDLINE_MAX, or nonzero flags; ENOSPC when the endovisor's table
  * of sandboxes is full.
  *
+ * Creating needs no privilege beyond access to the device node: a sandbox
+ * can reach nothing its creator could not, since its memory is charged to
+ * the creator's group and the files it is given are files its creator
+ * opened.
+ *
  * Returns the sandbox descriptor, close-on-exec. Nothing is allocated for the
  * kernelet itself until its first carrier arrives.
  */
@@ -152,25 +157,31 @@ struct kernelet_create {
  * KERNELET_VCPU_GET_EXEC_FD: the exec descriptor of virtual CPU i.
  *
  * The descriptor is on a file that lives only in memory, one per virtual
- * CPU, which the endovisor makes owned by the global root and execute-only
- * after creating it (shmem_file_setup() creates it readable), so that the
- * process which executes it is not dumpable afterwards. The endovisor
- * recognizes the file by its inode when it is executed: execveat() reopens
- * the file, so the file object the handler sees is never the one handed
- * out. Execute it with execveat(fd, "", argv, envp, AT_EMPTY_PATH); the
- * arguments and the environment are discarded.
+ * CPU, owned by root and execute-only: it can be executed, not read or
+ * written, and a process that has executed it is not dumpable afterwards.
+ * The endovisor knows which sandbox and which virtual CPU each such file is
+ * for by the file's identity, not by its contents. Execute it with
+ * execveat(fd, "", argv, envp, AT_EMPTY_PATH); the arguments and the
+ * environment are discarded.
  *
  * The exec is refused (EPERM) unless the executing process is in the
  * sandbox's control group and has no-new-privileges set, which is what
  * guarantees that it gains nothing by the exec; it fails with EBUSY if this
  * virtual CPU has been started already, by this descriptor or by another
  * copy of it, and with ESRCH if the sandbox has been killed. Otherwise the
- * process becomes the carrier of virtual CPU i, named kernelet/<slot>/<i>
- * after the sandbox's slot, which KERNELET_GET_STATS reports.
+ * process becomes the carrier of virtual CPU i, named kernelet/<slot>/<i>,
+ * where slot is the sandbox's slot: its index in the endovisor's table of
+ * sandboxes, a small number given at KERNELET_CREATE and reported by
+ * KERNELET_GET_STATS.
  *
  * The sandbox starts at the first such exec, which loads the kind's image as
  * this sandbox's instance and grants memory_initial, charged to the group.
- * The kernelet boots when every virtual CPU's carrier has arrived.
+ * The kernelet boots when every virtual CPU's carrier has arrived, because a
+ * kernel that starts its other processors expects each of them to answer.
+ * Until then KERNELET_GET_STATS reports the sandbox as STARTING; a holder
+ * that never starts one of its virtual CPUs has a sandbox that never boots,
+ * which KERNELET_KILL ends. A carrier that dies while the others are still
+ * arriving ends the sandbox, as any carrier's death does.
  *
  * Returns the exec descriptor, close-on-exec. EINVAL for an i beyond
  * nr_vcpus, EBUSY for a virtual CPU already started, ESRCH once the sandbox
@@ -269,7 +280,8 @@ struct kernelet_exit {
  * KERNELET_GET_STATS: the sandbox's slot and state, counters, and one row
  * per virtual CPU. The caller supplies an array of capacity rows at vcpus;
  * nr_vcpus is set to the sandbox's number, and min(capacity, nr_vcpus) rows
- * are filled.
+ * are filled. The rows are how a tool finds a sandbox's carriers without
+ * walking its control group; pid is what taskset and chrt take.
  */
 enum kernelet_state {
 	KERNELET_STATE_CREATED	= 1,		/* no carrier yet */
@@ -299,7 +311,7 @@ struct kernelet_stats {
 	__u64	log_dropped;
 	__u64	vcpus;				/* struct kernelet_vcpu_stat *, user memory */
 	__u32	capacity;			/* rows available at vcpus */
-	__u32	slot;				/* out: the sandbox's slot, which names its carriers */
+	__u32	slot;				/* out: the sandbox's index in the endovisor's table; names its carriers */
 };
 #define KERNELET_GET_STATS		_IOWR(KERNELET_IOC, 0x17, struct kernelet_stats)
 
