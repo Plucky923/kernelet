@@ -4,7 +4,9 @@ This chapter reads the kernel the book is built around: Asterinas's teaching exa
 
 The kernel is never edited. It is in this repository as `prototype/kernels/hello/src/lib.rs`. Before every build of the image, the build compares it byte for byte with a copy of the original, taken from the Asterinas tree at commit `ab9a4cfdc`. That it needs no edit to run inside Linux is the claim the rest of the book makes good.
 
-The excerpts below drop only the file's comments and imports. The file opens with `#![no_std]` and `#![deny(unsafe_code)]`, so the compiler rejects any `unsafe` in it; `align_up` comes from the small `align_ext` crate, and `println!` is OSTD's, writing to the console.
+The excerpts below drop only the file's comments and imports; of what the imports bring, `align_up` comes from the small `align_ext` crate, and `println!` is OSTD's, writing to the console.
+
+The file opens with `#![no_std]` and `#![deny(unsafe_code)]`, so the compiler rejects any `unsafe` in it.
 
 First comes the user program the kernel runs, then the kernel itself in four pieces. After each piece, the chapter says what it asks of the machine, because that list is what vOSTD and the endovisor have to provide.
 
@@ -36,7 +38,7 @@ message_end:
 
 It makes two system calls with the `syscall` instruction, using Linux's numbers, as Asterinas does: `write` is 1 and `exit` is 60.
 
-The kernel places the program in memory rather than loading it. A real kernel reads an executable's headers and maps each segment where they say; this kernel reads no headers. `include_bytes!("../hello")` embeds the assembled executable, headers and all, and the kernel copies the whole file into fresh frames and maps them from `0x400000`. That works because the program is linked as a static executable at `0x400000`, with its code at `0x401000`, the first page after the headers, and the linker placed each segment at its file offset from that address, so the code lands at `0x401000` and the message at `0x402000`. The kernel hard-codes both addresses.
+The kernel places the program in memory rather than loading it. A real kernel reads an executable's headers and maps each segment where they say; this kernel reads no headers. `include_bytes!("../hello")` embeds the assembled executable, headers and all, and the kernel copies the whole file into fresh frames and maps them from `0x400000`. That works because the program is linked as a static executable at `0x400000`, with its code at `0x401000`, the first page after the headers, and the linker placed each segment at its file offset from that address, so the code lands at `0x401000` and the message at `0x402000`. The kernel hard-codes the first two, `0x400000` and `0x401000`.
 
 ## Piece 1: main
 
@@ -53,7 +55,7 @@ pub fn main() {
 }
 ```
 
-`#[ostd::main]` marks the function the framework calls once it has booted, and generates the entry, `__ostd_main`, that calls it. `main` builds an address space holding the program, makes it current on this processor with `activate`, creates a task to run the program, and puts the task on the scheduler's queue with `run()`.
+`main` builds an address space holding the program, makes it current on this processor with `activate`, creates a task to run the program, and puts the task on the scheduler's queue with `run()`. `#[ostd::main]` marks it as the function the framework calls once it has booted, and generates the entry, `__ostd_main`, that calls it.
 
 The address space `main` activates is still active when the task runs. `main` runs before any task exists; the task first runs when `main` returns, on the same processor, and nothing in between switches address spaces.
 
@@ -143,7 +145,9 @@ A `UserContext` is a user program's register file. Its register part is the sixt
 
 The task sets the instruction pointer and leaves the rest zero. Left zero, the flags would run the program with interrupts off, so `execute` sets the interrupt flag itself. The stack pointer stays zero, which is harmless because the program never uses a stack.
 
-The loop calls `user_mode.execute(...)`, which **enters user mode** and returns each time the processor comes back into the kernel with something for the kernel to handle: a system call, or a CPU exception such as a page fault. Interrupts it handles itself; then, after giving the scheduler a chance to switch tasks, it goes back to user mode. `DummyUserHooks` is the empty set of hooks: it asks to be told of no other event, so `execute` returns for nothing else. The return value says what happened. The context now holds the program's registers as they were at that moment. The kernel reads and changes them through `context_mut()` before calling `execute` again. On an exception this loop ignores the reason and calls `execute` again, so a faulting program would fault forever; this one never faults.
+The loop calls `user_mode.execute(...)`, which **enters user mode** and returns each time the processor comes back into the kernel with something for the kernel to handle: a system call, or a CPU exception such as a page fault. Interrupts it handles itself; then, after giving the scheduler a chance to switch tasks, it goes back to user mode. `DummyUserHooks` is the empty set of hooks: it asks to be told of no other event, so `execute` returns for nothing else.
+
+When `execute` returns, the kernel has the reason and the program's registers. The return value says what happened. The context now holds the program's registers as they were at that moment. The kernel reads and changes them through `context_mut()` before calling `execute` again. On an exception this loop ignores the reason and calls `execute` again, so a faulting program would fault forever; this one never faults.
 
 So a user program, to this kernel, is a function call that returns now and then. The code that serves the program, `user_task`, lives *inside* a loop, on a kernel stack, and its local variables survive every trip the program makes to user mode and back. Keep that picture: Linux does not share it.
 
@@ -199,30 +203,32 @@ fn handle_syscall(user_context: &mut UserContext, vm_space: &VmSpace) {
 
 The handler dispatches on the system call number, which is in `rax` by Linux's convention; the arguments are in `rdi`, `rsi`, `rdx`. `write` prints the program's buffer and returns the byte count in `rax`; the file descriptor in `rdi` is ignored, since every write goes to the console. `exit` powers the machine off, which in a kernelet stops the sandbox, not the host.
 
-The kernel never dereferences a user address. For `write` it must read `buf_len` bytes of the *program's* memory at `buf_addr`, so it asks the address space for a **reader** over that range; `reader` refuses a range outside user space. `read_fallible` copies through the reader into a kernel buffer, wrapped as a `VmWriter`, and under vOSTD an unmapped page makes it return an error rather than fault. On a machine, OSTD turns the page fault into that error only if the kernel has registered a page-fault handler, which this one has not, so OSTD panics in its fault handler instead. Either way a bad buffer ends in a panic, never in a stray access, and a kernelet's panic, like `poweroff`, ends only its sandbox.
+The kernel never dereferences a user address. For `write` it must read `buf_len` bytes of the *program's* memory at `buf_addr`, so it asks the address space for a **reader** over that range; `reader` refuses a range outside user space, and refuses an address space that is not the one active on this processor, which is why piece 1's `activate` matters. `read_fallible` copies through the reader into a kernel buffer, wrapped as a `VmWriter`.
+
+A bad buffer ends in a panic, never in a stray access. Under vOSTD an unmapped page makes `read_fallible` return an error rather than fault; the kernel then calls `unwrap` on it and panics. On a machine, OSTD turns the page fault into that error only if the kernel has registered a page-fault handler, which this one has not, so OSTD panics in its fault handler instead. A kernelet's panic, like `poweroff`, ends only its sandbox.
 
 **What it asks of the machine:** a safe way to copy from a user address, which may be bad; a console; and power-off.
 
 ## The list
 
-Here is everything the hundred-line kernel needs, with what OSTD does on a machine and what vOSTD and the endovisor will have to do instead. Each row names the chapters that build it.
+Here is everything the hundred-line kernel needs, with what OSTD does on a machine and what vOSTD and the endovisor will have to do instead. Each row names, in italics, the chapter that builds it.
 
 | the kernel uses | on a machine, OSTD | inside Linux, vOSTD must |
 |---|---|---|
-| `#[ostd::main]` | boots, then calls `main` and yields to the first task | vOSTD's entry, which the endovisor calls, sets up and then calls the same generated `__ostd_main` (chapter 4) |
-| `Arc`, `vec!` (the heap) | a heap in the machine's RAM | ask Linux for memory (chapter 4) |
-| `unwrap`, `unimplemented!` (a panic) | prints and halts | print to the host and stop the sandbox (chapter 4) |
-| `FrameAllocOptions`, `Segment`, `write_bytes` | allocates from the machine's RAM and writes through its own map of it | allocate from a grant of memory Linux hands it, and write through Linux's direct map, the range of kernel addresses through which all physical memory is reachable (chapter 4) |
-| `VmSpace::new`, `cursor_mut`, `map` | writes a hardware page table the processor walks | ask Linux to put the page in a Linux page table (chapter 13) |
-| `VmSpace::activate` | loads the page-table register | remember which address space this virtual CPU is in, and switch the carrier to its Linux address space (chapter 13) |
-| `TaskOptions`, `Task::run`, `Task::current` | its own tasks, stacks and scheduler | OSTD's code, ported with small changes, on stacks the endovisor allocates for the kernelet's tasks (chapters 7 and 9) |
-| `disable_preempt` | a per-processor count the scheduler checks | keep the count in the virtual CPU's record, and raise Linux's own preemption count while any guard is held (chapter 11) |
-| `UserMode::execute` | the processor's instruction for entering user mode, and its trap handlers | a carrier, a Linux task that enters user mode on the kernelet's behalf, with a patch to Linux that routes the system call back (chapters 5 to 8) |
-| `VmSpace::reader`, `read_fallible` | reads the user address; a fault goes to the trap handler, which needs a page-fault handler the kernel registers (this one registers none, so it panics) | walk the page table itself and copy through Linux's direct map (chapter 14) |
-| `println!`, `poweroff` | the serial port; QEMU's exit port, or a halt | two calls into the host (chapter 4) |
+| `#[ostd::main]` | boots, then calls `main` and yields to the first task | vOSTD's entry, which the endovisor calls, sets up and then calls the same generated `__ostd_main` (*The kernelet ABI*) |
+| `Arc`, `vec!` (the heap) | a heap in the machine's RAM | ask Linux for memory (*The kernelet ABI*) |
+| `unwrap`, `unimplemented!` (a panic) | prints and halts | print to the host and stop the sandbox (*The kernelet ABI*) |
+| `FrameAllocOptions`, `Segment`, `write_bytes` | allocates from the machine's RAM and writes through its own map of it | allocate from a grant of memory Linux hands it, and write through Linux's direct map, the range of kernel addresses through which all physical memory is reachable (*The kernelet ABI*) |
+| `VmSpace::new`, `cursor_mut`, `map` | writes a hardware page table the processor walks | ask Linux to put the page in a Linux page table (*Tenant memory on Linux's page tables*) |
+| `VmSpace::activate` | loads the page-table register | remember which address space this virtual CPU is in, and switch the carrier to its Linux address space (*Tenant memory on Linux's page tables*) |
+| `TaskOptions`, `Task::run`, `Task::current` | its own tasks, stacks and scheduler | OSTD's code, ported with small changes, on stacks the endovisor allocates for the kernelet's tasks (*Two stacks*; *Tasks and virtual CPUs*) |
+| `disable_preempt` | a per-processor count the scheduler checks | keep the count in the virtual CPU's record, and raise Linux's own preemption count while any guard is held (*Sharing a processor politely*) |
+| `UserMode::execute` | the processor's instruction for entering user mode, and its trap handlers | a carrier, a Linux task that enters user mode on the kernelet's behalf, with a patch to Linux that routes the system call back (*Carrier hooks* through *Into user mode and back*) |
+| `VmSpace::reader`, `read_fallible` | reads the user address; a fault goes to the trap handler, which needs a page-fault handler the kernel registers (this one registers none, so it panics) | walk the page table itself and copy through Linux's direct map (*What vOSTD adds on top*) |
+| `println!`, `poweroff` | the serial port; QEMU's exit port, or a halt | two calls into the host (*The kernelet ABI*) |
 
 <div class="recap">
 
-**Recap.** The hundred-line kernel allocates frames, builds an address space with a cursor, creates a task, and in that task loops over `execute`, which enters user mode and returns on each system call. It copies the program's buffer through a fallible reader rather than touching the address. The table above is the contract that vOSTD and the endovisor must fulfill. The rest of the book fulfills it, in the chapters each row names.
+**Recap.** The hundred-line kernel allocates frames, builds an address space with a cursor, creates a task, and in that task loops over `execute`, which enters user mode and returns on each system call. It copies the program's buffer through a fallible reader rather than touching the address. The table above is the contract that vOSTD and the endovisor must fulfill. The rest of the book fulfills it, chapter by chapter.
 
 </div>

@@ -62,7 +62,7 @@ Instead, a copy walks the page table from the tenant address to the frame, and c
 
 On a bad address, vOSTD returns the page-fault error at once, where OSTD would first call the kernel proper's own page-fault handler and retry. An unmapped or read-only address is a *result* of the walk, not a fault.
 
-Returning the error is enough for kernels that map eagerly. Asterinas's full kernel proper maps on demand, so before it can run as a kernelet vOSTD must call its handler outside the RCU read section (RCU, *read-copy-update*: readers take no lock, and a writer waits until every reader in progress has finished before it frees anything; described below) and walk again. This prototype does not do that.
+Returning the error is enough for kernels that map eagerly, not for one that maps on demand. Asterinas's full kernel proper maps on demand, so before it can run as a kernelet vOSTD must call its handler outside the read section described below and walk again. This prototype does not do that.
 
 *Simplified from `prototype/vostd/src/mm/io.rs`: `Region`, `resolve`, `copy_regions`, `copy_opaque`.*
 
@@ -154,13 +154,13 @@ Memory pressure leaves the area's entries alone: `make mem-pressure` tries to dr
 
 ## Freeing a frame a copy may be reading
 
-`unmap` waits for every copy in progress before it frees a frame. A copy takes no cursor, since that would serialize every copy against every cursor, so it may still be reading the frame whose entry the `unmap` just cleared. The wait is a minimal RCU: the `rcu::read` around each page of a copy, and the `rcu::synchronize()` in `unmap` before the frames are freed, which waits a *grace period*, until every reader in progress has finished.
+`unmap` waits for every copy in progress before it frees a frame. A copy takes no cursor, since that would serialize every copy against every cursor, so it may still be reading the frame whose entry the `unmap` just cleared. The wait is a minimal RCU (*read-copy-update*: readers take no lock, and a writer waits until every reader in progress has finished before it frees anything): the `rcu::read` around each page of a copy, and the `rcu::synchronize()` in `unmap` before the frames are freed, which waits a *grace period*, until every reader in progress has finished.
 
 `synchronize` waits for every virtual CPU that was inside a read section when it was called. Each virtual CPU has a sequence word, odd while it is inside one. `synchronize` skips its own virtual CPU: its caller is not in a read section, and since a read section holds a preemption guard, no other task on this virtual CPU can have been switched out partway through one.
 
 The wait is short, one page's walk and copy, unless Linux has descheduled the reader's carrier; then the waiter spins, telling the host through `vcpu_on_spin`, until that carrier runs again.
 
-The grace period holds in the test: `make mem-conc` runs copies without pause on one virtual CPU against map-and-unmap cycles on the other and finds no torn page, that is, no copy still reading a frame when the test rewrote it after its `unmap` returned (the rewrite stands in for reuse). A second phase frees the frames for real while copies write into the space, reallocates them, and finds none overwritten.
+The grace period holds in the test: `make mem-conc` runs copies without pause on one virtual CPU against map-and-unmap cycles on the other and finds no torn page, that is, no copy still reading a frame when the test rewrote it after its `unmap` returned (the rewrite stands in for reuse). A second phase frees the frames for real while copies write into the space, reallocates them, and finds none overwritten; in this run no grace period of that phase found a copy to wait for.
 
 ## The range lock
 
@@ -197,13 +197,13 @@ fn unlock_word(&self, idx: usize, exclusive: bool) {
 }
 ```
 
-A contended cursor sleeps rather than spins, because the holder may itself be asleep in Linux inside a `vm_map`. The waiter's whole virtual CPU sleeps with it, which costs no more than spinning on a machine's page-table lock would.
+A contended cursor sleeps rather than spins, because the lock's holder may itself be asleep in Linux inside a `vm_map`. The waiter's whole virtual CPU sleeps with it, which costs no more than spinning on a machine's page-table lock would.
 
-The slow path is a futex, Linux's "sleep only if this word still holds this value" primitive. It is rebuilt for carriers because Linux's futex keys on a user address in the caller's address space and this word lives in kernel memory. A waiter sets the `WAITERS` bit and calls `vm_wait(space, word, expected)`; the endovisor takes the space's wait-queue lock, reads the word, returns at once if it no longer equals `expected`, and otherwise puts the carrier to sleep, killably. A releasing holder clears the bit with one atomic read-modify-write and, if it was set and no reader remains, calls `vm_wake`, which wakes every waiter under the same lock.
+The slow path is a futex, Linux's "sleep only if this word still holds this value" primitive. It is rebuilt for carriers because Linux's futex keys on a user address in the caller's address space and this word lives in kernel memory. A waiter sets the `WAITERS` bit and calls `vm_wait(space, word, expected)`; the endovisor takes the space's wait-queue lock, reads the word, returns at once if it no longer equals `expected`, and otherwise puts the carrier to sleep, killably. A releasing cursor clears the bit with one atomic read-modify-write and, if it was set and no reader remains, calls `vm_wake`, which wakes every waiter under the same lock.
 
 No wake-up can be lost, by the argument chapter 9 made for `vcpu_idle`: one side marks, then checks; the other changes, then checks the mark; so one of the two always sees the other. Here the mark is the `WAITERS` bit, the check is the read under the lock, and the change is the single read-modify-write on release.
 
-A cursor that waits behind a sleeping holder sleeps too, and takes the lock after the release without a single kernelet task switch: `make mem-conc` has one virtual CPU hold a cursor while its `vm_map` sleeps (a test hook makes it), and the other virtual CPU's cursor on the same region sleeps in `vm_wait` and takes the lock after the release.
+A cursor that waits behind a sleeping lock holder sleeps too, and takes the lock after the release without a single kernelet task switch: `make mem-conc` has one virtual CPU hold a cursor while its `vm_map` sleeps (a test hook makes it), and the other virtual CPU's cursor on the same region sleeps in `vm_wait` and takes the lock after the release.
 
 ## A page without read permission
 
@@ -292,7 +292,9 @@ Inside Linux, a memory service may sleep even when the kernel proper calls it un
 
 Rule 1 is sound because a kernelet's critical section promises only that no kernelet task switch happens on this virtual CPU until the guard drops, as Problem 2 of chapter 11 argued. A sleep in Linux is the same event as a Linux preemption, which the kernelet already survives at any instruction. On a machine a guard has a second job: OSTD frees page-table pages only after every processor has switched tasks, so a guard keeps them alive. Here no table is freed, and vOSTD's grace period watches each virtual CPU's sequence word rather than task switches, so a guard held across a Linux sleep changes nothing.
 
-Rule 2 is the one place where vOSTD asks more of the kernel proper than OSTD does: a kernel proper that maps under a spin lock or with virtual interrupts off runs on a machine and is stopped here. vOSTD asserts the rule before every sleeping memory service, with a count of spin locks held that is separate from the guard count, and stops the kernelet rather than counting violations, so a kernel proper under the tenant's control cannot break the rule through the memory services; only the sandbox's own virtual CPUs would spin, within its own share. Whether Asterinas's full kernel proper keeps the rule everywhere has not been checked.
+Rule 2 is the one place where vOSTD asks more of the kernel proper than OSTD does: a kernel proper that maps under a spin lock or with virtual interrupts off runs on a machine and is stopped here.
+
+vOSTD asserts the rule before every sleeping memory service, with a count of spin locks held that is separate from the guard count, and stops the kernelet rather than counting violations, so a kernel proper under the tenant's control cannot break the rule through the memory services; only the sandbox's own virtual CPUs would spin, within its own share. Whether Asterinas's full kernel proper keeps the rule everywhere has not been checked.
 
 The heap services break rule 2, a known gap that costs latency, not soundness. They may sleep inside `kmalloc`, carry no assertion, and are called under spin locks, the withheld set's insert among them. By rule 4 that costs latency only: a virtual CPU that wants the lock spins, and hands its turn on through `vcpu_on_spin`, for as long as `kmalloc` sleeps.
 
@@ -312,7 +314,7 @@ pub(crate) fn map(&self, va: Vaddr, paddr: Paddr, prot: u32) {
 
 pub(crate) fn assert_may_sleep(service: &str) {
     if held() != 0 || irq_is_off() {
-        panic!("R2 violated: the sleeping service {} was called holding {} kernelet spin lock(s)", service, held());   // R2 is the code's name for rule 2; the message names the lock case, the check covers both
+        panic!("R2 violated: the sleeping service {} was called holding {} kernelet spin lock(s)", service, held());   // R2 is the code's name for rule 2
     }
 }
 ```

@@ -6,7 +6,7 @@ This chapter resolves three conflicts between a kernelet and Linux over who hold
 
 <div class="linux">
 
-**Linux: preemption models.** Linux decides *that* a task should give way by setting a flag on it, `need_resched`, which the scheduler does at a timer tick when the task's slice is used up, or when a task with a better claim wakes. The *preemption models* differ in *when* the flag is acted on. A kernel is built with one of several models; one built with the full model and the option `PREEMPT_DYNAMIC`, as this book's is, can be switched at boot to `none`, `voluntary` or `full` with the parameter `preempt=`. Under *full* a task running kernel code can be rescheduled at almost any instruction, on return from an interrupt. Under *voluntary* and *none*, common on servers, a task in kernel mode keeps its processor until it sleeps, returns to user mode, or reaches one of the many places where Linux's own code calls [`cond_resched()`](https://elixir.bootlin.com/linux/v6.12/source/include/linux/sched.h#L2063), the voluntary preemption point.
+**Linux: preemption models.** Linux's *preemption models* differ in when a task that should give way does so. Linux decides *that* a task should give way by setting a flag on it, `need_resched`, which the scheduler does at a timer tick when the task's slice is used up, or when a task with a better claim wakes; the models differ in when the flag is acted on. A kernel is built with one of several models; one built with the full model and the option `PREEMPT_DYNAMIC`, as this book's is, can be switched at boot to `none`, `voluntary` or `full` with the parameter `preempt=`. Under *full* a task running kernel code can be rescheduled at almost any instruction, on return from an interrupt. Under *voluntary* and *none*, common on servers, a task in kernel mode keeps its processor until it sleeps, returns to user mode, or reaches one of the many places where Linux's own code calls [`cond_resched()`](https://elixir.bootlin.com/linux/v6.12/source/include/linux/sched.h#L2063), the voluntary preemption point.
 
 </div>
 
@@ -14,11 +14,11 @@ Under `preempt=none`, a kernelet task that computes holds its processor for as l
 
 The remedy is for the watch timer to do what a call to `cond_resched()` would: give the processor up on the kernelet's behalf when Linux wants it. The two forms below exist for the configurations in which Linux does not preempt kernel code; on a Linux that does, Linux reschedules by itself on the way out of the interrupt, and neither has anything left to do.
 
-The first form is the upcall of chapter 10: on its way out, if Linux has set `need_resched` meanwhile, vOSTD calls `vcpu_yield`, which reschedules in Linux. vOSTD notices without calling Linux. The Linux built for this book is configured for full preemption and only booted `preempt=none`, so it still keeps its preemption count, and it folds `need_resched` into that count (the box under Problem 2).
+The first form is the upcall of chapter 10: on its way out, if Linux has set `need_resched` meanwhile, vOSTD calls `vcpu_yield`, which reschedules in Linux. vOSTD notices without calling Linux, by the decrement-and-test of its mirror, under Problem 2; with the mirror off, only the stub below yields. The Linux built for this book is configured for full preemption and booted with `preempt=none` for this test, so it still keeps its preemption count, and it folds `need_resched` into that count (the box under Problem 2).
 
-The second form is a **yield stub** in the endovisor, for when the upcall cannot be taken because the interrupted task's stack has too little room left, or its bound is unknown. The timer points the interrupted frame at the stub by rewriting the frame's instruction pointer, as it does for the upcall. The upcall needs 32 KiB left on the stack, 16 KiB for its own frames and 16 KiB reserved for a Linux interrupt on the same stack. The stub needs a few dozen words, the slot it reserves, the sixteen words it pushes and one small C frame, and the reschedule itself runs on the Linux stack.
+The second form is a **yield stub** in the endovisor, for when the upcall cannot be taken because the interrupted task's stack has too little room left, or its bound is unknown. The timer points the interrupted frame at the stub by rewriting the frame's instruction pointer, as it does for the upcall.
 
-Nothing checks for those few words; running out halts the host on a double fault, as chapter 7 explains.
+The stub fits where the upcall does not. The upcall needs 32 KiB left on the stack, 16 KiB for its own frames and 16 KiB reserved for a Linux interrupt on the same stack. The stub needs a few dozen words, the slot it reserves, the sixteen words it pushes and one small C frame, and the reschedule itself runs on the Linux stack. Nothing checks for those few words; running out halts the host on a double fault, as chapter 7 explains.
 
 The watch callback's non-critical branch becomes the following, which replaces chapter 10's call to `klet_virq_redirect`. `again` is the callback's last lines, which re-arm the timer and return:
 
@@ -82,7 +82,7 @@ The stub never returns into a kernelet that died while the carrier was away. `kl
 
 `klet_do_yield` must yield under every model, and it serves every yield: the upcall's, the stub's, and the forced one of Problem 3. `cond_resched()` does nothing under the full model. So when it has not rescheduled and Linux still wants the processor, `schedule()` is called directly.
 
-The test `make yield` shows the remedy working. The test kernel in `prototype/kernels/yield/src/lib.rs` computes for seconds. The test runs it twice on a kernel booted with `preempt=none`, with a competing host process pinned to the same processor: once with the watch timer turned off (the module parameter `klet_watch=0`) and once with it on. With the timer off, the competitor gets nothing for the kernelet's whole computation, 4.4 s in the last run. The competitor prints a progress line every few milliseconds; with the timer on, the longest gap between two lines was 266 ms in the last run, and the test asserts under a second.
+The test `make yield` shows the remedy working. The test kernel in `prototype/kernels/yield/src/lib.rs` computes for seconds. The test runs it twice on a kernel booted with `preempt=none`, with a competing host process pinned to the same processor: once with the watch timer turned off (the module parameter `klet_watch=0`) and once with it on. With the timer off, the competitor gets nothing for the kernelet's whole computation, 4.4 s in the last run. The competitor prints a progress line about every 250 ms, so the test resolves nothing finer; with the timer on, the longest gap between two lines was 271 ms in the last run, barely more than the print interval, and the test asserts under a second.
 
 The test also shows that the upcall loses no register: a checksum the kernel computes over a long run in ten live variables comes out identical, and equal to a user-space reference, whether the kernelet was diverted through the upcall thousands of times or never.
 
@@ -185,13 +185,15 @@ void klet_svc_body(struct klet_svc_args *args)
 
 A kernelet guard therefore promises only that no *kernelet* task switch happens on this virtual CPU until it drops. Across a service, which may sleep, and at a forced yield (Problem 3, below), the carrier can still lose the processor while a kernelet guard is held. The kernelet is correct under that weaker promise, as a guest kernel is correct when its hypervisor deschedules a virtual CPU. The memory services need to sleep under a guard, which only this weaker promise allows. The chapter that builds them states it precisely.
 
-The test `make sched-coop` shows the mirror working. It runs four kernelet tasks hammering one spin lock for ten seconds, under the full model, while two competitors in a sibling control group make Linux preempt the carriers constantly. It counts, in the preemption notifier, every time a carrier is switched out involuntarily, outside a service, while vOSTD's `mirrored` flag says it is in a critical section. It counts by the flag rather than by the guard count because Linux's count goes up just after the kernelet's first guard and comes down just before its last one, and a switch in those few instructions is Linux's right; since Linux's count is raised whenever the flag is set, every switch the test counts is a real failure. With the mirror on, the test asserts that the count is zero. With it off (the module parameter `klet_mirror=0`, under which vOSTD still keeps the flag but skips the increment), recent runs counted between about 2,400 and 2,800.
+The test `make sched-coop` shows the mirror working. It runs four kernelet tasks hammering one spin lock for ten seconds, under the full model, while two competitors in a sibling control group make Linux preempt the carriers constantly. It counts, in the preemption notifier, every time a carrier is switched out involuntarily, outside a service, while vOSTD's `mirrored` flag says it is in a critical section. It counts by the flag rather than by the guard count because Linux's count goes up just after the kernelet's first guard and comes down just before its last one, and a switch in those few instructions is Linux's right; since Linux's count is raised whenever the flag is set, every switch the test counts is a real failure. With the mirror on, the test asserts that the count is zero. With it off (the module parameter `klet_mirror=0`, under which vOSTD still keeps the flag but skips the increment), the last run counted 2,025.
 
 ## Problem 3: a critical section that never ends
 
 The mirror lets a kernelet defer Linux's preemption, so a kernel proper whose logic the tenant controls could defer it forever by entering a critical section and never leaving.
 
-The watch timer bounds the deferral at two of its one-millisecond periods when ticks arrive on time, three when one is late, from interrupt context whatever the count. A tick that finds a carrier in kernelet code in a critical section with `need_resched` set notes the time; if the next tick finds the same, and at least a millisecond has passed since the note (`now` is the monotonic clock), it **forces** the yield. A tick that arrives late, because Linux had interrupts off or the machine under the test VM was busy, lengthens the grace, and a second strike that comes less than a millisecond after a late first one is skipped, so the grace can reach three ticks. This replaces chapter 10's last branch; before it, a requested firing goes straight to `again`, and so does a tick that finds no `need_resched`, which first drops the note:
+The watch timer bounds the deferral at two of its one-millisecond periods when ticks arrive on time, three when one is late, from interrupt context whatever the count. A tick that finds a carrier in kernelet code in a critical section with `need_resched` set notes the time; if the next tick finds the same, and at least a millisecond has passed since the note (`now` is the monotonic clock), it **forces** the yield. A tick that arrives late, because Linux had interrupts off or the machine under the test VM was busy, lengthens the grace, and a second strike that comes less than a millisecond after a late first one is skipped, so the grace can reach three ticks; the second strike is skipped whenever the first strike's callback ran later than the second's, which any jitter can cause.
+
+In the callback, the bound replaces chapter 10's last branch. Before it, a requested firing goes straight to `again`, and so does a tick that finds no `need_resched`, which first drops the note:
 
 *Simplified from `prototype/linux/endovisor/watch.c`: `klet_watch_fn`.*
 
@@ -209,11 +211,11 @@ Nothing in the stub changes for a forced yield: the service body lifts the mirro
 
 The count of strikes restarts whenever the carrier stops deferring Linux: both strikes must come from ticks that each find the carrier holding Linux off, with no tick in between that found otherwise. The note of the first strike is dropped whenever a tick finds the carrier out of a critical section or Linux no longer wanting the processor, and when the carrier leaves the processor, since a carrier that has given the processor back is deferring nothing.
 
-`make sched-coop`'s third boot measures the bound. It adds an *overstayer*, a task that holds a preemption guard for about 8 ms at a time (nominally 10). It was forced to yield over a thousand times, and its longest deferral was about 2 ms, against the 4 ms the test allows (measured on the booted prototype).
+`make sched-coop`'s third boot measures the bound. It adds an *overstayer*, a task that holds a preemption guard for about 8 ms at a time (nominally 10). It was forced to yield over a thousand times, and its longest deferral, measured from the first strike, was about 2 ms, against the 4 ms the test allows (measured on the booted prototype).
 
-Time a kernelet keeps the processor past Linux's wish delays its neighbors but does not shrink their share. Linux accounts the extra run time to the sandbox's control group like any other. `make sched-fair` boots the sandbox three times, with 1 kernelet task, with 50, and with 50 plus an overstayer, each against one competitor of equal weight in a sibling group on the same two processors, so the competitor's due is one processor. Its share was 0.98 to 0.99 of a processor in each boot, and varied by under 1 % between the boot with the overstayer, the only one with forced yields, and the two without; the test asserts under 3 % (measured on the booted prototype). What a neighbor can lose is at most the grace, per preemption.
+Time a kernelet keeps the processor past Linux's wish delays its neighbors but does not shrink their share. Linux accounts the extra run time to the sandbox's control group like any other. `make sched-fair` boots the sandbox three times, with 1 kernelet task, with 50, and with 50 plus an overstayer, each against one competitor of equal weight in a sibling group on the same two processors, so the competitor's due is one processor. Its share was 0.994 and 0.995 of a processor in the boots without the overstayer; with it, the only boot with forced yields, 0.884 in the last bench and 0.986 and 0.990 in two reruns, a variance the last chapter discusses. The test asserts a spread under 3 % and the last bench failed it (measured on the booted prototype). What a neighbor can lose is at most the grace, per preemption.
 
-Forced yields are counted and reported in the kernel log only when the endovisor unloads, since a print from the timer would lengthen the very deferrals it reports, so the operator sees after the fact which sandbox collected them.
+Forced yields are counted and reported in the kernel log only when the endovisor unloads, since a print from the timer would lengthen the very deferrals it reports, so the operator sees after the fact which carriers, by process identifier and virtual CPU, collected them.
 
 The rule and the bound, together:
 
@@ -233,9 +235,9 @@ flowchart TB
     b -- "still waiting at the next tick" --> e
 ```
 
-## The backstop: do not spin on an absent holder
+## The backstop: do not spin on an absent lock holder
 
-A spin lock that keeps failing may be waiting for a holder that is off its processor: after a forced yield, or while the holder's carrier is in a service it called under the lock, asleep or preempted. After a thousand failed attempts the lock says so with the service `vcpu_on_spin`, and keeps spinning.
+A spin lock that keeps failing may be waiting for a lock holder that is off its processor: after a forced yield, or while the lock holder's carrier is in a service it called under the lock, asleep or preempted. After a thousand failed attempts the lock says so with the service `vcpu_on_spin`, and keeps spinning.
 
 <div class="linux">
 
@@ -255,13 +257,15 @@ fn acquire_lock(&self) {
         spins += 1;
         if spins == SPINS_BEFORE_ON_SPIN {       // 1000
             spins = 0;
-            crate::vcpu::on_spin();              // "my holder may not be running"
+            crate::vcpu::on_spin();              // "my lock holder may not be running"
         }
     }
 }
 ```
 
-The lock is correct without the service: whether or not the endovisor finds a sibling to run, the loop goes on trying. A holder asleep in a service is not runnable, so for it the hint finds nothing. The waiter spins with its lock's guard held, so Linux's count is raised; Linux's slice end takes effect only inside the next `vcpu_on_spin` call, where the mirror is lifted, and otherwise the forced yield takes the processor within two ticks.
+The lock is correct without the service: whether or not the endovisor finds a sibling to run, the loop goes on trying. A lock holder asleep in a service is not runnable, so for it the hint finds nothing.
+
+A spinning waiter holds Linux off like any critical section, because it spins with its lock's guard held and Linux's count raised. At most one `vcpu_on_spin` call per jiffy can yield, so in practice the forced yield takes the processor first, within two or three ticks.
 
 No test of this book exercises the path; in every `make sched-coop` boot, the counters of spins that called the service and of calls to `yield_to()` were zero.
 

@@ -4,7 +4,7 @@ Everything is now in place for the hundred-line kernel to run its program. The k
 
 ## Leaving: the `user_run` service
 
-`UserMode::execute` in vOSTD is the real OSTD's code with one line changed: where OSTD runs its own assembly to enter user mode, vOSTD calls `user_run` with a pointer to the context, and interprets the number it returns.
+`UserContext::execute` in vOSTD, which `UserMode::execute` calls, keeps OSTD's signature and loop: where OSTD enters user mode with its own assembly and decodes the trap number, vOSTD calls `user_run` with a pointer to the context, and interprets the number it returns.
 
 *Simplified from `prototype/vostd/src/arch/cpu/context.rs`: `execute`.*
 
@@ -27,7 +27,9 @@ fn execute<T: UserModeHooks>(&mut self, hooks: &T) -> ReturnReason {
 }
 ```
 
-So `user_run` returns `0` for a system call, `1` for an exception and `2` for "an event happened; the kernel may want to know, then call me again". The third case is for chapter 10. The context it is given is a `RawUserContext`: the eighteen registers of chapter 3, in a fixed order, followed by three fields for exceptions.
+So `user_run` returns `0` for a system call, `1` for an exception and `2` for "an event happened; the kernel may want to know, then call me again". The third case is how a virtual interrupt reaches the kernel while its program runs.
+
+The context it is given is a `RawUserContext`: the eighteen registers of chapter 3, in a fixed order, followed by three fields for exceptions.
 
 On the endovisor's side, `user_run` is the one service that does not use the stub of the last chapter. It records the context, switches to the Linux stack, and does not come back until a hook brings the carrier into the kernelet again:
 
@@ -40,12 +42,12 @@ static u64 klet_svc_user_run(struct klet_user_ctx *ctx)
 
 	c->ctx = ctx;                               /* where the registers are, and where to put them later */
 	WRITE_ONCE(c->state, KLET_USER);            /* "in, or on the way to, user mode" */
-	smp_mb();                                   /* the state is published before the pending word is read: chapter 10 */
-	if (atomic_read(&c->vrec.pending)) {        /* a virtual interrupt arrived meanwhile: chapter 10 */
+	smp_mb();                                   /* the state is published before the pending word is read: see virtual interrupts */
+	if (atomic_read(&c->vrec.pending)) {        /* a virtual interrupt arrived meanwhile */
 		WRITE_ONCE(c->state, KLET_RUNNING);
 		return KLET_RUN_EVENT;
 	}
-	klet_mirror_out(c, false);                  /* chapter 11: give Linux its preemption count back */
+	klet_mirror_out(c, false);                  /* give Linux its preemption count back: the mirror, built later */
 	klet_switch(&c->coro_sp, c->linux_sp);      /* to the Linux stack, inside whichever hook entered us */
 	return c->run_ret;                          /* ... much later, with the reason the hook recorded */
 }
@@ -106,7 +108,7 @@ static bool klet_on_syscall(struct pt_regs *regs)
 
 	/* ... the kernelet handled the call and called user_run again ... */
 	if (c->state == KLET_USER) {
-		klet_space_adopt(c, c->vrec.space);     /* the right address space: chapter 13 */
+		klet_space_adopt(c, c->vrec.space);     /* the right address space: built with tenant memory */
 		klet_ctx_to_regs(c, regs);              /* its new registers */
 		c->user_live = true;                    /* from here on pt_regs is the authority, until the next hook */
 	} else {
@@ -123,9 +125,9 @@ static void klet_regs_to_ctx(struct klet_carrier *c, struct pt_regs *regs)
 }
 ```
 
-Read the middle of it twice. `klet_enter` switches to the kernelet stack, where `user_run` is waiting inside `klet_switch`; `user_run` returns `0`; `execute` returns `UserSyscall`; the kernel proper's loop handles the call and calls `execute` again; `user_run` switches back to the Linux stack, which lands *here*, just after `klet_enter`. Then the hook copies the kernelet's new registers out, returns `true`, and Linux returns to user mode with them, skipping its own system-call table entirely.
+The `klet_enter` in the middle of the hook runs the kernel proper's whole handling of the call. `klet_enter` switches to the kernelet stack, where `user_run` is waiting inside `klet_switch`; `user_run` returns `0`; `execute` returns `UserSyscall`; the kernel proper's loop handles the call and calls `execute` again; `user_run` switches back to the Linux stack, which lands *here*, just after `klet_enter`. Then the hook copies the kernelet's new registers out, returns `true`, and Linux returns to user mode with them, skipping its own system-call table entirely.
 
-The `syscall` instruction itself overwrites two registers on the way in: it puts the return address in `rcx` and the flags in `r11`. `pt_regs` holds them as the instruction left them, so the kernel proper sees exactly the registers it would see on a machine, and the call number is in `orig_ax`, where Linux's entry code put it.
+The kernel proper sees exactly the registers it would see on a machine. The `syscall` instruction itself overwrites two registers on the way in: it puts the return address in `rcx` and the flags in `r11`. `pt_regs` holds them as the instruction left them, and the call number is in `orig_ax`, where Linux's entry code put it.
 
 ```mermaid
 sequenceDiagram
@@ -147,19 +149,21 @@ sequenceDiagram
 
 Note what the sequence does *not* say: that the task which comes back is the one that left. Between the two switches the kernelet's own scheduler may have run another task, and then it is that task's `execute` that leaves, with another thread's registers. Nothing in Linux's exit path minds, because everything Linux will restore from the stack is in `pt_regs`, and the hook overwrites all of it.
 
-One register is not in `pt_regs`. A program keeps a pointer to its thread's private variables in a segment register (`%fs` on x86-64), and Linux saves that register's base per task, in its own record, not on the stack. The prototype's context carries no such base, so every tenant thread on a carrier shares the carrier's; a full vOSTD would carry one per thread and have the endovisor set it on each trip.
+The thread-pointer base is not in `pt_regs`, so in the prototype every tenant thread on a carrier shares the carrier's. A program keeps a pointer to its thread's private variables in a segment register (`%fs` on x86-64), and Linux saves that register's base per task, in its own record, not on the stack. The prototype's context carries no such base; a full vOSTD would carry one per thread and have the endovisor set it on each trip.
 
 ## Coming back by an exception
 
-A tenant's instruction can fault: divide by zero, an illegal instruction, a touch of an address with no mapping. The kernel proper expects `execute` to return `UserException` with the trap number, and for a page fault the address. On a machine, OSTD's trap handler would fill those in from the hardware.
+A tenant's fault must reach the kernel proper as `execute` returning `UserException`, with the trap number and, for a page fault, the address. A tenant's instruction can fault: divide by zero, an illegal instruction, a touch of an address with no mapping. On a machine, OSTD's trap handler would fill those in from the hardware.
 
 <div class="linux">
 
-**Linux: exceptions become signals.** When a user instruction faults, Linux's exception handler records the trap number, error code and address in the task's thread structure, queues a **signal** on the task (`SIGSEGV`, `SIGILL`, `SIGFPE`, and so on) with [`force_sig()`](https://elixir.bootlin.com/linux/v6.12/source/kernel/signal.c#L1666), and heads for user mode. Signals are acted on in the exit loop: Linux either kills or stops the task or arranges for a handler in the program to run. Two signals cannot be caught or blocked: `SIGKILL` and `SIGSTOP`. For a fault, Linux's handlers queue the signal with [`force_sig_fault()`](https://elixir.bootlin.com/linux/v6.12/source/kernel/signal.c#L1733), whose `si_code` says what kind of fault it was.
+**Linux: exceptions become signals.** When a user instruction faults, Linux's exception handler records the trap number, error code and address in the task's thread structure, queues a **signal** on the task (`SIGSEGV`, `SIGILL`, `SIGFPE`, and so on) with [`force_sig()`](https://elixir.bootlin.com/linux/v6.12/source/kernel/signal.c#L1666), and heads for user mode. For a fault, Linux's handlers queue the signal with [`force_sig_fault()`](https://elixir.bootlin.com/linux/v6.12/source/kernel/signal.c#L1733), whose `si_code` says what kind of fault it was.
+
+Signals are acted on in the exit loop: Linux either kills or stops the task or arranges for a handler in the program to run. Two signals cannot be caught or blocked: `SIGKILL` and `SIGSTOP`.
 
 </div>
 
-The resume hook runs at the top of that loop, before Linux delivers anything. So the endovisor takes the signals off the queue itself:
+The endovisor takes the signals off the queue itself, in the resume hook, which runs at the top of that loop before Linux delivers anything:
 
 *Simplified from `prototype/linux/endovisor/carrier.c`: `klet_drain_signals`.*
 
@@ -183,7 +187,7 @@ static bool klet_drain_signals(struct klet_carrier *c)
 			c->exc_pending = true;
 			exception = true;
 		}
-		/* anything else Linux forced (a resource limit's SIGXCPU, a seccomp trap's SIGSYS) is dropped */
+		/* anything else Linux forced (a seccomp trap's SIGSYS) is dropped */
 		spin_lock_irq(&current->sighand->siglock);
 	}
 	spin_unlock_irq(&current->sighand->siglock);
@@ -191,11 +195,17 @@ static bool klet_drain_signals(struct klet_carrier *c)
 }
 ```
 
-A fault signal is recognized by its number and its `si_code` together. The number is one of `SIGSEGV`, `SIGBUS`, `SIGILL`, `SIGFPE` and `SIGTRAP`, and the code is one a trap handler uses: positive, and below `SI_KERNEL`, the code Linux puts on signals it sends on its own account. Four more signals are accepted with `SI_KERNEL`, because some of x86's trap handlers have no finer code to give and send `SI_KERNEL` themselves ([`arch/x86/kernel/traps.c`](https://elixir.bootlin.com/linux/v6.12/source/arch/x86/kernel/traps.c)): `SIGSEGV` for a general-protection fault, an invalid task-state segment, an overflow trap (`int 4`), a bounds-check fault from 32-bit code, and the fault a processor raises on a disabled extended-state feature; `SIGBUS` for a segment-not-present and a stack fault; `SIGTRAP` for a breakpoint (`int3`); and `SIGFPE` for the coprocessor segment overrun that no current processor raises. In the extended-state case the trap number Linux left in the thread structure is stale, and the kernel proper sees whatever the last exception was. No process can forge that code, since `kill` sends `SI_USER`. Anything else is discarded: a signal sent by a process, which on the host side can only be the operator, since a tenant's `kill` is a system call and the syscall hook takes those; or a signal Linux sends for a reason of its own, such as a resource limit. One kind is left alone: a signal Linux has made fatal and marked immutable, which is what a seccomp filter's *kill* action does to its `SIGSYS`; the drain leaves it in the queue, Linux delivers it on the same pass, and the carrier's death ends the sandbox (chapter 12).
+A fault signal is recognized by its number and its `si_code` together. The number is one of `SIGSEGV`, `SIGBUS`, `SIGILL`, `SIGFPE` and `SIGTRAP`, and the code is one a trap handler uses: positive, and below `SI_KERNEL`, the code Linux puts on signals it sends on its own account. Four more signals are accepted with `SI_KERNEL`, because some of x86's trap handlers have no finer code to give and send `SI_KERNEL` themselves ([`arch/x86/kernel/traps.c`](https://elixir.bootlin.com/linux/v6.12/source/arch/x86/kernel/traps.c)): `SIGSEGV` for a general-protection fault, an invalid task-state segment, an overflow trap (`int 4`), a bounds-check fault from 32-bit code, and the fault a processor raises on a disabled extended-state feature; `SIGBUS` for a segment-not-present and a stack fault; `SIGTRAP` for a breakpoint (`int3`); and `SIGFPE` for the coprocessor segment overrun that no current processor raises. In the extended-state case the trap number Linux left in the thread structure is stale, and the kernel proper sees whatever the last exception was. No process can forge that code, since `kill` sends `SI_USER`.
+
+Every other signal the drain finds is discarded, with one exception left for Linux. A signal sent by a process is dropped: on the host side that is a process allowed to signal the carrier, since a tenant's `kill` is a system call and the syscall hook takes those. So is a signal Linux sends for a reason of its own, once a fault has reset its action. One kind is left alone: a signal Linux has made fatal and marked immutable, which is what a seccomp filter's *kill* action does to its `SIGSYS`; the drain leaves it in the queue, Linux delivers it on the same pass, and the carrier's death ends the sandbox.
 
 `SIGKILL` and `SIGSTOP` are left in the queue. The first is how the operator and the endovisor end a carrier, and Linux acts on it in the same loop. The second takes effect at the carrier's next return to user mode, where Linux stops it as it stops any task; a stopped carrier is a stopped virtual CPU until `SIGCONT`, and a virtual CPU that does not return to user mode, because it is idle or runs only kernel tasks, keeps running with the stop pending.
 
-Most signals never reach the queue at all, and that is arranged earlier. The binary-format handler of chapter 6 sets every signal but `SIGKILL` and `SIGSTOP`, which cannot be, to be *ignored*, and clears the signal mask, in every carrier, since each arrives by an exec of its own. An ignored signal is discarded the moment it is sent, so an operator's `SIGTERM`, `SIGQUIT` or `SIGTSTP` to a carrier does nothing. The drain alone would not do, for two reasons. A signal whose default action is to end the task without a core dump, `SIGTERM`, `SIGINT`, `SIGPIPE` and their kind, is fatal at the moment it is sent: the sender sees that nothing will catch it and turns it into a `SIGKILL` on the spot ([`complete_signal()`](https://elixir.bootlin.com/linux/v6.12/source/kernel/signal.c#L994)), before any drain. And the drain runs at the top of one pass of the exit loop, while Linux delivers signals later in the same pass if one was pending when the pass began, so a `SIGQUIT` that arrived between the two would dump core and end the carrier. The fault signals are ignored too, and still arrive: Linux sends a fault with `force_sig_info_to_task()`, which first sets an ignored signal back to its default action, so the signal is queued and the drain sees it. The drain then ignores it again, so that the next fault is forced the same way and a `SIGSEGV` a process sends in between is discarded.
+Most signals never reach the queue at all, and that is arranged earlier. The binary-format handler of chapter 6 sets every signal but `SIGKILL` and `SIGSTOP`, which cannot be, to be *ignored*, and clears the signal mask, in every carrier, since each arrives by an exec of its own. An ignored signal is discarded the moment it is sent, so an operator's `SIGTERM`, `SIGQUIT` or `SIGTSTP` to a carrier does nothing.
+
+The drain alone would not do, for two reasons. A signal whose default action is to end the task without a core dump, `SIGTERM`, `SIGINT`, `SIGPIPE` and their kind, is fatal at the moment it is sent: the sender sees that nothing will catch it and turns it into a `SIGKILL` on the spot ([`complete_signal()`](https://elixir.bootlin.com/linux/v6.12/source/kernel/signal.c#L994)), before any drain. And the drain runs at the top of one pass of the exit loop, while Linux delivers signals later in the same pass if one was pending when the pass began, so a `SIGQUIT` that arrived between the two would dump core and end the carrier.
+
+The fault signals are ignored too, and still arrive. Linux sends a fault with `force_sig_info_to_task()`, which first sets an ignored signal back to its default action, so the signal is queued and the drain sees it. The drain then ignores it again, so that the next fault is forced the same way and a `SIGSEGV` a process sends in between is discarded.
 
 The resume hook brings the exception into the kernelet:
 
@@ -208,7 +218,7 @@ static void klet_on_resume(struct pt_regs *regs)
 
 	for (;;) {
 		if (c->state == KLET_DEAD || c->inst->stopped || c->inst->dying) {
-			klet_carrier_die(c);                                 /* chapter 12 */
+			klet_carrier_die(c);                                 /* stopping a kernelet, later */
 			return;
 		}
 		if (c->state == KLET_NEW) {                              /* the first time, out of the exec: wait for the sandbox's start, then enter (chapter 6) */
@@ -220,7 +230,7 @@ static void klet_on_resume(struct pt_regs *regs)
 			klet_regs_snapshot(c, regs);                         /* the faulting registers, into ctx */
 			c->user_live = false;                                /* ctx is the authority again */
 		}
-		if (c->exc_pending) {                                    /* from a signal, or from the fault handler of chapter 13 */
+		if (c->exc_pending) {                                    /* from a signal, or from the endovisor's own fault handler, later */
 			c->exc_pending = false;
 			if (c->state == KLET_USER && c->user_live) {
 				klet_regs_snapshot(c, regs);                     /* same: ctx must hold the registers of the faulting instruction */
@@ -230,7 +240,7 @@ static void klet_on_resume(struct pt_regs *regs)
 			klet_enter(c, KLET_RUN_EXCEPTION);                   /* user_run returns 1 */
 			continue;
 		}
-		if (atomic_read(&c->vrec.pending)) {                     /* a virtual interrupt: chapter 10 */
+		if (atomic_read(&c->vrec.pending)) {                     /* a virtual interrupt: the next chapter but one */
 			if (c->state == KLET_USER && c->user_live) {
 				klet_regs_snapshot(c, regs);                     /* the interrupted registers, into ctx */
 				c->user_live = false;
@@ -249,15 +259,19 @@ static void klet_on_resume(struct pt_regs *regs)
 }
 ```
 
-The loop shape matters: each `klet_enter` returns when the kernelet calls `user_run` again, and the hook then goes round once more to see whether anything else is pending before it finally applies the registers and returns to Linux. Two lines are easy to miss: before an exception is reported, by either route, the hook must copy the *current* `pt_regs` into the context (`klet_regs_snapshot`), because the context still holds the registers of the previous trip, and the kernel proper must see the registers of the faulting instruction. `user_live` says which of the two copies is the authority: it is set when the context is applied to `pt_regs`, and cleared when `pt_regs` is copied back into the context, by the syscall hook or by a snapshot; so the snapshot is taken exactly once per trip, and never over registers the kernelet has already seen.
+The loop shape matters: each `klet_enter` returns when the kernelet calls `user_run` again, and the hook then goes around once more to see whether anything else is pending before it finally applies the registers and returns to Linux.
 
-The same flag guards the end of the loop. The exit loop runs the hook for work of Linux's own as well, a reschedule, a signal the drain dropped, a stop and a continue, and then nothing is pending for the kernelet and the registers in `pt_regs` are the tenant's live ones. Applying the context over them would send the tenant back to the return of its last system call, a rewind of everything it had done since, so the hook leaves them alone and returns. One of the memory tests, `make mem-kill`, runs a tenant that keeps a count in a register and the same count in memory and reports the first moment they part, while it is preempted, signaled, and stopped and continued.
+Before an exception is reported, by either route, the hook copies the current `pt_regs` into the context, so that the kernel proper sees the faulting instruction's registers. The copy, `klet_regs_snapshot`, is needed because the context still holds the registers of the previous trip. `user_live` says which of the two copies is the authority: it is set when the context is applied to `pt_regs`, and cleared when `pt_regs` is copied back into the context, by the syscall hook or by a snapshot; so the snapshot is taken exactly once per trip, and never over registers the kernelet has already seen.
 
-Page faults on tenant memory take a shorter path through the endovisor's own fault handler, which sets `exc_pending` directly; that is chapter 13. What the kernel proper sees is the same in both cases: `execute` returns `UserException`, with a `CpuException::PageFault` carrying the address.
+The same flag keeps the hook from rewinding a tenant when it runs for Linux's own work. The exit loop runs the hook for work of Linux's own as well, a reschedule, a signal the drain dropped, a stop and a continue, and then nothing is pending for the kernelet and the registers in `pt_regs` are the tenant's live ones. Applying the context over them would send the tenant back to the return of its last system call, a rewind of everything it had done since, so the hook leaves them alone and returns. The hook therefore runs for every kind of exit work, not only the kernelet's, and is written to find nothing of its own to do.
+
+One of the memory tests, `make mem-kill`, runs a tenant that keeps a count in a register and the same count in memory and reports the first moment they part, while it is preempted, signaled, and stopped and continued.
+
+Page faults on tenant memory take a shorter path through the endovisor's own fault handler, which sets `exc_pending` directly, as the chapter on tenant memory shows. What the kernel proper sees is the same in both cases: `execute` returns `UserException`, with a `CpuException::PageFault` carrying the address.
 
 ## Hello, world
 
-With chapters 4 to 8 built, `make hello` boots Linux in QEMU, loads the module, runs the holder, and this appears in the serial log (one line of Linux's own about an out-of-tree module, the lines of a self-test of the interface that the boot runs first, and the counters printed at unload are left out):
+With chapters 4 to 8 built, `make hello` boots Linux in QEMU, loads the module, runs the holder, and this appears in the serial log (the run is `prototype/.build/uapi2-run1-serial-hello.log`; one line of Linux's own about an out-of-tree module, the lines of a self-test of the interface that the test runs first, and the counters printed at unload are left out):
 
 ```
 INIT: loading endovisor.ko
@@ -267,6 +281,7 @@ RUN-TEST: running /holder register hello /hello.image
 kernelet: image loaded: 59877 bytes of text at ffffffffc0207000, 32983 of read-only data, 50656 of data and bss at ffffffffc021f000, 2798 relocations applied
 kernelet: kind 0 "hello" registered: an image of 328680 bytes, text [0xffffffffc0207000, 0xffffffffc02159e5), 94208 bytes shared
 holder: kind 0 registered: hello from /hello.image
+RUN-TEST: /holder register hello /hello.image exited 0
 RUN-TEST: running /holder run -c /sys/fs/cgroup/sandbox --console /hello.console --log /hello.log hello 1
 kernelet: sandbox 0 created: kind 0 "hello", 1 vcpu(s), memory 4096 KiB (max 65536 KiB), max_tasks 256, cmdline ""
 holder: sandbox 0 created: kind hello, 1 vcpu(s), cmdline ""
@@ -301,7 +316,9 @@ kernelet: endovisor unloaded
 INIT: done
 ```
 
-Line by line: the holder registers the image as a kind, and the endovisor loads it where modules live (chapter 4); the holder creates the sandbox with a console file and a log file, and forks and execs its one carrier, which the handler turns into one (chapter 6); the endovisor publishes the offsets by which vOSTD will find its way around Linux, restores the image's data and allocates the grant (chapter 4), and, every carrier having arrived, boots the kernelet, which enters the image and, before anything else, times a heap allocation and its free and then, at its first log line, a service call that does nothing (the numbers are the subject of the last chapter); the kernel proper creates its address space; the program's `write` arrives by the syscall hook and the kernel proper prints the message through `console_write` to the console file, followed by the message's own newline as an empty line; its `exit` becomes the `stop` service, which arms the sweep that takes a processor back from a virtual CPU left spinning; the carrier dies and its lifeline closes, and the last release returns what the kernelet held, the stack the stopping carrier was still standing on included; the holder reads the sandbox's statistics, destroys it, and the test prints the two files; the module's reference count reaches zero and it unloads. The build checks that the console file holds the greeting, that the log has the exit code, a clean unload, and no Linux error report.
+The log follows one sandbox from registration to destruction. The holder registers the image as a kind, and the endovisor loads it where modules live (chapter 4); the holder creates the sandbox with a console file and a log file, and forks and execs its one carrier, which the handler turns into one (chapter 6); the endovisor publishes the offsets by which vOSTD will find its way around Linux, restores the image's data and allocates the grant (chapter 4), and, every carrier having arrived, boots the kernelet, which enters the image and, before anything else, times a heap allocation and its free and then, at its first log line, a service call that does nothing (the numbers are the subject of the last chapter); the kernel proper creates its address space; the program's `write` arrives by the syscall hook and the kernel proper prints the message through `console_write` to the console file, followed by the message's own newline as an empty line; its `exit` becomes the `stop` service, which arms the sweep that takes a processor back from a virtual CPU left spinning; the carrier dies and its lifeline closes, and the last release returns what the kernelet held, the stack the stopping carrier was still standing on included; the holder reads the sandbox's statistics, destroys it, and the test prints the two files; the module's reference count reaches zero and it unloads.
+
+The build checks that the console file holds the greeting, that the serial log has the exit code, a clean unload, and no Linux error report.
 
 <div class="recap">
 

@@ -10,11 +10,13 @@ A kernelet image is two layers of code compiled into one file, held together by 
 
 The first two are the image's contents; the third is this chapter's subject.
 
-The image file is a relocatable object, the `ld -r` of the kernel proper and vOSTD, built for the kernel's code model so that its code can run where Linux keeps modules. Registering it as a kind, in the endovisor's `image.c`, is a module load without a module: every section is placed in the range modules live in, every relocation is applied as Linux's own module loader applies it, the text is made read-only and executable, and the one symbol looked up is the entry table below, which must be the image's only global symbol. An image that refers to any symbol it does not define is refused, which is the mechanical form of chapter 1's rule that the image calls nothing of the host's.
+Registering an image loads it as Linux loads a module, without its being one. The image file is a relocatable object, the `ld -r` of the kernel proper and vOSTD, built for the kernel's code model so that its code can run where Linux keeps modules. The endovisor's `image.c` does what the module loader does: every section is placed in the range modules live in, every relocation is applied as Linux's own module loader applies it, the text is made read-only and executable, and the one symbol looked up is the entry table below, which must be the image's only global symbol. An image that refers to any symbol it does not define is refused, which is the mechanical form of chapter 1's rule that the image calls nothing of the host's.
+
+One loaded copy of an image serves one sandbox at a time in this prototype. The image is linked for fixed addresses, so its code reaches its data where the loader placed it; the loader therefore keeps a pristine copy of the writable data as relocated, and every sandbox of the kind starts from that copy, with the uninitialized data zeroed. A second sandbox of a kind must wait for the first to be destroyed.
 
 <div class="linux">
 
-**Linux: modules and exported symbols.** A kernel module is code loaded into the running kernel with `insmod`. It may call only kernel functions that the kernel marks as **exported** (`EXPORT_SYMBOL` in the source); the rest are private to the kernel even though they are in the same address space. The endovisor is a module. A few functions it needs are not exported in a stock kernel, which is one of the two reasons for the patch in the next chapter.
+**Linux: modules and exported symbols.** A kernel module, code loaded into the running kernel with `insmod`, may call only the kernel functions that the kernel marks as **exported** (`EXPORT_SYMBOL` in the source); the rest are private to the kernel even though they are in the same address space. The endovisor is a module. A few functions it needs are not exported in a stock kernel, which is one of the two reasons for the patch in the next chapter.
 
 </div>
 
@@ -30,11 +32,12 @@ The image ABI has three structures. Here they are, trimmed to what this chapter 
 pub struct BootArgs {
     pub abi_version: u64,
     pub grant_paddr: u64,        // the physical address of its memory
-    pub grant_len: u64,          // and how much: 4 MiB here
+    pub grant_len: u64,          // and how much: 2 or 4 MiB here
     pub linear_map_base: u64,    // where Linux maps all of physical memory
     pub nr_vcpus: u64,           // how many virtual CPUs the sandbox has
+    // ... how to find the virtual CPU record, and the floating-point area's size
     pub tsc_khz: u64,            // the cycle counter's frequency
-    // ... how to find the virtual CPU record, the command line, and more
+    // ... the command line, and more
 }
 
 /// The host functions the kernelet may call. Its only way out.
@@ -47,8 +50,9 @@ pub struct Services {
     pub mem_free: unsafe extern "C" fn(ptr: *mut u8, size: u64, align: u64),
     pub user_run: unsafe extern "C" fn(ctx: *mut RawUserContext) -> u64,
     pub vm_create: unsafe extern "C" fn() -> i64,
+    // ... vm_destroy, vm_activate
     pub vm_map: unsafe extern "C" fn(space: u64, va: u64, paddr: u64, prot: u32) -> i64,
-    // ... vm_unmap, vm_protect, vm_flush, vm_wait, vm_wake, vm_activate, vm_destroy
+    // ... vm_unmap, vm_protect, vm_flush, vm_wait, vm_wake
     pub kstack_alloc: unsafe extern "C" fn() -> u64,
     pub kstack_free: unsafe extern "C" fn(base: u64),
     pub vcpu_boot: unsafe extern "C" fn(id: u64),
@@ -69,9 +73,9 @@ pub struct EntryTable {
 }
 ```
 
-vOSTD is the only crate in the image allowed to write `unsafe`, so only vOSTD can call a service.
+vOSTD is the only crate in the image that can reach the service table, which it keeps private, so only vOSTD can call a service.
 
-Two rules shape every service. Arguments are integers or pointers into the kernelet's own memory: a space number, a virtual address, a physical address, a buffer to log. The one exception is `mem_free`, whose pointer is into host memory that `mem_alloc` returned, below; the endovisor checks it against a table of the blocks it handed out, kept where the kernelet cannot reach, reads the block's number below the pointer with a read that tolerates a fault, and refuses what it does not recognize (a stale pointer to a block that was freed and handed out again at the same address is the one case it cannot tell apart). And the host writes into the kernelet only through the two pointers vOSTD hands it for that purpose, the context of chapter 8 and the floating-point area of chapter 9, and keeps no other. Both keep a buggy vOSTD from steering the endovisor into writing wherever the kernelet says.
+Two rules shape every service. Arguments are integers or pointers into the kernelet's own memory: a space number, a virtual address, a physical address, a buffer to log. The one exception is `mem_free`, whose pointer is into host memory that `mem_alloc` returned, below; the endovisor checks it against a table of the blocks it handed out, kept where the kernelet cannot reach, reads the block's number below the pointer with a read that tolerates a fault, and refuses what it does not recognize (a stale pointer to a block that was freed and handed out again at the same address is the one case it cannot tell apart). And the host writes into the kernelet only through the two pointers vOSTD hands it for that purpose, the user context that `user_run` is given and the area that `fpu_save` is given, and keeps no other. Both keep a buggy vOSTD from steering the endovisor into writing wherever the kernelet says.
 
 The image's one exported symbol is the entry table:
 
@@ -89,11 +93,9 @@ pub static kernelet_entry_table: EntryTable = EntryTable {
 
 The endovisor checks the entry table's `abi_version` against its own when an image is registered, and refuses the image if the two halves were built from different ABIs.
 
-One loaded copy of an image serves one sandbox at a time in this prototype. The image is linked for fixed addresses, so its code reaches its data where the loader placed it; the loader therefore keeps a pristine copy of the writable data as relocated, and every sandbox of the kind starts from that copy, with the uninitialized data zeroed. A second sandbox of a kind must wait for the first to be destroyed.
-
 ## The grant and the direct map
 
-A kernel needs memory to manage. The endovisor gives a kernelet a **grant**: one physically contiguous block of RAM, the `memory_initial` of the holder's create request (4 MiB unless it asks for less), taken from Linux's page allocator when the sandbox starts, charged to the sandbox's control group, and described in the boot arguments by its physical address and length.
+The endovisor gives a kernelet a **grant**: one physically contiguous block of RAM, the `memory_initial` of the holder's create request (4 MiB from the prototype's holder; a request is rounded up to 2 MiB and may not exceed 4 MiB), taken from Linux's page allocator when the sandbox starts, charged to the sandbox's control group, and described in the boot arguments by its physical address and length.
 
 *Simplified from `prototype/linux/endovisor/sandbox.c`: `klet_sandbox_start`.*
 
@@ -119,11 +121,11 @@ int klet_sandbox_start(struct klet_inst *inst)
 
 <div class="linux">
 
-**Linux: the direct map.** Linux maps *all* of physical memory, in order, into one region of the kernel's address space, called the direct map or linear map. Turning a physical address into a pointer the kernel can dereference is therefore one addition: `__va(paddr)` is `paddr + base`. `kmalloc` and the page allocator hand out direct-map memory, so for them a kernel pointer and a physical address are two names for the same bytes; `vmalloc`, which chapter 7 uses, is the exception, because it maps scattered pages into a separate region. The line `__va(0)` above is simply the base.
+**Linux: the direct map.** Linux maps *all* of physical memory, in order, into one region of the kernel's address space, called the direct map or linear map. Turning a physical address into a pointer the kernel can dereference is therefore one addition: `__va(paddr)` is `paddr + base`. `kmalloc` and the page allocator hand out direct-map memory, so for them a kernel pointer and a physical address are two names for the same bytes; `vmalloc`, from which the endovisor takes kernelet stacks, is the exception, because it maps scattered pages into a separate region. The line `__va(0)` above is simply the base.
 
 </div>
 
-vOSTD's frame allocator runs over the grant exactly as OSTD's runs over a machine's RAM: a bitmap with one bit per 4 KiB frame, a first-fit search for `n` contiguous free frames, and a reference count per frame (the count matters in chapter 14). When the kernel proper's `FrameAllocOptions` asks for a segment, this is what answers.
+vOSTD's frame allocator plays over the grant the part OSTD's plays over a machine's RAM, more simply: where the allocator shipped with OSTD is a buddy system, vOSTD's is a bitmap with one bit per 4 KiB frame, a first-fit search for `n` contiguous free frames, and a reference count per frame (the count matters once tenant pages sit on Linux's page tables). When the kernel proper's `FrameAllocOptions` asks for a segment, this is what answers.
 
 *Simplified from `prototype/vostd/src/mm/frame.rs`: `alloc`, `FrameAllocOptions`.*
 
@@ -184,7 +186,7 @@ static HEAP: HostHeap = HostHeap;
 
 **The console and the log.** `println!` collects a line and hands it to `console_write`, the sandbox's console; vOSTD's own lines, among them a panic's message, go to `log_write`, the sandbox's kernel log. Each arrives at the file the holder set for it, through a ring that a work item drains, because a service may not block on a terminal or a pipe while the kernel proper may hold one of its spin locks. A sandbox given no file for one of the two has its lines printed with `printk`, prefixed `kernelet:`, which is why they then appear in the serial log beside Linux's own messages.
 
-**Power-off.** `poweroff` is the service `stop`, which never returns. What the endovisor does with it is chapter 12.
+**Power-off.** `poweroff` is the service `stop`, which never returns. The endovisor ends the sandbox with it, never the host.
 
 ## How the kernelet starts
 
@@ -205,12 +207,12 @@ pub(crate) unsafe extern "C" fn kernelet_entry(boot: *const BootArgs, svc: *cons
 }
 ```
 
-`__ostd_main` is generated by the `#[ostd::main]` attribute on the kernel proper's `main`. It calls `main`, and then calls `Task::yield_now()`, which switches to the first task that `main` started and never returns. That is how the hundred-line kernel goes from piece 1 to piece 3: `main` built a task and returned, and the framework's scheduler ran it.
+`__ostd_main` calls `main` and then `Task::yield_now()`, which, since `main` started a task, switches to it and never returns. That is how the hundred-line kernel goes from piece 1 to piece 3: `main` built a task and returned, and the framework's scheduler ran it.
 
 What remains unexplained is where `kernelet_entry` is *called from*: on which Linux task, on which stack, and how that task later enters user mode for the kernelet. Those are the next four chapters.
 
 <div class="recap">
 
-**Recap.** A kernelet talks to the host through three C-layout tables: boot arguments in, a service table of function pointers out, and an entry table the host calls. Its memory is a grant of 4 MiB whose frames it reaches through Linux's direct map, its heap is `kmalloc` behind a service, and its console is `printk`. The endovisor starts it by calling `kernelet_entry`, which ends in the kernel proper's `main`.
+**Recap.** A kernelet talks to the host through three C-layout tables: boot arguments in, a service table of function pointers out, and an entry table the host calls. Its memory is a grant of a few MiB whose frames it reaches through Linux's direct map, its heap is `kmalloc` behind a service, and its console and log go to files the holder sets, or to `printk` if it sets none. The endovisor starts it by calling `kernelet_entry`, which ends in the kernel proper's `main`.
 
 </div>

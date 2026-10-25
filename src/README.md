@@ -30,7 +30,9 @@ The caption's first word says how the block differs from the file. "Simplified" 
 
 ## The chapters
 
-Each chapter uses only what the ones before it have built. Some words in the list below are defined only in chapter 1; skim past them.
+Each chapter uses only what the ones before it have built.
+
+Some words in the list below are defined only in the next chapter; skim past them.
 
 1. **Why a kernel of your own** says what a kernelet is and why it can be safe.
 2. **The endovisor UAPI**, its user-space interface, is what a program on the host may ask of the endovisor: the image as a file, the device node and its descriptors, and how user space creates the carriers.
@@ -54,6 +56,6 @@ Chapters 13 and 14, where the tenant's memory moves onto Linux's page tables wit
 
 The book keeps three conventions.
 
-- A few words are used in exactly one sense throughout; chapter 1 collects them, and the chapter named beside a word there defines it in full.
+- A few words are used in exactly one sense throughout; the word table at the end of the next chapter collects the first of them, and the chapter named beside a word there defines it in full.
 - Linux functions are linked to the version 6.12 source on `elixir.bootlin.com` the first time they are named, so that you can read the real code.
 - Most figures are diagrams written as text in the page source; a few are drawings.
