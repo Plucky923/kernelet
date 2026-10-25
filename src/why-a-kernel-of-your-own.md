@@ -46,9 +46,7 @@ Asterinas is a kernel written in Rust that runs the same programs Linux runs: it
 - **OSTD**, the *framework*, is small. It is the only part of the kernel allowed to use Rust's `unsafe`. OSTD wraps the machine, meaning page tables, tasks, interrupts, entry to user mode, in an interface that cannot be misused to corrupt memory.
 - **The kernel proper** is everything else: system calls, file systems, the network stack, process and memory management. It is written entirely in *safe* Rust against OSTD's interface.
 
-So the kernel proper can do only what OSTD's interface lets it do. It cannot forge a pointer to another tenant's memory, because safe Rust has no way to express that. It cannot execute a privileged instruction, because none of OSTD's functions do that for it. It can still have bugs, and a hostile tenant will look for them, but a bug in safe Rust can produce a wrong answer, never a corrupted page table.
-
-Who compiles it matters. The *operator* of the machine builds the kernel proper, and refuses any crate that does not carry `#![deny(unsafe_code)]`, or that allows the keyword back anywhere inside; the tenant never hands over code to be loaded into kernel mode. What the tenant controls is its own programs, and through them which paths of the kernel proper run, with which arguments. OSTD itself, the layer that does use `unsafe`, is written and audited by the operator, like the host kernel: it is trusted, as the host is.
+So the kernel proper can do only what OSTD's interface lets it do. It cannot forge a pointer to another tenant's memory, because safe Rust has no way to express that. It cannot execute a privileged instruction or corrupt a page table, because none of OSTD's functions do that for it. OSTD goes further: it guarantees that no safe Rust code written against its interface can break memory safety, whatever that code does. This property is called **soundness**, and OSTD's authors pursue it with a combination of methods: extensive testing, program analysis and, for parts of OSTD, formal verification.
 
 ## The same kernel, a different framework
 
