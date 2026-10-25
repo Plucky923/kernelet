@@ -1,6 +1,6 @@
 # How to read this book
 
-This is a tutorial about the **kernelet**: a complete OS kernel that runs *inside* another kernel, and does so safely.
+This is a tutorial about the **kernelet**: a complete OS kernel that runs *inside* another kernel, and does so *safely*.
 
 The tutorial comes with a prototype implementation of kernelets in Linux. It patches and extends the Linux kernel so that a small Rust kernel written against OSTD (Asterinas's kernel framework) can run inside Linux, serve a user program's system calls, manage that program's memory, and be scheduled and stopped by Linux without Linux ever understanding what it is.
 
