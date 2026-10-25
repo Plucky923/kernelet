@@ -4,7 +4,7 @@ Before any mechanism, the view from the host's user space. Linux calls the set o
 
 This chapter first shows the interface in use, by the prototype's own holder program, then says why it has the shape it has, and then specifies every operation. Everything the rest of the book builds is behind this interface, and nothing a tenant does ever touches it. The endovisor of this prototype does not offer the device yet: the holder program is built but not run, and the tests start a sandbox an older way, with one program file and one `execve`.
 
-## Creating a sandbox
+## A prototype kernelet runtime
 
 The program that drives a kernelet sandbox is its **holder**: the one process of the kernelet runtime that creates the sandbox, keeps its descriptor open for as long as the sandbox lives, and destroys it. A container runtime has such a process per container; the prototype's is `holder.c`, a static C program of two commands, `register` and `run`.
 
@@ -129,37 +129,27 @@ static void join_cgroup(const char *dir)             /* write our process identi
 
 Between the `fork` and the `execveat` the child is an ordinary process of the holder's user, and anything Linux lets a process set on itself can go there: the processor it is pinned to, as here; its priority or scheduling class; the user it runs as; the namespaces it is in; its resource limits; a seccomp filter, which bounds what the tenant may ask of its kernelet. All of it survives the `exec`, because these are properties of the task and not of the program it runs, and all of it is per carrier, so two virtual CPUs can be pinned to two processors and given two priorities.
 
-The whole life of a sandbox, then, in order:
+In summary, the whole life of a sandbox is, in order:
 
 1. When the machine is set up, the operator registers each kind with `KERNELET_KIND_REGISTER`.
 2. The runtime makes a control group for the sandbox with the limits the operator chose, and starts the holder in it, or the holder moves itself in before it creates anything, as `-c` does.
 3. The holder creates the sandbox with `KERNELET_CREATE`, opens the disk image and whatever else the sandbox is to have and passes each with `KERNELET_ATTACH_DEVICE`, and passes its console and log with `KERNELET_SET_CONSOLE` and `KERNELET_SET_LOG`.
-4. For each virtual CPU, the holder asks for the exec descriptor with `KERNELET_VCPU_GET_EXEC_FD` and forks a child, which arranges itself and executes the descriptor. The first of those `exec`s loads the kind's image as this sandbox's instance and gives the kernelet its memory, charged to the group. When the last carrier has arrived, the carrier of virtual CPU 0 enters the image and the kernel proper boots; the others wait until the kernel proper starts their processor.
+4. For each virtual CPU, the holder asks for the exec descriptor with `KERNELET_VCPU_GET_EXEC_FD` and forks a child, which arranges itself and executes the descriptor. The first of those `exec`s loads the kind's image as this sandbox's instance. From now on, the carrier no longer executes the holder's code, but the kernelet's.
 5. The sandbox runs. Linux schedules each carrier with the processors and the class its creator gave it; the kernelet schedules its own tasks on them.
 6. The kernel proper powers off, or the holder calls `KERNELET_KILL`, or a carrier is killed. The endovisor marks the kernelet dying, stops every carrier, and when the last of them is gone records why. The holder's `KERNELET_WAIT` returns, it reaps the carriers, calls `KERNELET_DESTROY`, and exits; the runtime removes the group.
 
-```mermaid
-flowchart TB
-    subgraph cg["control group"]
-        direction TB
-        h["the holder<br/>(a process of the kernelet runtime)<br/>holds the sandbox descriptor"]
-        h -- "fork; pin, renice, filter;<br/>execveat(exec fd 0)" --> c0["kernelet/7/0<br/>the carrier of virtual CPU 0<br/>enters the image"]
-        h -- "fork; ...; execveat(exec fd 1)" --> c1["kernelet/7/1<br/>the carrier of virtual CPU 1<br/>waits for vcpu_boot"]
-    end
-```
-
-What the operator sees on the host is that figure: a control group containing the holder and one process per virtual CPU, named `kernelet/<slot>/<i>` after the sandbox's slot number, which is 7 in the figure, all children of the holder. `ps` and `top` list them; `taskset` and `chrt` move a virtual CPU to other processors or change its class while the sandbox runs; root's `perf` profiles one, since a carrier is not dumpable (below) and so not open to its own user's tools; `kill -KILL` on any of them ends the sandbox, as does `cgroup.kill` on the group. Nothing in the group corresponds to the tenant's own processes, which only the kernelet knows about.
-
 ## Why it is shaped so
 
-Four things the interface has to allow decide its shape.
+The kernelet UAPI is designed with four requirements in mind:
 
 1. **Every Linux task of a sandbox is created by user space, and user space can find it and govern it with Linux's own system calls.** A carrier is a special task, since its system calls go to the kernelet and not to Linux, but it is still a task, and the host's tools for tasks, `sched_setaffinity`, `setpriority`, `sched_setattr`, control groups, namespaces, resource limits, `perf`, `/proc`, must apply to it as to any other. Linux applies them to any task; only user space can apply them *before* the task carries a virtual CPU, and only a task user space made is one whose identifier it knows without searching.
 2. **Resources reach a sandbox as descriptors.** A disk image, a network interface, a console and a log file are things the runtime opens itself, under its own user's permissions, and passes down. Nothing is named by path inside the kernel, and a sandbox can reach exactly what its runtime could open.
-3. **An image is kernel code.** Loading one is allowed to whoever may load a module; creating a sandbox of a loaded image is allowed to whoever may open the device. And one copy of an image's code serves every sandbox of it.
-4. **A sandbox dies whole, and dies with its runtime.** Nothing a crashed runtime held keeps a sandbox alive.
+3. **A sandbox dies whole, and dies with its runtime.** Nothing a crashed runtime held keeps a sandbox alive.
+4. **An image is kernel code.** Loading one is allowed to whoever may load a module; creating a sandbox of a loaded image is allowed to whoever may open the device. And one copy of an image's code serves every sandbox of it.
 
-**The model is KVM.** Linux has one interface that meets the first, second and fourth already, and it is the one to copy. KVM, Linux's hypervisor, is a module that runs virtual machines whose virtual processors are ordinary user threads: a program such as QEMU opens `/dev/kvm`, asks it for a descriptor that stands for a virtual machine, asks that for a descriptor per virtual processor, and runs each virtual processor from a thread of its own by calling an operation on its descriptor ([`KVM_CREATE_VM`](https://elixir.bootlin.com/linux/v6.12/source/Documentation/virt/kvm/api.rst#L138), [`KVM_CREATE_VCPU`](https://elixir.bootlin.com/linux/v6.12/source/Documentation/virt/kvm/api.rst#L294), [`KVM_RUN`](https://elixir.bootlin.com/linux/v6.12/source/Documentation/virt/kvm/api.rst#L379)). The threads are QEMU's: it created them, it can pin them and renice them, `ps` shows them, and the machine dies when QEMU does, because closing the last descriptor destroys it. A kernelet's interface has the same three levels: a system descriptor, a sandbox descriptor, and a descriptor per virtual CPU, each made from the one above it.
+### Learning from the KVM UAPI
+
+Linux has one pre-existing interface that meets the first three considerations already—KVM, Linux's hypervisor—and thus its interface is the one that we should draw inspirations from. The KVM module runs virtual machines whose virtual processors are ordinary user threads: a program such as QEMU opens `/dev/kvm`, asks it for a descriptor that stands for a virtual machine, asks that for a descriptor per virtual processor, and runs each virtual processor from a thread of its own by calling an operation on its descriptor ([`KVM_CREATE_VM`](https://elixir.bootlin.com/linux/v6.12/source/Documentation/virt/kvm/api.rst#L138), [`KVM_CREATE_VCPU`](https://elixir.bootlin.com/linux/v6.12/source/Documentation/virt/kvm/api.rst#L294), [`KVM_RUN`](https://elixir.bootlin.com/linux/v6.12/source/Documentation/virt/kvm/api.rst#L379)). The threads are QEMU's: it created them, it can pin them and renice them, `ps` shows them, and the machine dies when QEMU does, because closing the last descriptor destroys it. A kernelet's interface has the same three levels: a system descriptor, a sandbox descriptor, and a descriptor per virtual CPU, each made from the one above it using ioctl, as shown by the diagram below:
 
 ```mermaid
 flowchart TB
@@ -170,7 +160,15 @@ flowchart TB
     ex -- "fork, configure, execveat" --> car["the carrier of virtual CPU i<br/>a child of the holder"]
 ```
 
-**Why a carrier is made by `exec` and not by a call.** This is the one place the two interfaces differ. A KVM virtual processor is run by a thread that *calls* `KVM_RUN` and returns from it, keeping its own address space throughout; the guest's memory is elsewhere, in a mapping the thread set up. A carrier is to the kernelet what a processor is to an ordinary kernel: the kernelet runs its tenant's processes on it one at a time, and switches the carrier's address space to the current process's as it does. The tenant's program runs in Linux's own user mode, on Linux's own page tables, so a carrier's address space is always one of the tenant's, and it must start holding nothing of the host's: not the holder's program, not its heap, not a stack with the holder's secrets on it. The one operation in Linux that gives a process a fresh address space is `execve`. So the per-virtual-CPU descriptor is not called; it is executed. It is a small file that lives only in memory, created by the endovisor with [`shmem_file_setup()`](https://elixir.bootlin.com/linux/v6.12/source/mm/shmem.c#L5265) and then made owned by root and execute-only, that the endovisor recognizes when it is executed *by its inode*, not by anything written in it (`execveat` reopens the file, so the open file the handler sees is never the one it handed out); possession of the descriptor is the right to start that virtual CPU, once.
+### Differing from the KVM UAPI
+
+KVM runs a virtual processor by a *call*: a thread invokes `KVM_RUN` and returns from it. A kernelet starts a virtual CPU by an *exec*: a process executes the descriptor and never returns. This is the one place the two interfaces differ, and the reason is what each thread's address space is for.
+
+A KVM thread keeps its own address space throughout. The guest's memory is elsewhere, in a mapping the thread set up; the thread only drives the guest.
+
+A carrier is to the kernelet what a processor is to an ordinary kernel: the kernelet runs its tenant's processes on it, one at a time. Those processes run in Linux's own user mode, on Linux's own page tables, so at every switch the kernelet switches the carrier's address space to the current process's, and the carrier's address space is always one of the tenant's. It must therefore start holding nothing of the host's: not the holder's program, not its heap, not a stack with the holder's secrets on it. The one operation in Linux that gives a process a fresh address space is `execve`. So the per-virtual-CPU descriptor is not called; it is executed.
+
+What is executed is a small file that lives only in memory. The endovisor creates it with [`shmem_file_setup()`](https://elixir.bootlin.com/linux/v6.12/source/mm/shmem.c#L5265), makes it owned by root and execute-only, and recognizes it when it is executed *by its inode*, not by anything written in it; `execveat` reopens the file, so the open file the handler sees is never the one it handed out. Possession of the descriptor is the right to start that virtual CPU, once.
 
 <div class="linux">
 
