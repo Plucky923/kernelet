@@ -4,28 +4,30 @@ The kernelet's scheduler needs interrupts, and Linux leaves it none; this chapte
 
 ## Bits in a record
 
-A virtual interrupt is a bit in the `pending` word of a virtual CPU's record (chapter 9). The endovisor sets it from interrupt context or from another processor; the kernelet's handler for it runs as kernelet code on that virtual CPU's carrier, never in Linux's interrupt context, soon after. Two bits are raised in this prototype; a third, LINES, is reserved for devices:
+A virtual interrupt is a bit in the `pending` word of a virtual CPU's record (chapter 9). The endovisor sets it from interrupt context or from another processor. The kernelet's handler for it runs as kernelet code on that virtual CPU's carrier, never in Linux's interrupt context, soon after. Two bits are raised in this prototype; a third, LINES, is reserved for devices:
 
 | bit | meaning | set by |
 |---|---|---|
-| TICK | a millisecond has passed while this virtual CPU's carrier was on a processor; also raised whenever the virtual CPU wakes from `vcpu_idle` | the watch timer, below |
+| TICK | this processor's watch period expired while this carrier was current; also raised whenever the virtual CPU wakes from `vcpu_idle` | the watch timer, below; `vcpu_idle` on waking |
 | KICK | another virtual CPU wants this one to look at its run queue | the `vcpu_kick` service |
 
-Each bit stands in for a hardware interrupt the kernel proper already handles. The kernel proper's timer callbacks and its scheduler's tick accounting run from TICK as they would from a hardware timer interrupt, except that vOSTD computes the kernelet's jiffies from the cycle counter rather than by counting ticks, because a virtual CPU that Linux has not scheduled gets none. KICK does what a reschedule interrupt does on a machine: it makes the virtual CPU ask its scheduler whether something more urgent has become runnable.
+Each bit stands in for a hardware interrupt the kernel proper already handles. The kernel proper's timer callbacks run from TICK as they would from a hardware timer interrupt; one of them is the scheduler's, which does its tick accounting and sets need-preempt when the running task's slice is used up. KICK does what a reschedule interrupt does on a machine: it makes the virtual CPU ask its scheduler whether something more urgent has become runnable. vOSTD computes the kernelet's *jiffies*, its count of ticks since boot, from the cycle counter rather than by counting ticks, because a virtual CPU that Linux has not scheduled gets none.
 
-A virtual CPU is in a **critical section** when the kernelet task on it holds at least one preemption guard or spin lock, or has its virtual interrupts masked. The question the rest of the chapter answers is *when* the handler runs, and the answer depends on whether the virtual CPU is in a critical section at the moment the bit is set: a bit is delivered by whichever of four paths comes first, the upcall, the end of the critical section, the return from user mode, or the start of the next scheduling decision, each described below.
+When the handler runs depends on what the virtual CPU is doing when the bit is set, and above all on whether it is in a critical section. A virtual CPU is in a **critical section** when the kernelet task on it holds at least one preemption guard or spin lock, or has its virtual interrupts masked. A bit is delivered by whichever of four paths comes first: the upcall, the end of the critical section, the return from user mode, or the start of the next scheduling decision, described below. Failing all four, the next watch firing that can deliver it does.
 
 ## The watch timer
 
 <div class="linux">
 
-**Linux: high-resolution timers and preemption notifiers.** A timer callback can redirect the interrupt it runs in by changing the saved instruction pointer. An [`hrtimer`](https://elixir.bootlin.com/linux/v6.12/source/kernel/time/hrtimer.c) is a timer whose callback runs in interrupt context, normally on the processor that armed it; a *pinned* timer is guaranteed to stay there, and a *hard* one runs in the interrupt itself even on a real-time kernel, a kernel built to run most interrupt work in threads. A callback returns `HRTIMER_RESTART` to run again, after moving its expiry forward by whole periods past now with `hrtimer_forward_now()`, or `HRTIMER_NORESTART` to stop. The timer interrupt publishes the registers of whatever it interrupted, and a callback reads them with [`get_irq_regs()`](https://elixir.bootlin.com/linux/v6.12/source/include/asm-generic/irq_regs.h), which is how Linux's profiler samples programs; if the callback changes the saved instruction pointer, the interrupt returns somewhere else.
+**Linux: high-resolution timers and preemption notifiers.** An [`hrtimer`](https://elixir.bootlin.com/linux/v6.12/source/kernel/time/hrtimer.c) is a timer whose callback runs in interrupt context, normally on the processor that armed it. A *pinned* timer is guaranteed to stay there. A *hard* one runs in the interrupt itself even on a real-time kernel, a kernel built to run most interrupt work in threads. A callback returns `HRTIMER_RESTART` to run again, after moving its expiry forward by whole periods past now with `hrtimer_forward_now()`, or `HRTIMER_NORESTART` to stop.
 
-A **preemption notifier** ([`preempt_notifier_register()`](https://elixir.bootlin.com/linux/v6.12/source/kernel/sched/core.c#L4866)) is a pair of callbacks Linux runs for one task every time it switches that task out of a processor and in to one; KVM uses it to know where its virtual CPUs are. Notifiers exist only in a kernel built with an option that something must select; the patch's option selects it.
+A timer callback can make the interrupted code resume somewhere else. The timer interrupt publishes the registers of whatever it interrupted, and a callback reads them with [`get_irq_regs()`](https://elixir.bootlin.com/linux/v6.12/source/include/asm-generic/irq_regs.h), which is how Linux's profiler samples programs; a callback that changes the saved instruction pointer makes the interrupt return somewhere else.
+
+A **preemption notifier** ([`preempt_notifier_register()`](https://elixir.bootlin.com/linux/v6.12/source/kernel/sched/core.c#L4866)) is a pair of callbacks Linux runs for one task every time it switches that task out of a processor and in to one; KVM, Linux's own hypervisor, uses it to load a virtual CPU's state onto the processor it is switched in on and to save it when it is switched out. Notifiers are compiled in only if another configuration option requires them (`CONFIG_PREEMPT_NOTIFIERS` cannot be turned on by itself); the patch's `CONFIG_KERNELET` requires it.
 
 </div>
 
-The **watch timer**, a pinned, hard, one-millisecond `hrtimer` on each processor, is armed while the task running there is a carrier, and for at most one more period after it leaves. Each carrier registers a preemption notifier when it starts, and the notifier's switch-in callback arms the timer of whatever processor the carrier has just landed on; the timer's own callback re-arms itself if it interrupted a carrier and stops otherwise. So a carrier that Linux migrates is watched wherever it lands, and a processor that has no carrier is soon unwatched.
+The **watch timer**, a pinned, hard, one-millisecond `hrtimer` on each processor, is armed while the task running there is the carrier of a virtual CPU, and for at most one more period after it leaves. Each carrier registers a preemption notifier when it starts. The notifier's switch-in callback arms the timer of whatever processor the carrier has just landed on. The timer's own callback re-arms itself if it interrupted a carrier and stops otherwise. So a carrier that Linux migrates is watched wherever it lands, and a processor that has no carrier is soon unwatched.
 
 *Simplified from `prototype/linux/endovisor/watch.c` and `prototype/linux/endovisor/sched.c`: `klet_watch_arm`, `klet_sched_in`.*
 
@@ -85,9 +87,13 @@ static enum hrtimer_restart klet_watch_fn(struct hrtimer *timer)
 }
 ```
 
-`klet_in_image_text` asks whether the interrupted instruction lies in the kernelet image's code; Linux's code and the endovisor's never do. `klet_in_kernelet` asks whether the carrier is running kernelet code and not a service: state `RUNNING`, depth 0, not asleep in `vcpu_idle` and not evicted. A carrier inside a service call is never redirected, because it may hold Linux's locks.
+The callback's two tests keep it from redirecting anything but kernelet code. `klet_in_image_text` asks whether the interrupted instruction lies in the kernelet image's code; Linux's code and the endovisor's never do. `klet_in_kernelet` asks whether the carrier is running kernelet code and not a service: state `RUNNING`, depth 0, not asleep in `vcpu_idle`, and not *evicted*, that is, not already being forced out of kernelet code by the endovisor, as happens when the sandbox is being stopped. A carrier inside a service call is never redirected, because it may hold Linux's locks.
 
-`klet_virq_raise` sets the bit and does the two cheap things that get it noticed. It wakes the carrier if it is asleep in `vcpu_idle`. It flags the carrier (chapter 6) if it is in user mode, so that it comes back through the resume hook and `user_run` returns 2; `execute`'s loop then runs the handlers before it re-enters user mode. Those handlers run without a task switch, because the tenant's floating-point and vector registers are still live on the processor and another task's kernelet code would overwrite them. The need-preempt they set is acted on at the next guard drop in kernelet code, or returned to the kernel proper as a kernel event if its hooks report it, which is how a kernel proper with such hooks preempts a thread that never leaves user mode. A flag set while the hook is already running is not lost, as chapter 5 arranged. And `user_run` publishes `KLET_USER` and then reads `pending`, while `klet_virq_raise` sets the bit and then reads the state; as with idling, one of the two always sees the other, so a bit raised just as the carrier leaves is never stranded.
+`klet_virq_raise` sets the bit and does the two cheap things that get it noticed. It wakes the carrier if it is asleep in `vcpu_idle`. It flags the carrier (chapter 6) if it is in user mode, so that it comes back through the resume hook and `user_run` returns 2.
+
+A carrier in user mode takes its virtual interrupts on the way back, without a task switch: this is the return-from-user-mode path. `execute`'s loop runs the handlers, through `deliver_no_switch`, the same `handle_virq` as below without the final `might_preempt`, before it re-enters user mode. Unlike OSTD, which may switch at that point, vOSTD does not: the tenant thread's floating-point and vector registers are still live on the processor, and this book's kernels save them only after `execute` returns, so another task's restore of its own would overwrite them. The need-preempt the handlers set therefore waits for the next call to `might_preempt`, which is the next upcall, or a guard drop that finds a new bit pending; a thread that stays in user mode is preempted only if the kernel proper's own `has_kernel_event` hook reports need-preempt and the kernel proper then switches, which this book's kernels do not do.
+
+Neither the flag nor the bit can be lost in a race. A flag set while the hook is already running is not lost, as chapter 5 arranged. `user_run` publishes `KLET_USER` and then reads `pending`, while `klet_virq_raise` sets the bit and then reads the state; as with idling, one of the two always sees the other, so a bit raised just as the carrier leaves is never stranded.
 
 When the carrier is in kernelet code outside a critical section, the endovisor delivers at once, as a machine would, by changing one saved register:
 
@@ -111,13 +117,13 @@ bool klet_virq_redirect(struct klet_carrier *c, struct pt_regs *regs)
 }
 ```
 
-The redirect is refused when interrupts are masked or when the task's kernelet stack has too little room. vOSTD publishes each task's stack limit at every task switch, and the handlers need 32 KiB of headroom (`KLET_UPCALL_HEADROOM`), since Linux's own hard interrupts land on that stack too. A refused bit waits for one of the other paths or for the next firing.
+The redirect is refused when interrupts are masked or when the task's kernelet stack has too little room. vOSTD publishes each task's stack limit at every task switch. The endovisor requires 32 KiB below the interrupted stack pointer (`KLET_UPCALL_HEADROOM`): 16 KiB for the upcall and the callbacks it runs, and 16 KiB reserved for Linux, whose interrupts and exceptions push their first frame onto whatever stack they interrupt. A refused bit waits for one of the other paths or for the next firing.
 
 ## The upcall
 
 When the timer interrupt returns, it lands not on the interrupted instruction but in the kernelet's **upcall** stub: the kernelet's own interrupt handler, which only a redirected interrupt enters.
 
-The stub is in vOSTD, in assembly, because it is entered between two arbitrary instructions and must put every general register and the flags back exactly; the kernelet is built without vector instructions, so there is no vector state to save. It saves everything on the *current task's* kernelet stack, calls a Rust function, and returns to the interrupted instruction. Kernel code has no red zone, the 128 bytes below the stack pointer that user-mode code may use without moving it, so the stub may push below the interrupted `rsp`. It is written in Intel syntax, destination first, as Rust's `global_asm!` has it; chapter 7's switch was in AT&T syntax, the GNU assembler's default, source first.
+The stub, in vOSTD's assembly, saves everything on the *current task's* kernelet stack, calls a Rust function, and returns to the interrupted instruction. It is assembly because it is entered between two arbitrary instructions and must put every general register and the flags back exactly. The kernelet is built without vector instructions, so there is no vector state to save. The kernelet, like Linux, is compiled without a red zone, the 128 bytes below the stack pointer that user-mode code may use without moving it, so the stub may push below the interrupted `rsp`. The excerpt is in Intel syntax, destination first, as Rust's `global_asm!` has it; chapter 7's switch was in AT&T syntax, the GNU assembler's default, source first.
 
 *Simplified from `prototype/vostd/src/vcpu.rs`: `klet_virq_entry`, `klet_virq_body`.*
 
@@ -125,7 +131,7 @@ The stub is in vOSTD, in assembly, because it is entered between two arbitrary i
 klet_virq_entry:
     lea rsp, [rsp - 8]       ; a slot for the interrupted instruction pointer (lea, not sub: sub would change the flags)
     pushfq                   ; the flags, exactly as the interrupted code left them
-    push rax ... push r15    ; every general register
+    push rax ... push r15    ; every general register but rsp
     mov rbp, rsp
     and rsp, -16             ; align for the call
     call klet_virq_body      ; returns the instruction pointer to resume at
@@ -166,49 +172,49 @@ fn run_handlers(rec: &VcpuRec) {
 }
 ```
 
-The body's first act copies `virq_ip` into a local variable, so from then on the interrupted address lives in this frame, on the task's own stack. The record's field is free for the next upcall on this virtual CPU, and the stub copies the local into the slot only once the body has returned, perhaps much later and on another virtual CPU. The check against the image's text range is a check on the host's bookkeeping, not a defense against a hostile host: vOSTD's soundness should not depend on the endovisor's arithmetic. Four lines raise Linux's preemption count while the handlers run, so that Linux does not take the processor in the middle; the next chapter explains them. At entry no guard is ever held, so `owns_mirror` is true here and is tested only for safety.
+The check against the image's text range catches a bug in the endovisor's bookkeeping, so that a wrong address stops the kernelet instead of being jumped to. The host is trusted, so this is not a defense against it.
 
-The `might_preempt` at the end adds **kernel-mode preemption**, which OSTD on a machine lacks: the handler may switch to another task before returning. Because the interrupted instruction pointer is in a frame on the task's own stack, the interrupted task resumes later, from the same frame, on whichever virtual CPU next picks it. That is how a tick ends a time slice in the middle of a kernel task's computation, as it does on a machine with a preemptible kernel.
+Four lines raise Linux's preemption count while the handlers run, so that Linux does not take the processor in the middle; the next chapter explains them. `owns_mirror` is therefore always true here.
 
-An upcall must not preempt inside `reschedule`, between its decision and its switch, so vOSTD flags that window and defers any preemption to its end. `reschedule` runs without a preemption guard, so an upcall can land between the two. By then the run queue has already made the chosen task current and put the running task back in the queue; a second decision could pick the running task, and OSTD's switch waits for its target to finish switching away, which the running task never does, so the processor would hang. So `open_resched_window`, the first thing `reschedule` does, first runs whatever virtual interrupts are already pending, without switching, then clears need-preempt and sets a flag in the virtual CPU's local storage. While the flag is set, `might_preempt` only records a note, and whoever closes the window, the completed switch or the decision to do nothing, acts on the note at once. A preemption is therefore deferred by the window and never by more. Opening the window is the fourth delivery path, and it is the one that takes the TICK that `vcpu_idle` leaves on every wake.
+The `might_preempt` at the end adds **kernel-mode preemption**, which OSTD on a machine lacks: the handler may switch to another task before returning. The body's first act copies `virq_ip` into a local variable, so the interrupted address lives in this frame, on the task's own stack. The record's field is free for the next upcall on this virtual CPU. The stub copies the local into the slot only once the body has returned, perhaps much later, and the interrupted task resumes from the same frame. A preempted task stays on its own virtual CPU's run queue and moves to another only after it blocks; vOSTD relies on that, since its per-virtual-CPU accesses compute their address before they touch it. That is how a tick ends a time slice in the middle of a kernel task's computation, as it does on a machine with a preemptible kernel.
 
-The window has a price. When one virtual CPU wakes a task for another, the woken virtual CPU usually picks the task before the kick arrives; the kick then lands inside the window and leaves a note, and the note costs one reschedule that finds nothing to do.
+An upcall must not preempt inside `reschedule`, between its decision and its switch, so vOSTD flags that window and defers any preemption to its end. `reschedule` holds no preemption guard, since on a machine nothing preempts OSTD's kernel code, so an upcall can land between the two. By then the run queue has already made the chosen task current and put the running task back in the queue. A second decision could pick the running task, and before switching to a task OSTD waits until the processor that last ran it has finished saving it; a task that waits for itself waits forever, and the processor would hang. So `open_resched_window`, the first thing `reschedule` does, runs whatever virtual interrupts are already pending, without switching, so that whatever they ask for is answered by the decision about to be made; then it clears need-preempt and sets a flag in the virtual CPU's local storage. While the flag is set, `might_preempt` only records a note. Whoever closes the window, the completed switch, the decision to do nothing, or the retry that decides again, acts on the note at once, so a preemption is deferred by the window and never by more.
+
+The window costs one empty reschedule each time a kick lands inside it. When virtual CPU A puts a task on B's run queue and kicks B while B is already deciding, B often picks the task before the kick's upcall lands; the upcall then lands inside the window and leaves a note, and the note costs one reschedule that finds nothing to do.
 
 ```mermaid
 flowchart TB
-    t["watch timer fires<br/>(interrupt context)"] --> raise["set TICK in the record<br/>(unless a kick's firing)"]
+    t["watch timer fires<br/>(interrupt context)"] --> raise["set TICK in the record<br/>(unless a kick's firing);<br/>flag the carrier if in user mode"]
     raise --> where{"what was interrupted?"}
-    where -- "user mode" --> flag["flag the carrier:<br/>resume hook, user_run returns 2,<br/>handlers run, no switch"]
+    where -- "user mode" --> flag["resume hook, user_run returns 2,<br/>handlers run, no switch"]
     where -- "kernelet code, not in a critical section,<br/>stack to spare" --> redir["saved ip := virq_entry<br/>irq_off := 1"]
-    where -- "a critical section, too little stack,<br/>a service, or Linux" --> pend["leave the bit pending"]
+    where -- "a critical section, too little stack,<br/>a service, Linux, or no registers" --> pend["leave the bit pending"]
     redir --> stub["virq_entry: push all,<br/>klet_virq_body"]
     stub --> h["TICK: timer callbacks;<br/>KICK: set need-preempt"]
     h --> pre["irq_off := 0;<br/>might_preempt()"]
     pre --> ret["pop all, ret"]
-    pend --> later["delivered at unmask, guard drop,<br/>return from user mode, the next<br/>scheduling decision, or the next firing"]
+    pend --> later["delivered at unmask, guard drop,<br/>user_run's check, the next<br/>scheduling decision, or the next firing"]
 ```
 
 ## Interrupts off, and guards
 
 Two separate fields in the record stand for the two ways a kernel defers work: masking interrupts holds off the handler, and a preemption guard holds off only the task switch. They are kept separate because OSTD keeps them separate.
 
-- `irq_off` is the virtual interrupt flag, inverted. vOSTD sets it where OSTD's interrupts-off guard, `irq::disable_local()`, would clear the processor's flag, and clears it when the guard drops; the endovisor sets it when it redirects into the upcall, and the upcall clears it at the end. While it is set, nothing is delivered.
+- `irq_off` is the virtual interrupt flag, inverted. vOSTD sets it where OSTD's interrupts-off guard, `irq::disable_local()`, would clear the processor's flag, and clears it when the guard drops; the endovisor sets it when it redirects into the upcall, and the upcall clears it at the end. While it is set, nothing is delivered. It has two writers, but plain stores are enough: the endovisor writes a 1 only when it finds a 0, and the upcall it diverts into always clears that 1 again before the interrupted code resumes.
 - The **guard count**, the low bits of `preempt_info`, is how many preemption guards and spin locks are held. What a guard *means* is that no task switch happens on this virtual CPU while it is held; how that is *enforced* is that the watch timer never redirects a task that holds one, so the upcall, the one place a switch could happen underneath kernelet code, is never entered under a guard.
 
-Handlers, unlike task switches, may run under a guard. When the carrier comes back from user mode with a bit pending, `execute` runs them whatever the count, without switching. And `klet_virq_body` tests the count once more before `might_preempt`, because OSTD never preempts a task that holds a guard; the test is defensive, since the upcall is entered only with the count at zero.
-
-The guard word is updated only by its own virtual CPU, with single read-modify-write instructions (`add`, `sub`, `and`, `or`), because the guard count shares its word with the need-preempt bit, which the upcall's KICK handler sets. If a guard's increment compiled to a load, an add and a store, an upcall could land between the load and the store, because the count was still zero, and the store would erase the need-preempt bit the upcall had just set; a single `add` to memory cannot be split by an interrupt. `irq_off` has two writers, vOSTD and the endovisor, but the endovisor writes a 1 only when it finds a 0, so plain stores are enough.
+The guard word is updated only by its own virtual CPU, with single read-modify-write instructions (`add`, `sub`, `and`, `or`), because the guard count shares its word with the need-preempt bit, which the upcall's handlers set. If a guard's increment compiled to a load, an add and a store, an upcall could land between the load and the store, because the count was still zero, and the store would erase the need-preempt bit the upcall had just set; a single `add` to memory cannot be split by an interrupt.
 
 ## Delivery at the end of a critical section
 
-A bit that was left pending while interrupts were masked must still be delivered. The interrupts-off guard that unmasks does it:
+When a critical section ends, vOSTD delivers whatever was left pending in it: the interrupts-off guard that unmasks checks, and so does dropping the last preemption guard, which catches a bit that arrived while the carrier was in a service called under a guard. The unmask:
 
 *Simplified from `prototype/vostd/src/task/preempt/cpu_local.rs` and `prototype/vostd/src/vcpu.rs`: `irq_unmask`, `deliver_if_pending`, `handle_virq`.*
 
 ```rust
 pub(crate) fn irq_unmask() {
     let leaving = get_guard_count() == 0;       // the end of a critical section?
-    /* ... chapter 11's mirror ... */
+    /* ... the next chapter's mirror ... */
     set_irq_off(false);
     if leaving {
         vcpu::deliver_if_pending();             // a few loads and a branch
@@ -220,7 +226,7 @@ pub(crate) fn deliver_if_pending() {
 }
 
 pub(crate) fn handle_virq() {                   // the same handlers, called as a function
-    if IN_VIRQ.load() { return; }               // already inside the handlers: they will take the bit
+    if IN_VIRQ.load() { return; }               // already inside (one flag per virtual CPU): a bit raised before the handlers' last look is taken, a later one waits for the next path
     IN_VIRQ.store(true);
     {
         let _guard = crate::irq::disable_local();
@@ -231,7 +237,7 @@ pub(crate) fn handle_virq() {                   // the same handlers, called as 
 }
 ```
 
-Dropping the last preemption guard runs the same check; most services run under a guard, so that catches a bit that arrived while the carrier was in Linux. So a virtual interrupt is delivered by whichever of four paths comes first: the upcall, if the kernelet was not in a critical section when it arrived; the end of the critical section, if it was; the return from user mode; or the start of the next scheduling decision, which runs whatever is pending before it decides. Failing all of those, because the carrier was in a service that held no guard, had too little stack, or had been taken off its processor by Linux, the next watch firing finds the bit, at most a millisecond later.
+A virtual interrupt is delivered by whichever of four paths comes first: the upcall, if the kernelet was not in a critical section when it arrived; the end of the critical section, if it was; the return from user mode; or the start of the next scheduling decision, which runs whatever is pending before it decides. Failing all of those, because the carrier was in a service that held no guard, had too little stack, or had been taken off its processor by Linux, the bit waits for the first watch firing that finds the carrier on a processor, in kernelet code, outside a critical section and with stack to spare: a millisecond of the carrier's own running time at best, with no bound while Linux keeps it off a processor.
 
 ## The kick's interrupt
 
@@ -261,6 +267,6 @@ A kick whose bit is already set does nothing at all, so a thousand kicks before 
 
 <div class="recap">
 
-**Recap.** Virtual interrupts are bits in the virtual CPU's record: TICK from the watch timer, KICK from `vcpu_kick`. The watch timer is a pinned, hard, one-millisecond `hrtimer` per processor, armed by each carrier's preemption notifier whenever Linux puts the carrier on that processor. When it finds the carrier in kernelet code outside a critical section, with room on the task's stack, it points the interrupted frame at the image's upcall stub, which saves everything on the task's stack, runs the handlers, and may switch tasks before returning: kernel-mode preemption, held off only inside a scheduling decision. A carrier in user mode is flagged and runs the handlers on its way back without switching; one in a critical section delivers the bit itself when the section ends; a kick to another processor makes its timer fire at once; anything else waits at most one period.
+**Recap.** Virtual interrupts are bits in the virtual CPU's record: TICK from the watch timer, KICK from `vcpu_kick`. The watch timer is a pinned, hard, one-millisecond `hrtimer` per processor, armed by each carrier's preemption notifier whenever Linux puts the carrier on that processor. When it finds the carrier in kernelet code outside a critical section, with room on the task's stack, it points the interrupted frame at the image's upcall stub, which saves everything on the task's stack, runs the handlers, and may switch tasks before returning: kernel-mode preemption, held off by a guard and, inside a scheduling decision, by the window. A carrier in user mode is flagged and runs the handlers on its way back without switching; one in a critical section delivers the bit itself when the section ends; the next scheduling decision runs whatever is pending; a kick to another processor makes its timer fire at once; anything else waits for the next firing that can deliver it.
 
 </div>
