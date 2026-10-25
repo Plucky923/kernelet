@@ -1,8 +1,8 @@
 # How to read this book
 
-This book explains one idea and one program.
+This is a tutorial about the **kernelet**: a complete OS kernel that runs *inside* another kernel, and does so safely.
 
-The idea is the **kernelet**: a complete operating-system kernel that runs *inside* another kernel, as an ordinary piece of loaded code, and yet is kept apart from it. The program is a prototype that does exactly that on Linux: a small kernel written against the Asterinas kernel framework runs inside a patched Linux, serves a user program's system calls, manages that program's memory, and is scheduled and stopped by Linux without Linux ever understanding what it is.
+The tutorial comes with a prototype implementation of kernelets in Linux. It patches and extends the Linux kernel so that a small Rust kernel written against OSTD (Asterinas's kernel framework) can run inside Linux, serve a user program's system calls, manage that program's memory, and be scheduled and stopped by Linux without Linux ever understanding what it is.
 
 By the end you will know how every part of that prototype works, down to the C and Rust that does it, and you will have run it.
 
@@ -20,11 +20,11 @@ Everything beyond that is explained the first time it is needed, in a box like t
 
 ## The companion repository
 
-The code is in the `prototype/` directory of this repository. Every code excerpt in the book is a simplified version of code there, and a caption under each excerpt names the file it comes from and the functions it shows, like this:
+The code is in the `prototype/` directory of this repository. Every code excerpt in the book is a simplified version of code there, and is given a caption that names the file it comes from and the functions it shows, like this:
 
 *Simplified from `prototype/linux/endovisor/switch.S`: `klet_switch`.*
 
-"Simplified" means that logging, counters, error paths and comments have been cut so that the mechanism fits on the page. The file holds the real thing, with its comments, and is worth opening beside the book. "Unchanged" means the block is copied from the file verbatim, and the checker compares the two.
+"Simplified" means that logging, counters, error paths and comments have been cut so that the mechanism fits on the page. If the caption begins with "Unchanged" instead, the block is copied from the file verbatim.
 
 ## The chapters
 
@@ -50,6 +50,4 @@ Chapters 13 and 14 are the climax, and everything before them is there so that t
 
 ## Conventions
 
-A few words are used in exactly one sense throughout; each is defined where it first appears, and the first chapter collects them. Linux functions are linked to the version 6.12 source on `elixir.bootlin.com` the first time they are named, so that you can read the real code. Every figure is either a diagram in the text or a drawing; nothing in a figure is decorative.
-
-Each chapter ends with a short recap, and where a chapter's mechanism has a test, the chapter names the `make` target that runs it.
+A few words are used in exactly one sense throughout; each is defined where it first appears, and the first chapter collects them. Linux functions are linked to the version 6.12 source on `elixir.bootlin.com` the first time they are named, so that you can read the real code. Every figure is either a diagram in the text or a drawing.

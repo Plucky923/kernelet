@@ -1,8 +1,9 @@
 # Why a kernel of your own
 
-A computer runs one kernel. Every program on it asks that kernel for files, memory and time through system calls, and the kernel decides. That is the picture from your operating-systems course, and it is true of the laptop in front of you.
-
-It stops being true, or at least stops being enough, on a machine in a data center. There, one computer runs programs from many customers, called **tenants**, who do not trust each other and whom the operator does not trust either. Each tenant must be kept from reading, corrupting or starving the others. There are two established ways to do that, and this chapter introduces a third.
+<!--
+TODO: Begin the paragraph with the cloud computing or IaaS. 
+--->
+In a data center, one machine runs programs from many customers, called **tenants**, who do not trust each other and whom the operator does not trust either. Each tenant must be kept from reading, corrupting or starving the others. There are two established ways to do that, and this chapter introduces a third.
 
 ## Two ways to share a machine
 
