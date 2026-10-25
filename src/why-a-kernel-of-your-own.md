@@ -68,9 +68,9 @@ These are used in one sense throughout the book.
 | **host kernel**, or **host** | the kernel that owns the machine. In this book, Linux |
 | **endovisor** | the component of the host kernel that creates, serves and destroys kernelets. *Endo-* because it sits inside the host kernel, beside the kernelets, where a hypervisor sits beneath its guests. In this book, a Linux kernel module |
 | **vOSTD** | the framework inside a kernelet: OSTD's interface with a different implementation underneath |
-| **service table** | the fixed list of host functions a kernelet may call; its only way out |
+| **service table** | the fixed list of host functions vOSTD may call; its only way out |
 | **grant** | the physical memory a kernelet has been given |
-| **virtual CPU** | one of the fixed number of processors a sandbox is given when it is created; the kernelet runs its tasks on them as a kernel runs on real processors (chapter 9) |
+| **virtual CPU** | one of the fixed number of processors a kernelet is given when it is created; the kernelet schedules its tasks on them as a kernel does on real processors (chapter 9) |
 | **carrier** | a Linux task that carries one of a sandbox's virtual CPUs and may run the tenant's programs (chapters 2 and 6) |
 | **kernelet runtime** | the host program that creates and configures sandboxes, as a container runtime does (chapter 2) |
 | **carrier event hooks** | the two functions Linux calls for a carrier, at a system call and before user mode; the small patch that adds them is the one change to Linux (chapter 5) |
