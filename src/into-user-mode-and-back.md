@@ -155,7 +155,7 @@ The thread-pointer base is not in `pt_regs`, so in the prototype every tenant th
 
 A tenant's fault must reach the kernel proper as `execute` returning `UserException`, with the trap number and, for a page fault, the address. A tenant's instruction can fault: divide by zero, an illegal instruction, a touch of an address with no mapping. On a machine, OSTD's trap handler would fill those in from the hardware.
 
-<div class="linux">
+<div class="background">
 
 **Linux: exceptions become signals.** When a user instruction faults, Linux's exception handler records the trap number, error code and address in the task's thread structure, queues a **signal** on the task (`SIGSEGV`, `SIGILL`, `SIGFPE`, and so on) with [`force_sig()`](https://elixir.bootlin.com/linux/v6.12/source/kernel/signal.c#L1666), and heads for user mode. For a fault, Linux's handlers queue the signal with [`force_sig_fault()`](https://elixir.bootlin.com/linux/v6.12/source/kernel/signal.c#L1733), whose `si_code` says what kind of fault it was.
 

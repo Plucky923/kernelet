@@ -14,7 +14,7 @@ Registering an image loads it as Linux loads a module, without its being one. Th
 
 One loaded copy of an image serves one sandbox at a time in this prototype. The image is linked for fixed addresses, so its code reaches its data where the loader placed it; the loader therefore keeps a pristine copy of the writable data as relocated, and every sandbox of the kind starts from that copy, with the uninitialized data zeroed. A second sandbox of a kind must wait for the first to be destroyed.
 
-<div class="linux">
+<div class="background">
 
 **Linux: modules and exported symbols.** A kernel module, code loaded into the running kernel with `insmod`, may call only the kernel functions that the kernel marks as **exported** (`EXPORT_SYMBOL` in the source); the rest are private to the kernel even though they are in the same address space. The endovisor is a module. A few functions it needs are not exported in a stock kernel, which is one of the two reasons for the patch in the next chapter.
 
@@ -119,7 +119,7 @@ int klet_sandbox_start(struct klet_inst *inst)
 }
 ```
 
-<div class="linux">
+<div class="background">
 
 **Linux: the direct map.** Linux maps *all* of physical memory, in order, into one region of the kernel's address space, called the direct map or linear map. Turning a physical address into a pointer the kernel can dereference is therefore one addition: `__va(paddr)` is `paddr + base`. `kmalloc` and the page allocator hand out direct-map memory, so for them a kernel pointer and a physical address are two names for the same bytes; `vmalloc`, from which the endovisor takes kernelet stacks, is the exception, because it maps scattered pages into a separate region. The line `__va(0)` above is simply the base.
 

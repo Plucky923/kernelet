@@ -116,7 +116,7 @@ Killed anywhere else, the carrier is out of Linux's reach, since Linux acts on `
 
 ## Eviction
 
-<div class="linux">
+<div class="background">
 
 **Linux: signals and kernel mode.** Linux acts on a signal, even `SIGKILL`, only when the task is about to return to user mode. A task that stays in kernel mode is never killed by a signal, however long it stays. Linux's own kernel code is written to come out: it sleeps in killable waits and passes voluntary preemption points. Code that Linux did not write does neither.
 

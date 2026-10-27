@@ -290,7 +290,7 @@ static void klet_ignore_signals(void)
  * the file is recognized by its inode (klet_exec_lookup), because the exec
  * opened the file afresh.
  *
- * Before the point of no return, the checks of KLET_VCPU_GET_EXEC_FD, in this
+ * Before the point of no return, the checks of KLET_GET_VCPU_EXEC_FD, in this
  * order: the sandbox has not been killed (ESRCH), this virtual CPU has not
  * been started (EBUSY), and the process is in the sandbox's control group with
  * no-new-privileges set (EPERM). Then what every loader does, with an address

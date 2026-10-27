@@ -40,7 +40,7 @@ Linux frees an area's page-table pages in four cases, and none applies here. (1)
 
 The walk need not handle huge entries. The area holds only 4 KiB entries, since `vm_map` inserts one page at a time, so `child` treats a huge entry as absent.
 
-<div class="linux">
+<div class="background">
 
 **Linux: page-table isolation.** To blunt Meltdown, Linux gives each address space a second top-level page for user mode. Whenever it writes a user entry into `mm->pgd`, it writes the same entry into the second page, so both point at the same lower-level tables; below the top level there is one table, the one the last chapter described. In the kernel-mode copy only, Linux sets no-execute on those top-level user entries, so that a return to user mode on the wrong table faults. `mm->pgd` is the kernel-mode copy, and it is the root the endovisor publishes for vOSTD.
 
@@ -50,7 +50,7 @@ Permissions are taken from the leaf only, never combined down the levels. Linux 
 
 ## Copying to and from the tenant
 
-<div class="linux">
+<div class="background">
 
 **Linux: copying from user memory.** Linux's `copy_from_user` rests on two mechanisms. The processor feature SMAP, supervisor-mode access prevention, faults any kernel-mode access to a user page unless the kernel has opened a window for it with `stac`, which it closes again with `clac`. And the copying instruction is listed in the *exception table*, the list of instructions allowed to fault and where to resume, so that a fault inside it resumes at a fixup that returns an error; Linux keeps a table for its own code and for each module's.
 

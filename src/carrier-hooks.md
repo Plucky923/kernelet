@@ -10,7 +10,7 @@ The table is the whole interface by which Linux's core calls into the endovisor.
 
 ## Where Linux can be hooked
 
-<div class="linux">
+<div class="background">
 
 **Linux: tasks and the entry path.** Linux's unit of execution is the **task** ([`struct task_struct`](https://elixir.bootlin.com/linux/v6.12/source/include/linux/sched.h#L778)); a thread is a task, a single-threaded process is a task.
 
@@ -117,7 +117,7 @@ The prototype's holder installs a filter only in one boot of `make probe`, which
 
 **The resume hook.** The patch's second call is on the way out. A task reaches `exit_to_user_mode_loop()` only when it has exit work pending, and the hook sits at the top of that loop, after interrupts are enabled and before Linux delivers signals. The loop, and the flag that most often sends a task into it, are Linux's own:
 
-<div class="linux">
+<div class="background">
 
 **Linux: the exit work flags and `TIF_NOTIFY_RESUME`.** A task carries a word of *thread flags*, and a few of them mean "do something before this task next returns to user mode": `TIF_SIGPENDING` (a signal to deliver), `TIF_NEED_RESCHED` (the scheduler wants the processor back), and [`TIF_NOTIFY_RESUME`](https://elixir.bootlin.com/linux/v6.12/source/arch/x86/include/asm/thread_info.h#L87), the general-purpose one, which stands for any other deferred work. The entry layer tests the whole set at once ([`EXIT_TO_USER_MODE_WORK`](https://elixir.bootlin.com/linux/v6.12/source/include/linux/entry-common.h#L65)) and enters `exit_to_user_mode_loop()` only if one of them is set.
 

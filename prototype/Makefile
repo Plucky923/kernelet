@@ -1175,7 +1175,7 @@ check-probe-seccomp:
 	exit $$rc
 
 # uapi-check's checks, every one of which must pass (host/runtime/uapi-check.c).
-UAPI_CHECKS := 67
+UAPI_CHECKS := 66
 # The probe ended by KLET_KILL: the sandbox is marked dying first, so the
 # watch timer stops and leaves the carrier spinning in kernelet code to the
 # eviction sweep, which the kill arms because no root carrier is left to.

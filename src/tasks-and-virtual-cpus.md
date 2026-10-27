@@ -83,7 +83,7 @@ struct klet_vcpu_rec {
 
 The record's place is what makes it fast to find: it is embedded in the endovisor's per-carrier structure, directly after the table of hooks that `task_struct` points at.
 
-<div class="linux">
+<div class="background">
 
 **Linux: per-processor data and `%gs`.** Linux keeps a block of per-processor variables, and on x86-64 the segment register `%gs` points at the current processor's block, so that reading one of them is a single `mov` with a `%gs:` prefix, whichever processor the code is on. Two of those variables matter here: the pointer to the **current task**, and the **preemption count**, the nesting depth of `preempt_disable()`, which Linux raises around code that must not be preempted. The block's layout is Linux's own, so a module learns the offsets at run time.
 

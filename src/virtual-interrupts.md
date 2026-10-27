@@ -19,7 +19,7 @@ When the handler runs depends on what the virtual CPU is doing when the bit is s
 
 ## The watch timer
 
-<div class="linux">
+<div class="background">
 
 **Linux: high-resolution timers and preemption notifiers.** An [`hrtimer`](https://elixir.bootlin.com/linux/v6.12/source/kernel/time/hrtimer.c) is a timer whose callback runs in interrupt context, normally on the processor that armed it. A *pinned* timer is guaranteed to stay there. A *hard* one runs in the interrupt itself even on a real-time kernel, a kernel built to run most interrupt work in threads. A callback returns `HRTIMER_RESTART` to run again, after moving its expiry forward by whole periods past now with `hrtimer_forward_now()`, or `HRTIMER_NORESTART` to stop. `hrtimer_active()` says whether a timer is queued or its callback is running, `hrtimer_cb_get_time()` gives the time a callback runs at, and `hrtimer_set_expires()` sets the next expiry directly.
 

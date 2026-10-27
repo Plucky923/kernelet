@@ -10,13 +10,15 @@ By the end you will know how every part of that prototype works, down to the C a
 
 The book assumes three things: what one operating-systems course teaches, the ability to read C, and a fair command of Rust. From the course you know what a process is, what virtual memory and a page table are, what a system call does, and what an interrupt and a context switch are, in the abstract.
 
-It assumes nothing about the Linux source: every Linux mechanism beyond the course is explained the first time it is needed, in a box like this:
+It assumes nothing about the Linux source. Background knowledge beyond the course, whether about Linux, ELF, compiler behavior or processor details, is explained the first time it is needed in a **background box**. Each box begins with a subject and a topic, such as **Linux: control groups** or **ELF: relocations**. It explains the concept, the names used for it in the relevant code or format, and why it matters to the kernelet design.
 
-<div class="linux">
+<div class="background">
 
-**Linux.** Each box says what the mechanism is, what the source calls it, and why the design cares.
+**Linux: control groups.** A control group is a set of tasks that Linux accounts and limits together. The prototype puts a sandbox's carrier tasks in one group so that Linux can account for their resource use together.
 
 </div>
+
+If you already know a box's topic, you can continue with the main text. The same box style is used for every subject; the label tells you which background knowledge it introduces.
 
 ## Code excerpts
 

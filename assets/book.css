@@ -10,6 +10,6 @@
 .content .recap { border-left: 4px solid var(--links); padding: 0.4em 1em; margin: 1.2em 0; background: var(--quote-bg); }
 .content .recap p:first-child { margin-top: 0; }
 .content .recap p:last-child { margin-bottom: 0; }
-.content .linux { border-left: 4px solid #d99; padding: 0.4em 1em; margin: 1.2em 0; background: var(--quote-bg); }
-.content .linux p:first-child { margin-top: 0; }
-.content .linux p:last-child { margin-bottom: 0; }
+.content .background { border-left: 4px solid #d99; padding: 0.4em 1em; margin: 1.2em 0; background: var(--quote-bg); }
+.content .background p:first-child { margin-top: 0; }
+.content .background p:last-child { margin-bottom: 0; }

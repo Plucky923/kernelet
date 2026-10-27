@@ -23,7 +23,7 @@ flowchart TB
 
 That is a stronger position than the one a kernel has on a machine, where a bug in the framework could map any frame into a tenant. Here, no translation reaches the hardware without trusted host code having checked the frame.
 
-<div class="linux">
+<div class="background">
 
 **Linux: address spaces, areas, and page faults.** A process's user memory is described by an address space, [`struct mm_struct`](https://elixir.bootlin.com/linux/v6.12/source/include/linux/mm_types.h#L790), which holds the page table's root (`mm->pgd`) and a set of **virtual memory areas** (VMAs): contiguous ranges with uniform permissions, each optionally backed by a file.
 
@@ -89,7 +89,7 @@ Four choices in this code each close a hole.
 
 A carrier must run in the address space of the process whose thread it carries, and `kernelet_switch_mm()`, the first of the patch's two helpers, is how it changes space. A carrier is born with an empty address space of its own; to run a tenant thread it must run in *that process's* space. Two of the lines above call the helper, and both hooks call it, through `klet_space_adopt` below, before they apply the registers on a trip to user mode in which the virtual CPU has activated a different process than the carrier is in (chapter 9).
 
-<div class="linux">
+<div class="background">
 
 **Linux: changing a task's address space.** Linux switches a task's address space in two places, neither usable by a user task, and a module cannot write a third. Linux has the operation twice: for a kernel thread that borrows a user address space ([`kthread_use_mm()`](https://elixir.bootlin.com/linux/v6.12/source/kernel/kthread.c#L1439)), and for `execve` ([`exec_mmap()`](https://elixir.bootlin.com/linux/v6.12/source/fs/exec.c#L958)), which replaces a process's address space with a fresh one. Neither will do for a user task that wants to swap between address spaces it holds references to: the first warns if its caller is not a kernel thread and takes the references a kernel thread needs, which a user task must not, and the second is private to `exec` and drops the task's reference to the old space. And a module cannot write its own, because everything the switch touches is private to the core kernel.
 

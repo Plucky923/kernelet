@@ -10,7 +10,7 @@ A carrier is an ordinary user task, not a kernel thread, because it must enter u
 
 ## A carrier is born by fork and exec
 
-<div class="linux">
+<div class="background">
 
 **Linux: how tasks are made.** Almost every task is created by one function, [`kernel_clone()`](https://elixir.bootlin.com/linux/v6.12/source/kernel/fork.c#L2745), which underlies `fork`, `clone` and kernel-thread creation. It copies the parent's task structure and then, depending on flags, shares or copies the address space, open files and so on. A child made by `fork` is therefore a copy of its parent in every property Linux keeps on the task: control group, credentials, namespaces, processor mask, priority, resource limits, seccomp filter, and the hooks pointer the patch added.
 
@@ -130,7 +130,7 @@ Carriers wait in a killable, no-load sleep. `wait_event_state` is Linux's ordina
 
 The endovisor must hear of a carrier's death however it happens, because a sandbox cannot continue without one of its processors. A carrier can die without the endovisor's involvement: the operator kills it, or Linux's out-of-memory killer does. Losing a carrier is losing a processor with whatever the kernelet was doing on it. Linux offers a clean way to hear of it.
 
-<div class="linux">
+<div class="background">
 
 **Linux: descriptors and release.** When a task exits, Linux closes its open files, and the last close of a file runs the file's `release` operation. Every process has a table of open file descriptors, and a task's exit closes them all, whatever the reason for the exit. A module can make an open file of its own with [`anon_inode_getfile()`](https://elixir.bootlin.com/linux/v6.12/source/fs/anon_inodes.c#L143), with whatever operations it likes.
 

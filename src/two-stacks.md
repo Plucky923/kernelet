@@ -4,7 +4,7 @@ Chapter 3 drew a picture: the kernel proper's handler for a user program is a lo
 
 ## Two kernels, two opinions about the stack
 
-<div class="linux">
+<div class="background">
 
 **Linux: a task's kernel stack.** A Linux task's kernel stack, 16 KiB on x86-64, is empty whenever the task is in user mode. The stack is used whenever the task runs in kernel mode, and it is *empty* while the task is in user mode: a system call builds a few frames on it, and returning to user mode discards them. Linux's exit path relies on this; nothing in Linux can be "in the middle of a function" while its task runs user code. The saved user registers, `pt_regs`, sit at the very top of the stack and are the one thing that survives.
 
@@ -122,7 +122,7 @@ static void klet_leave(struct klet_carrier *c, enum klet_cstate state)
 
 ## Where the stacks come from
 
-<div class="linux">
+<div class="background">
 
 **Linux: `vmalloc`.** Linux has two kinds of kernel memory: the direct map, physically contiguous, from `kmalloc` and the page allocator; and the **vmalloc area**, where the kernel builds virtually contiguous ranges out of scattered pages with [`vmalloc()`](https://elixir.bootlin.com/linux/v6.12/source/include/linux/vmalloc.h#L144). Each range is followed by an unmapped *guard page*, so running off the end of one faults instead of silently overwriting its neighbor.
 

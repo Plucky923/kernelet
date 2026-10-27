@@ -180,18 +180,17 @@ The seccomp boot ends with `ended by signal 31`. The `KLET_KILL` boot logs `evic
 
 ## 5. Header comment lines changed
 
-`linux/endovisor/uapi/endovisor.h`: 12 comment lines added, none removed; no name, number or struct changed.
+`linux/endovisor/uapi/endovisor.h`: 12 comment lines added, none removed; no name, number or struct changed in that implementation pass. The list below omits the later-removed memory-growth ioctl.
 
 ```text
 KLET_CREATE:            + * In this prototype a kind has at most one sandbox at a time, because its
                         + * one loaded copy is position-dependent (EBUSY while one exists).
                         + * In this prototype memory_initial must come to 2 or 4 MiB, the grant being
                         + * one physically contiguous run (EINVAL otherwise).
-KLET_VCPU_GET_EXEC_FD:  + * (The descriptor is an O_PATH one on that file, which execveat accepts.)
+KLET_GET_VCPU_EXEC_FD:  + * (The descriptor is an O_PATH one on that file, which execveat accepts.)
 KLET_ATTACH_DEVICE:     + * This prototype has no devices: EOPNOTSUPP.
 KLET_SET_CONSOLE/LOG:   + * In this prototype the console carries output only, and a console or log
                         + * not given goes to the host's kernel log, prefixed "kernelet:".
-KLET_GRANT:             + * This prototype's grant is fixed: EOPNOTSUPP.
 KLET_WAIT:              + * This prototype reports a panic as EXITED, as a power-off, with no message.
                         + * Of the endovisor's reasons, this prototype detects only
                         + * KLET_KILLED_CARRIER_LOST.

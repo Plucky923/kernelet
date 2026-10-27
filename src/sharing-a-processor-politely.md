@@ -4,7 +4,7 @@ This chapter resolves three conflicts between a kernelet and Linux over who hold
 
 ## Problem 1: a Linux that does not preempt kernel code
 
-<div class="linux">
+<div class="background">
 
 **Linux: preemption models.** Linux's *preemption models* differ in when a task that should give way does so. Linux decides *that* a task should give way by setting a flag on it, `need_resched`, which the scheduler does at a timer tick when the task's slice is used up, or when a task with a better claim wakes; the models differ in when the flag is acted on. A kernel is built with one of several models; one built with the full model and the option `PREEMPT_DYNAMIC`, as this book's is, can be switched at boot to `none`, `voluntary` or `full` with the parameter `preempt=`. Under *full* a task running kernel code can be rescheduled at almost any instruction, on return from an interrupt. Under *voluntary* and *none*, common on servers, a task in kernel mode keeps its processor until it sleeps, returns to user mode, or reaches one of the many places where Linux's own code calls [`cond_resched()`](https://elixir.bootlin.com/linux/v6.12/source/include/linux/sched.h#L2063), the voluntary preemption point.
 
@@ -92,7 +92,7 @@ The stub's unforced path, taken only when the stack is short, runs in no test: t
 
 If Linux preempts a carrier while the kernelet task on it holds a spin lock, every other virtual CPU that wants that lock spins until Linux runs the first one again, which may be a whole time slice later. This is *lock-holder preemption*. There are two families of remedy: tell the host when not to preempt, and make waiting cheap when it preempted anyway. This section is the first remedy; the backstop at the end of the chapter is the second.
 
-<div class="linux">
+<div class="background">
 
 **Linux: the preemption count.** Linux keeps a per-processor **preemption count**, which [`preempt_disable()`](https://elixir.bootlin.com/linux/v6.12/source/include/linux/preempt.h#L213) and every spin lock raise and their counterparts lower; on return from an interrupt, Linux reschedules kernel code only if the count is zero. The word is a set of bit fields: the low eight bits are the preemption depth, and the bits above count software- and hardware-interrupt nesting, which is how Linux knows it is in an interrupt. It lives in the per-processor block that `%gs` points at.
 
@@ -239,7 +239,7 @@ flowchart TB
 
 A spin lock that keeps failing may be waiting for a lock holder that is off its processor: after a forced yield, or while the lock holder's carrier is in a service it called under the lock, asleep or preempted. After a thousand failed attempts the lock says so with the service `vcpu_on_spin`, and keeps spinning.
 
-<div class="linux">
+<div class="background">
 
 **Linux: `yield_to()`.** [`yield_to()`](https://elixir.bootlin.com/linux/v6.12/source/kernel/sched/syscalls.c#L1468) asks the scheduler to run a named runnable task next in place of the caller, a hint the scheduler may decline. With the scheduler's default features it pushes the caller's deadline back, if other tasks share its run queue, and reschedules; it does not make Linux pick the named task. Its second argument says whether to reschedule the named task's processor as well; KVM passes true. So with the argument false, the call only gives up the caller's own turn.
 

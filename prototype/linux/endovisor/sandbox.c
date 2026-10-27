@@ -348,7 +348,7 @@ static struct file *klet_exec_file_make(struct klet_inst *inst, unsigned int vcp
 	return file;
 }
 
-static long klet_vcpu_get_exec_fd(struct klet_inst *inst, u32 __user *uarg)
+static long klet_get_vcpu_exec_fd(struct klet_inst *inst, u32 __user *uarg)
 {
 	struct file *file;
 	u32 vcpu;
@@ -759,11 +759,10 @@ static long klet_sandbox_ioctl(struct file *file, unsigned int cmd, unsigned lon
 	void __user *uarg = (void __user *)arg;
 
 	switch (cmd) {
-	case KLET_VCPU_GET_EXEC_FD:
-		return klet_vcpu_get_exec_fd(inst, uarg);
+	case KLET_GET_VCPU_EXEC_FD:
+		return klet_get_vcpu_exec_fd(inst, uarg);
 	case KLET_ATTACH_DEVICE:
-	case KLET_GRANT:
-		return -EOPNOTSUPP;	/* no devices, and a fixed grant, in this prototype */
+		return -EOPNOTSUPP;	// No devices in this prototype.
 	case KLET_SET_CONSOLE:
 		return klet_set_out(inst, &inst->console, uarg);
 	case KLET_SET_LOG:

@@ -107,7 +107,7 @@ static struct klet_stats stats(int fd, struct klet_vcpu_stat *rows, unsigned int
 
 static int get_exec(int fd, unsigned int vcpu)
 {
-	return ioctl(fd, KLET_VCPU_GET_EXEC_FD, &vcpu);
+	return ioctl(fd, KLET_GET_VCPU_EXEC_FD, &vcpu);
 }
 
 /*
@@ -297,19 +297,17 @@ int main(int argc, char **argv)
 
 	refused(ioctl(fd, KLET_ATTACH_DEVICE, &(struct klet_device){ .type = KLET_DEVICE_BLOCK, .fd = 0 }),
 		EOPNOTSUPP, "KLET_ATTACH_DEVICE: EOPNOTSUPP in this prototype");
-	refused(ioctl(fd, KLET_GRANT, &(struct klet_grant){ .add = 2 << 20 }), EOPNOTSUPP,
-		"KLET_GRANT: EOPNOTSUPP in this prototype");
 	reason = 0x80000000u;
 	refused(ioctl(fd, KLET_KILL, &reason), EINVAL, "KLET_KILL refuses the endovisor's own reasons (EINVAL)");
 	refused(ioctl(fd, KLET_DESTROY), EBUSY, "KLET_DESTROY refuses a sandbox that has not exited (EBUSY)");
-	refused(get_exec(fd, 2), EINVAL, "KLET_VCPU_GET_EXEC_FD refuses a virtual CPU beyond nr_vcpus (EINVAL)");
+	refused(get_exec(fd, 2), EINVAL, "KLET_GET_VCPU_EXEC_FD refuses a virtual CPU beyond nr_vcpus (EINVAL)");
 
 	/* The exec descriptors. */
 	e0 = get_exec(fd, 0);
 	e0b = get_exec(fd, 0);
 	e1 = get_exec(fd, 1);
 	ok(e0 >= 0 && e0b >= 0 && e1 >= 0 && (fcntl(e0, F_GETFD) & FD_CLOEXEC),
-	   "KLET_VCPU_GET_EXEC_FD: close-on-exec descriptors, a second one for the same virtual CPU too", strerror(errno));
+	   "KLET_GET_VCPU_EXEC_FD: close-on-exec descriptors, a second one for the same virtual CPU too", strerror(errno));
 	ok(fstat(e0, &sb) == 0 && S_ISREG(sb.st_mode) && (sb.st_mode & 07777) == 0111 &&
 	   sb.st_uid == 0 && sb.st_gid == 0, "the exec descriptor's file is root's, regular and execute-only (0111)", "not so");
 	{
@@ -356,7 +354,7 @@ int main(int argc, char **argv)
 		snprintf(how, sizeof(how), "kernelet/%u/0", st.slot);
 		ok(strcmp(comm, how) == 0, "the carrier is named kernelet/<slot>/0", comm);
 	}
-	refused(get_exec(fd, 0), EBUSY, "KLET_VCPU_GET_EXEC_FD refuses a virtual CPU started already (EBUSY)");
+	refused(get_exec(fd, 0), EBUSY, "KLET_GET_VCPU_EXEC_FD refuses a virtual CPU started already (EBUSY)");
 	exec_refused(e0b, 1, NULL, EBUSY, "an exec of a second descriptor of a started virtual CPU is refused (EBUSY)");
 	{
 		int one = 1;
@@ -384,7 +382,7 @@ int main(int argc, char **argv)
 		waitpid(carrier, &status, 0);
 		ok(WIFSIGNALED(status) && WTERMSIG(status) == SIGKILL, "the carrier died by SIGKILL", "not");
 	}
-	refused(get_exec(fd, 1), ESRCH, "KLET_VCPU_GET_EXEC_FD after the kill (ESRCH)");
+	refused(get_exec(fd, 1), ESRCH, "KLET_GET_VCPU_EXEC_FD after the kill (ESRCH)");
 	exec_refused(e1, 1, NULL, ESRCH, "an exec into a killed sandbox is refused (ESRCH)");
 	st = stats(fd, rows, KLET_MAX_VCPUS);
 	ok(st.state == KLET_STATE_EXITED && rows[0].state == KLET_VCPU_GONE, "KLET_GET_STATS: EXITED, vcpu 0 gone", "not");

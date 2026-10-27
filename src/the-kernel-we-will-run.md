@@ -151,7 +151,7 @@ When `execute` returns, the kernel has the reason and the program's registers. T
 
 So a user program, to this kernel, is a function call that returns now and then. The code that serves the program, `user_task`, lives *inside* a loop, on a kernel stack, and its local variables survive every trip the program makes to user mode and back. Keep that picture: Linux does not share it.
 
-<div class="linux">
+<div class="background">
 
 **Linux: the empty kernel stack.** In Linux a task's kernel stack is empty whenever the task is in user mode. A system call builds frames on it, and returning to user mode discards them. Reconciling that with the picture above is the work of the chapters on two stacks and on the round trip into user mode.
 

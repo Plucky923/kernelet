@@ -508,10 +508,10 @@ int run_sandbox(int sys_fd, const char *name, unsigned int nr_vcpus, const char 
 		    nr_vcpus, cmdline);
 
 	for (i = 0; i < nr_vcpus; i++) {
-		int exec_fd = ioctl(sb.fd, KLET_VCPU_GET_EXEC_FD, &i);
+		int exec_fd = ioctl(sb.fd, KLET_GET_VCPU_EXEC_FD, &i);
 
 		if (exec_fd < 0)
-			die("KLET_VCPU_GET_EXEC_FD");
+			die("KLET_GET_VCPU_EXEC_FD");
 		sb.pids[i] = fork();
 		if (sb.pids[i] < 0)
 			die("fork");
