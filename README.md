@@ -2,6 +2,9 @@
 
 A book and working prototype about running a kernel of your own inside Linux.
 
+[Read the book online](https://tatetian.github.io/kernelet/). GitHub Actions
+rebuilds and publishes it whenever `main` is pushed.
+
 A **kernelet** is a complete kernel, written in safe Rust against the Asterinas kernel framework, that runs *inside* a host kernel as an ordinary piece of loaded code and is kept apart from it by the language rather than by hardware. This repository holds a book that explains how that works on Linux, chapter by chapter, and the prototype the book describes: a small kernel running as a kernelet inside a patched Linux 6.12, serving a user program's system calls, managing its memory in a Linux page table, scheduled and stopped by Linux.
 
 The repository has two main parts:

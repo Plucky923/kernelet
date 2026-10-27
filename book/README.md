@@ -32,3 +32,21 @@ The build needs `mdbook` and `mdbook-mermaid`; rendering also needs a headless
 Chrome browser. The repository's root Makefile delegates the same book commands
 here. `make clean` removes generated HTML and renderer output, keeping the book's
 source and the prototype intact.
+
+## Publishing
+
+The published book is at <https://tatetian.github.io/kernelet/>.
+The workflow in `../.github/workflows/book-pages.yml` checks and builds the book
+on every push to `main`, then deploys `book/build/` to GitHub Pages.
+It can also be started manually from the repository's Actions tab on `main`.
+
+The repository's **Settings → Pages → Build and deployment → Source** must be
+set to **GitHub Actions**. The workflow uses GitHub's built-in token, with
+`pages: write` and `id-token: write` scoped to the deployment job; no personal
+access token or generated-site branch is needed. This follows GitHub's
+[custom Pages workflow](https://docs.github.com/en/pages/getting-started-with-github-pages/using-custom-workflows-with-github-pages).
+
+The workflow pins mdBook and Mermaid to the versions documented in the root
+README. It sets the site's base path from Pages metadata when building, so the
+generated 404 page can load assets under `/kernelet/`. A failed check or build
+prevents deployment and leaves the previous published site in place.
