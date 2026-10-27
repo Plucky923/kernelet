@@ -1,6 +1,6 @@
 # The kernelet-in-Linux prototype
 
-This is the companion prototype of *Introduction to Kernelets in Linux*. It
+This is the companion prototype of *Building Kernelets on Linux*. It
 runs Asterinas's 100-line Hello World kernel, unedited, as a **kernelet**: a
 kernel compiled against an OSTD-shaped library (vOSTD), loaded into a patched
 Linux 6.12 as part of a module, running in kernel mode on its own stacks,

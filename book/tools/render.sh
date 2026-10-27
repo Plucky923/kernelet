@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Render a built page with a headless Chrome, for changes that touch how a page looks.
 #
-#   tools/render.sh PAGE [OUT.png]     screenshot book/PAGE to OUT.png (default .cache/render/…png)
+#   tools/render.sh PAGE [OUT.png]     screenshot build/PAGE to OUT.png (default .cache/render/…png)
 #                                      and check that every Mermaid block on the page was rendered
 #   tools/render.sh --install          fetch a headless Chrome into .cache/puppeteer and stop
 #
@@ -50,7 +50,7 @@ if [ -z "$page" ]; then
     sed -n '2,11p' "$0" | sed 's/^# \{0,1\}//' >&2
     exit 2
 fi
-html="$root/book/$page"
+html="$root/build/$page"
 if [ ! -f "$html" ]; then
     echo "render: $html does not exist; run 'make build' first" >&2
     exit 2

@@ -1,5 +1,15 @@
 # Documentation conventions
 
+## Repository and book structure
+
+- `book/` contains the mdBook source, assets, and tools; `prototype/` contains the implementation. Shared instructions and build shortcuts stay at the repository root.
+- The book is titled **Building Kernelets on Linux**. Its introduction precedes two parts: **Accepted Design** and **Design Proposals**.
+- Accepted Design chapters live in `book/src/accepted-design/`. Proposed changes live in `book/src/design-proposals/`, using the guide and template there.
+- Each proposal's filename starts with its original submission date: `YYYY-MM-DD-descriptive-title.md`. Its heading and table-of-contents label start with the same date followed by the title. Keep that date when revising the proposal.
+- A proposal's status distinguishes discussion from acceptance. When accepted, integrate the agreed changes into Accepted Design and the prototype where applicable; retain the proposal and decision rationale as history.
+- Code-caption paths such as `prototype/linux/endovisor/image.c` are relative to the repository root. Label proposed code separately from excerpts of existing implementation.
+- Run book commands from `book/`, or use the root Makefile's shortcuts. Generated HTML belongs in `book/build/`, never alongside the book source.
+
 ## Background knowledge in the book
 
 - Introduce background beyond the assumed operating-systems course and C/Rust knowledge at its first use in a background box. This applies to Linux, ELF, compilers, processor architecture, and other subjects.

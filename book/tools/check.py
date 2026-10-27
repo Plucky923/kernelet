@@ -1,12 +1,13 @@
 #!/usr/bin/env python3
-"""The book's checker. Run from the repository root: `python3 tools/check.py`.
+"""The book's checker. Run from the repository root: `python3 book/tools/check.py`.
 
 It fails, with a line per problem, if:
 
   - a page listed in src/SUMMARY.md does not exist, or a .md file under src/ is not listed;
   - an internal link does not resolve to an existing page, or to an anchor that page has
     (an explicit `{#id}` on a heading, or mdBook's slug of the heading text);
-  - an external link points anywhere but Linux v6.12 on elixir.bootlin.com;
+  - an Accepted Design external link points anywhere but Linux v6.12 on elixir.bootlin.com;
+  - a proposal filename, title, or table-of-contents entry lacks its submission date;
   - a code caption names a file of the companion prototype that does not exist, or an
     identifier that does not appear in that file. A caption is any line that holds a code
     span starting with `prototype/`; every other code span on that line that looks like an
@@ -24,9 +25,11 @@ is a promise the checker keeps: the file exists, and both names are in it.
 import os
 import re
 import sys
+from datetime import date
 
-ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-SRC = os.path.join(ROOT, "src")
+BOOK = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+ROOT = os.path.dirname(BOOK)
+SRC = os.path.join(BOOK, "src")
 
 LINK_RE = re.compile(r"(?<!!)\[([^\[\]]*)\]\(([^)\s]+)\)")
 HEADING_RE = re.compile(r"^(#{1,6})\s+(.*?)\s*(?:\{#([A-Za-z0-9_-]+)\})?\s*$")
@@ -36,6 +39,11 @@ CODE_SPAN_RE = re.compile(r"`([^`]+)`")
 IDENT_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*(?:::[A-Za-z_][A-Za-z0-9_]*)*(?:\(\))?$")
 CAPTION_RE = re.compile(r"^\s*\*(Simplified from|Unchanged from|Unchanged:|From) ")
 ALLOWED_EXTERNAL = ("https://elixir.bootlin.com/linux/v6.12/",)
+
+
+def is_proposal(path):
+    return path.startswith("design-proposals/") and path not in (
+        "design-proposals/README.md", "design-proposals/template.md")
 
 
 def slugify(text):
@@ -101,16 +109,41 @@ def main():
                 texts[full] = f.read()
     anchors = {full: headings(text) for full, text in texts.items()}
 
+    for page in pages:
+        if not is_proposal(page):
+            continue
+        match = re.fullmatch(r"(\d{4}-\d{2}-\d{2})-[a-z0-9]+(?:-[a-z0-9]+)*\.md", os.path.basename(page))
+        if not match:
+            problems.append(f"{page}: proposal filename must be YYYY-MM-DD-descriptive-title.md")
+            continue
+        submitted = match.group(1)
+        try:
+            date.fromisoformat(submitted)
+        except ValueError:
+            problems.append(f"{page}: invalid submission date {submitted}")
+        text = texts.get(os.path.join(SRC, page), "")
+        title = next((line for _, line in lines_outside_fences(text) if line.startswith("# ")), "")
+        if not title.startswith(f"# {submitted} ") or not title[len(submitted) + 3:].strip():
+            problems.append(f"{page}: proposal title must begin with {submitted} followed by a title")
+    with open(os.path.join(SRC, "SUMMARY.md"), encoding="utf-8") as f:
+        for line in f:
+            match = SUMMARY_ITEM_RE.match(line) or SUMMARY_PREFIX_RE.match(line.strip())
+            if match and is_proposal(match.group(2)):
+                submitted = os.path.basename(match.group(2))[:10]
+                if not match.group(1).startswith(submitted + " "):
+                    problems.append(f"SUMMARY.md: proposal label for {match.group(2)} must begin with {submitted}")
+
     n_links = n_refs = n_figs = 0
     for full, text in texts.items():
         rel = os.path.relpath(full, ROOT)
+        proposal_area = os.path.relpath(full, SRC).startswith("design-proposals" + os.sep)
         n_figs += text.count("```mermaid") + text.count("<svg")
         for lineno, line in lines_outside_fences(text):
             for m in LINK_RE.finditer(line):
                 href = m.group(2)
                 n_links += 1
                 if href.startswith("http://") or href.startswith("https://"):
-                    if not href.startswith(ALLOWED_EXTERNAL):
+                    if not proposal_area and not href.startswith(ALLOWED_EXTERNAL):
                         problems.append(f"{rel}:{lineno}: external link outside Linux v6.12 on elixir: {href}")
                     continue
                 if href.startswith("mailto:"):
@@ -127,6 +160,10 @@ def main():
                 if anchor and target in anchors and anchor not in anchors[target]:
                     problems.append(f"{rel}:{lineno}: no heading {anchor!r} in {os.path.relpath(target, ROOT)}")
             spans = CODE_SPAN_RE.findall(line)
+            # Proposals can name files they intend to add. Only explicit source
+            # captions promise that their files and identifiers already exist.
+            if proposal_area and not CAPTION_RE.match(line):
+                continue
             files = [s for s in spans if s.startswith("prototype/")]
             bodies = []
             for fspan in files:

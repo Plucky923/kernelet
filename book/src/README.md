@@ -1,8 +1,17 @@
 # How to read this book
 
-This is a tutorial about the **kernelet**: a complete OS kernel that runs *inside* another kernel, and does so *safely*.
+**Building Kernelets on Linux** explains the design and implementation of the **kernelet**: a complete OS kernel that runs *inside* another kernel, and does so *safely*.
 
-The tutorial comes with a prototype implementation of kernelets in Linux. It patches and extends the Linux kernel. With those changes small Rust kernels written against OSTD, the framework at the bottom of the Rust kernel Asterinas, can run inside Linux, scheduled and stopped by Linux without Linux's own code needing to understand the kernel it runs.
+The book has two parts:
+
+- **Accepted Design** describes the design the project currently endorses, its implementation in `prototype/`, and its limitations. These chapters build up the working system step by step.
+- **Design Proposals** is the place to develop and review optimizations, alternative designs, and new material. A proposal is an idea under discussion, not a promise about the accepted design or the prototype's behavior. Anyone can contribute a proposal, including the book's author.
+
+An accepted proposal is incorporated into Accepted Design and, where applicable, the prototype. Declined or withdrawn proposals remain available with the reasons for the decision, so future contributors can learn from the discussion. Acceptance is what separates the two parts; authorship does not.
+
+Start with [Accepted Design](accepted-design/why-a-kernel-of-your-own.md) to understand the system. To suggest a change, read [Contributing a design proposal](design-proposals/README.md) and use the [proposal template](design-proposals/template.md). Each proposal's title and filename begin with its original submission date, such as `2026-10-27 Improve syscall performance` and `2026-10-27-improve-syscall-performance.md`.
+
+The companion prototype patches and extends Linux. With those changes small Rust kernels written against OSTD, the framework at the bottom of the Rust kernel Asterinas, can run inside Linux, scheduled and stopped by Linux without Linux's own code needing to understand the kernel it runs.
 
 By the end you will know how every part of that prototype works, down to the C and Rust that do it. You will also have run it; the prototype's README says how.
 
@@ -22,7 +31,7 @@ If you already know a box's topic, you can continue with the main text. The same
 
 ## Code excerpts
 
-Every code excerpt in the book comes from the `prototype/` directory of this repository.
+Code excerpts in Accepted Design come from the `prototype/` directory of this repository. Source paths in their captions are relative to the repository root, even though the book's source lives in `book/`. Design proposals may also show proposed code; they must distinguish it from code already in the prototype.
 
 A caption under each excerpt names the file it comes from and, for a simplified excerpt, the functions it shows, like this:
 
@@ -30,7 +39,7 @@ A caption under each excerpt names the file it comes from and, for a simplified 
 
 The caption's first word says how the block differs from the file. "Simplified" means that logging, counters, error paths and comments have been cut so that the mechanism fits on the page. "Unchanged" means that the block is copied from the file verbatim.
 
-## The chapters
+## The Accepted Design chapters
 
 Each chapter uses only what the ones before it have built.
 

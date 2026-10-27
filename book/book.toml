@@ -1,10 +1,11 @@
 [book]
 language = "en"
 src = "src"
-title = "Introduction to Kernelets in Linux"
-description = "A tutorial on running a kernel of your own inside Linux, with a working prototype"
+title = "Building Kernelets on Linux"
+description = "The accepted design and implementation of kernelets on Linux, with proposals for their evolution"
 
 [build]
+build-dir = "build"
 create-missing = false
 # Index pages are README.md so that GitHub shows them when a directory is opened. mdBook's
 # default `index` preprocessor renders a README.md chapter as index.html but keeps rewriting
