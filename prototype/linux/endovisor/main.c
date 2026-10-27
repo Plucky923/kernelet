@@ -61,7 +61,7 @@
 struct klet_totals klet_totals;
 struct workqueue_struct *klet_wq;
 
-/* The kinds and the sandboxes; KLET_CREATE, KLET_DESTROY and the exec lookup. */
+// The kind and sandbox tables support `KLET_CREATE`, cleanup, and exec lookup.
 DEFINE_MUTEX(klet_table_lock);
 struct klet_kind klet_kinds[KLET_MAX_KINDS];
 struct klet_inst *klet_sandboxes[KLET_MAX_SANDBOXES];
@@ -470,7 +470,7 @@ static long klet_kind_register(struct klet_kind_register __user *uarg)
 		strscpy(kind->name, reg.name, sizeof(kind->name));
 		kind->nr_sandboxes = 0;
 		kind->used = true;
-		pr_info("kernelet: kind %d \"%s\" registered: an image of %zd bytes, text [%#lx, %#lx), %zu bytes shared\n",
+		pr_info("kernelet: kind %d \"%s\" registered: an image of %zd bytes, PIE text offsets [%#lx, %#lx), %zu bytes shared\n",
 			id, kind->name, len, kind->text_lo, kind->text_hi, kind->text_size);
 	}
 	mutex_unlock(&klet_table_lock);

@@ -38,7 +38,7 @@ Some words in the list below are defined only in the next chapter; skim past the
 
 1. **Why a kernel of your own** says what a kernelet is and why it can be safe.
 2. **The endovisor UAPI**, its user-space interface, is what a program on the host may ask of the endovisor: the image as a file, the device node and its descriptors, and how user space creates the carriers.
-3. **The kernel we will run** reads the hundred-line kernel that runs throughout the book, and lists what it needs from a machine.
+3. **The first kernel we will run** reads the hundred-line kernel that runs throughout the book, and lists what it needs from a machine.
 4. **The kernelet ABI**, its binary interface, is how a kernelet talks to its host from the inside: the tables passed between host and kernelet, the grant, and the first services.
 5. **Carrier hooks and patch overview** adds the two carrier event hooks, where a carrier enters and leaves kernelet code, and lists the rest of the small patch the prototype makes to Linux.
 6. **Carriers** puts a kernelet on the Linux tasks it runs on.

@@ -5,9 +5,9 @@ module needs that Linux does not already make: kernel_clone, and
 flush_tlb_mm_range for the synchronous flush of vm_flush.
 
 And four exports for the endovisor's own image loader and its registration
-of an image: execmem_alloc and execmem_free, which allocate the image's memory
-where modules live, set_memory_rox, which makes its text read-only and
-executable, and modules_disabled, which registering checks as init_module does.
+of an image: set_memory_ro and set_memory_rox protect the shared PIE mappings,
+set_memory_rw makes private data writable and restores direct-map permissions
+before backing pages are freed, and modules_disabled is checked at registration.
 
 Signed-off-by: kernelet-in-Linux prototype <none@example.com>
 ---
@@ -344,27 +344,11 @@ Signed-off-by: kernelet-in-Linux prototype <none@example.com>
  endmenu		# General setup
  
  source "arch/Kconfig"
---- a/mm/execmem.c
-+++ b/mm/execmem.c
-@@ -58,6 +58,7 @@
- 
- 	return __execmem_alloc(range, size);
- }
-+EXPORT_SYMBOL_GPL(execmem_alloc);
- 
- void execmem_free(void *ptr)
- {
-@@ -68,6 +69,7 @@
- 	WARN_ON(in_interrupt());
- 	vfree(ptr);
- }
-+EXPORT_SYMBOL_GPL(execmem_free);
- 
- static bool execmem_validate(struct execmem_info *info)
- {
 --- a/arch/x86/mm/pat/set_memory.c
 +++ b/arch/x86/mm/pat/set_memory.c
-@@ -2124,6 +2124,7 @@
+@@ -2116,0 +2117 @@
++EXPORT_SYMBOL_GPL(set_memory_ro);
+@@ -2124,6 +2125,7 @@
  
  	return change_page_attr_clear(&addr, numpages, clr, 0);
  }
@@ -372,6 +356,8 @@ Signed-off-by: kernelet-in-Linux prototype <none@example.com>
  
  int set_memory_rw(unsigned long addr, int numpages)
  {
+@@ -2131,0 +2134 @@
++EXPORT_SYMBOL_GPL(set_memory_rw);
 --- a/kernel/module/main.c
 +++ b/kernel/module/main.c
 @@ -128,6 +128,7 @@

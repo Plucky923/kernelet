@@ -74,6 +74,7 @@ CONFIG_KALLSYMS_ALL=y
 # --- process, task and time-keeping support the prototype relies on -----
 CONFIG_MULTIUSER=y
 CONFIG_FUTEX=y
+CONFIG_EPOLL=y
 CONFIG_POSIX_TIMERS=y
 CONFIG_HIGH_RES_TIMERS=y
 CONFIG_SECCOMP=y

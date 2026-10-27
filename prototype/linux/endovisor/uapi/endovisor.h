@@ -8,7 +8,8 @@
 // - An exec descriptor, returned by `KLET_GET_VCPU_EXEC_FD`, starts one virtual CPU.
 //   Executing it with `execveat` and `AT_EMPTY_PATH` makes the caller that virtual CPU's carrier.
 //
-// The operations defined below are ioctls.
+// The descriptors support the ioctls defined below;
+// a sandbox descriptor also supports `read` and readiness notification.
 // They return -1 with `errno` set on failure,
 // and otherwise return what their comments specify, or zero when nothing is specified.
 //
@@ -27,7 +28,7 @@
 #include <linux/types.h>
 
 // Returned by `KLET_GET_API_VERSION`; a runtime refuses any other value.
-#define KLET_API_VERSION	1
+#define KLET_API_VERSION	2
 
 // The ioctl type byte is chosen for the prototype.
 // `0xEB` is unassigned in `Documentation/userspace-api/ioctl/ioctl-number.rst` at v6.12.
@@ -49,15 +50,17 @@
 
 // The ioctl for registering a new kernelet kind by providing a new image.
 //
-// `image_fd` is an open descriptor on the image file:
-// an ELF relocatable object (`ET_REL`, x86-64) holding the kernel proper and vOSTD,
-// built so that it has no undefined symbol,
-// only relocations of the kinds the endovisor's loader applies,
-// and one exported symbol, `kernelet_entry_table`.
-// The endovisor repeats those checks on the file and refuses it (`EINVAL`, `ENOEXEC`) if any fails;
+// `image_fd` is an open descriptor on a self-contained x86-64 PIE image (`ET_DYN`)
+// holding the kernel proper and vOSTD, with no interpreter or external dependencies.
+// Its loadable segments fix the relative layout of shared code and private data.
+// Its only runtime relocations are `R_X86_64_RELATIVE` records targeting private data;
+// shared pages need no runtime patches.
+// `e_entry` identifies the `kernelet_entry_table` object, not an executable entry point.
+// The endovisor validates the image and refuses incompatible files (`EINVAL`, `ENOEXEC`);
 // it also refuses an image whose ABI version is not its own (`EPROTO`).
-// It copies the image's code into pages it keeps for the kind's life,
-// shared by every sandbox of the kind.
+// It retains one copy of the shared pages for the kind's life.
+// Each sandbox maps those pages at its own virtual address,
+// receives fresh writable data, and relocates its pointers for that address.
 //
 // The name of the new kind is given in `name`, which `KLET_KIND_LIST` reports.
 // This name must be unique among all registered kinds (`EEXIST` otherwise).
@@ -154,8 +157,6 @@ struct klet_kind_list {
 //
 // # Prototype limitations
 //
-// A kind has at most one sandbox at a time,
-// because its one loaded copy is position-dependent (`EBUSY` while one exists).
 // `memory_initial` must round to 2 or 4 MiB,
 // the grant being one physically contiguous run (`EINVAL` otherwise).
 struct klet_create {
@@ -278,18 +279,42 @@ struct klet_device {
 // values with the high bit set are reserved for the endovisor and refused with `EINVAL`.
 //
 // The ioctl returns zero without waiting for the carriers to stop.
-// Stopping is asynchronous; `KLET_WAIT` says when it is done.
+// Stopping is asynchronous; `read` waits for completion and reports the exit reason.
 // A sandbox that has no carrier exits at once.
 // The operation is idempotent: a second kill changes nothing.
+//
+// Closing the last copy of the sandbox descriptor also requests termination.
+// The endovisor releases the sandbox's remaining memory, mappings, and records
+// once both its last descriptor is closed and every carrier has stopped.
+// Closing an exited sandbox releases those resources;
+// closing a live sandbox arranges cleanup after exit without waiting for its carriers.
+// Copies made with `dup` or inherited through `fork` keep the descriptor alive
+// until they too are closed.
+//
+// # Security
+//
+// Automatic cleanup releases a crashed holder's sandbox
+// once no other process holds a copy of its descriptor.
 #define KLET_KILL			_IOW(KLET_IOC, 0x15, __u32)
 
-// The ioctl for waiting until a sandbox has exited and reporting how it ended.
+// The exit record returned by `read` on a sandbox descriptor.
 //
-// A sandbox has exited when, after it was marked dying, every carrier it had is gone,
-// or at once if it never had one.
-// The sandbox descriptor is also pollable: it reports `POLLIN` once the sandbox has exited.
+// After a termination request, the sandbox exits when every carrier is gone;
+// if it has no carriers, it exits immediately.
+// A blocking `read` waits interruptibly for that state;
+// with `O_NONBLOCK`, it fails with `EAGAIN` until the sandbox has exited.
+// A caught signal can interrupt the wait with `EINTR`.
 //
-// The ioctl fills in the exit record and returns zero on success.
+// A read buffer must hold at least one `struct klet_exit` (`EINVAL` otherwise).
+// A successful read copies one complete record and returns its size in bytes.
+// A zero-length read returns zero immediately.
+// An invalid destination fails with `EFAULT`.
+// Reads do not consume the record: repeated reads return the same result.
+// The descriptor is not seekable (`ESPIPE` from `lseek`).
+//
+// `poll`, `select`, and `epoll` report readability once the sandbox has exited.
+// `poll` reports `POLLIN | POLLRDNORM`; readiness persists after a read.
+// After readiness notification, either `read` or `KLET_GET_STATS` retrieves the exit record.
 // `how` identifies which of three things ended the sandbox:
 //
 // - `KLET_END_EXITED`: `code` is the kernel proper's exit code.
@@ -321,14 +346,15 @@ struct klet_exit {
 	__u32	pad;
 	char	message[KLET_MESSAGE_LEN];
 };
-#define KLET_WAIT			_IOR(KLET_IOC, 0x16, struct klet_exit)
 
-// The ioctl for reading a sandbox's state, counters, and virtual CPU statistics.
+// The ioctl for reading a sandbox's state, exit record, counters, and virtual CPU statistics.
 //
 // The caller supplies an array of `capacity` rows at `vcpus`.
 // The endovisor sets `nr_vcpus` to the sandbox's number of virtual CPUs
 // and fills in `min(capacity, nr_vcpus)` rows.
-// It also reports the sandbox's `slot`, `state`, and counters.
+// It also reports the sandbox's `slot`, `state`, counters, and `exit` record.
+// `exit` is zero until `state` is `KLET_STATE_EXITED`;
+// it then holds the same final record as `read`, without blocking.
 // The rows let a tool find the sandbox's carriers without walking its control group;
 // `pid` is the process identifier that `taskset` and `chrt` take.
 //
@@ -362,23 +388,8 @@ struct klet_stats {
 	__u64	vcpus;				// `struct klet_vcpu_stat *`, user memory
 	__u32	capacity;			// rows available at `vcpus`
 	__u32	slot;				// out: the sandbox's index in the endovisor's table; names its carriers
+	struct klet_exit exit;			// out: final exit record, zero before exit
 };
 #define KLET_GET_STATS		_IOWR(KLET_IOC, 0x17, struct klet_stats)
-
-// The ioctl for destroying an exited sandbox and releasing its resources.
-//
-// The operation returns the memory, instance, and records to Linux.
-// It is legal once the sandbox has exited (`EBUSY` before)
-// and returns zero on success.
-// The exit status stays readable through the sandbox descriptor until it is closed.
-//
-// Closing the last copy of the sandbox descriptor performs `KLET_KILL`;
-// the endovisor then destroys the sandbox once it has exited.
-// Release never waits.
-//
-// # Security
-//
-// Automatic cleanup ensures that nothing a crashed holder held keeps a sandbox alive.
-#define KLET_DESTROY		_IO(KLET_IOC, 0x18)
 
 #endif // `_UAPI_LINUX_KLET_H`

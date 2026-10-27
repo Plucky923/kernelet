@@ -68,7 +68,7 @@ static enum hrtimer_restart klet_sweep(struct hrtimer *timer)
 	atomic_inc(&inst->n.evictions);
 	pr_info("kernelet: sandbox %d: evicting vcpu carrier (pid %d) on cpu %d: ip %#lx (+%#lx in the kernelet image, %pS), sweep %d\n",
 		inst->slot, current->pid, smp_processor_id(),
-		regs->ip, regs->ip - inst->kind->text_lo,
+		regs->ip, regs->ip - inst->text_lo,
 		(void *)regs->ip, atomic_read(&klet_totals.sweeps));
 
 	/* The only register the endovisor touches. */

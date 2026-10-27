@@ -1,22 +1,18 @@
-/* SPDX-License-Identifier: GPL-2.0 */
-/*
- * The endovisor: the service half of the kernelet image ABI, the endovisor
- * UAPI (uapi/endovisor.h, /dev/endovisor), and everything between them.
- *
- * Kernelet images are files, registered as *kinds* (KLET_KIND_REGISTER) and
- * loaded and relocated by the endovisor itself (image.c); a kind's one loaded
- * copy serves one live sandbox at a time, because the image is
- * position-dependent and its text reaches its data at addresses fixed when it
- * was loaded. A sandbox is one struct klet_inst, in a table of
- * KLET_MAX_SANDBOXES slots (sandbox.c).
- *
- * Vocabulary, as in the book: a *carrier* is a Linux task that carries one of
- * the sandbox's virtual CPUs for the sandbox's whole life, a child the holder
- * forked that executed the virtual CPU's exec descriptor. A carrier does *not*
- * carry an OSTD task: OSTD tasks are the kernelet's own objects on their own
- * kernelet stacks, and the kernelet's own scheduler multiplexes them onto the
- * vCPUs. Linux schedules the N carriers and never sees a kernelet task.
- */
+// SPDX-License-Identifier: GPL-2.0
+// The endovisor connects the kernelet image ABI to the endovisor UAPI.
+//
+// Kernelet images are files, registered as kinds through `KLET_KIND_REGISTER`
+// and validated by the endovisor itself in `image.c`.
+// A kind shares immutable pages across independent PIE mappings
+// with private data and relocations.
+// A sandbox is one `struct klet_inst`,
+// in a table of `KLET_MAX_SANDBOXES` slots in `sandbox.c`.
+//
+// A carrier is a Linux task that carries one of the sandbox's virtual CPUs:
+// a child the holder forked that executed the virtual CPU's exec descriptor.
+// OSTD tasks are the kernelet's own objects on their own kernelet stacks,
+// and the kernelet's own scheduler multiplexes them onto the vCPUs.
+// Linux schedules the carriers and never sees a kernelet task.
 #ifndef _KLET_ENDOVISOR_H
 #define _KLET_ENDOVISOR_H
 
@@ -513,24 +509,33 @@ struct klet_counters {
 	atomic_t stolen_ms;
 };
 
-/* One registered image (image.c). */
+// A loadable segment of the restricted PIE image.
+struct klet_image_segment {
+	u64 offset, filesz, memsz;
+	u32 flags;
+};
+
+// A relocation whose target is private to an instance.
+struct klet_image_reloc {
+	u64 offset, addend;
+};
+
+#define KLET_IMAGE_SEGMENTS 8
+#define KLET_IMAGE_SPAN_MAX (16UL << 20)
+
+// One registered PIE image, with immutable pages shared by its instances.
 struct klet_kind {
 	bool used;
 	char name[KLET_NAME_LEN];
-	/*
-	 * The text and read-only data, in one executable allocation near the
-	 * kernel's text (execmem), read-only and executable once relocated; the
-	 * writable data and bss in another, and a pristine copy of the writable
-	 * data as it was relocated, which every sandbox of the kind starts from.
-	 */
-	void *text;
-	size_t text_size;		/* the allocation */
-	unsigned long text_lo, text_hi;	/* the executable sections within it */
-	void *data;
-	size_t data_size;
-	void *pristine;
-	const struct klet_entry_table *entry;
-	/* Sandboxes that exist (created, not destroyed): 0 or 1 in this prototype. */
+	u8 *image;			// Unrelocated template, including zeroed BSS.
+	size_t image_size;
+	struct page **shared_pages;	// `NULL` for pages private to each instance.
+	unsigned int nr_pages, nr_segments, nr_relocs;
+	struct klet_image_segment segments[KLET_IMAGE_SEGMENTS];
+	struct klet_image_reloc *relocs;
+	u64 entry_offset;
+	size_t text_size, data_size;	// Shared and private mapped bytes.
+	unsigned long text_lo, text_hi;	// Executable offsets within the image.
 	unsigned int nr_sandboxes;
 };
 
@@ -553,6 +558,10 @@ struct klet_out {
 struct klet_inst {
 	refcount_t refs;		/* the sandbox file's, and each carrier record's */
 	struct klet_kind *kind;
+	void *image_base;
+	struct page **image_pages;
+	const struct klet_entry_table *entry;
+	unsigned long text_lo, text_hi;
 	int slot;
 	struct mutex mutex;		/* the sandbox operations, against each other */
 
@@ -734,16 +743,10 @@ static inline bool klet_in_grant(struct klet_inst *inst, u64 paddr, u64 len)
 	       paddr + len <= inst->boot.grant_paddr + inst->boot.grant_len;
 }
 
-/* Is ip in the executable sections of a kind's loaded image? */
-static inline bool klet_in_kernelet_text(const struct klet_kind *kind, unsigned long ip)
-{
-	return ip >= kind->text_lo && ip < kind->text_hi;
-}
-
-/* ... of the sandbox's kind? */
+// Is `ip` inside this sandbox's executable image mapping?
 static inline bool klet_in_image_text(struct klet_inst *inst, unsigned long ip)
 {
-	return klet_in_kernelet_text(inst->kind, ip);
+	return ip >= inst->text_lo && ip < inst->text_hi;
 }
 
 /* ------------------------------------------------------------------ */
@@ -828,7 +831,8 @@ extern struct klet_inst *klet_sandboxes[KLET_MAX_SANDBOXES];
 /* image.c: the kernelet image loader */
 int klet_image_load(struct klet_kind *kind, const void *buf, size_t len);
 void klet_image_free(struct klet_kind *kind);
-void klet_image_restore(struct klet_kind *kind);
+int klet_image_start(struct klet_inst *inst);
+void klet_image_stop(struct klet_inst *inst);
 
 /* sandbox.c: KLET_CREATE, the sandbox descriptor, the exec descriptors, the end */
 long klet_sandbox_create(struct klet_create __user *uarg);

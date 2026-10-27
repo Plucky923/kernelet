@@ -1,45 +1,18 @@
 // SPDX-License-Identifier: GPL-2.0
-/*
- * The kernelet image loader: KLET_KIND_REGISTER's half that turns a file into
- * a kind.
- *
- * An image is an ELF relocatable object for x86-64 (ET_REL), the `ld -r` of
- * the kernel proper and vOSTD, built with `relocation-model=static` and
- * `code-model=kernel`. Loading it is what the module loader does for a module,
- * with three differences: every symbol is resolved within the image itself
- * (an undefined symbol is refused, so an image can name nothing of Linux's);
- * the one symbol looked up is kernelet_entry_table, which must be the image's
- * only global symbol; and nothing in it is run at load.
- *
- *  - Every SHF_ALLOC section is laid out: the executable ones first and the
- *    read-only ones after them, in one allocation from execmem's module
- *    range (EXECMEM_MODULE_TEXT), and the writable ones and the bss in a
- *    second (EXECMEM_MODULE_DATA). code-model=kernel puts every address the
- *    image's code forms in the top 2 GiB (R_X86_64_32S), which is where the
- *    module range is, and the two allocations are within 2 GiB of each other
- *    for the PC-relative relocations; each relocation checks that its value
- *    fits, as arch/x86/kernel/module.c does.
- *  - The relocations are applied as apply_relocate_add() applies them, for
- *    the kinds the build emits: R_X86_64_NONE, 64, 32, 32S, PC32, PLT32 and
- *    PC64. Any other kind, a REL section against a loaded section, a TLS or
- *    common symbol, or a constructor section is refused (ENOEXEC).
- *  - The text is made read-only and executable (set_memory_rox()); the data
- *    stays writable and non-executable. A copy of the writable data as
- *    relocated is kept, pristine: the image is position-dependent, its text
- *    reaches its data at the addresses fixed here, so one loaded copy serves
- *    one sandbox at a time, and every sandbox of the kind starts from that
- *    copy (klet_image_restore), with the bss zeroed.
- *
- * execmem_alloc(), execmem_free() and set_memory_rox() are not exported to
- * modules in v6.12; the patch exports them.
- */
+// The restricted PIE loader and per-sandbox image mappings.
+//
+// Registration validates a self-contained x86-64 `ET_DYN` image and keeps
+// an unrelocated template plus one set of immutable backing pages.
+// Each sandbox maps those same immutable pages at a different virtual base,
+// allocates its own writable pages, and applies `R_X86_64_RELATIVE` there.
+// `e_entry` names the `kernelet_entry_table` object, not executable startup code.
+// No image code runs while registering or mapping the image.
 
 #include <linux/elf.h>
-#include <linux/execmem.h>
-#include <linux/kernel.h>
 #include <linux/mm.h>
 #include <linux/overflow.h>
 #include <linux/slab.h>
+#include <linux/sort.h>
 #include <linux/string.h>
 #include <linux/vmalloc.h>
 
@@ -47,440 +20,524 @@
 
 #include "kernelet.h"
 
-/* Not in Linux's elf.h: the ELF specification's values. */
+// Values specified by the ELF ABI but absent from Linux's exported ELF header.
+#ifndef DT_GNU_HASH
+#define DT_GNU_HASH 0x6ffffef5
+#endif
+#ifndef DT_FLAGS
+#define DT_FLAGS 30
+#endif
+#ifndef DF_BIND_NOW
+#define DF_BIND_NOW 0x8
+#endif
+#ifndef DF_1_NOW
+#define DF_1_NOW 0x1
+#endif
+#ifndef DF_1_PIE
+#define DF_1_PIE 0x08000000
+#endif
+#ifndef SHT_INIT_ARRAY
+#define SHT_INIT_ARRAY 14
+#define SHT_FINI_ARRAY 15
+#define SHT_PREINIT_ARRAY 16
+#endif
 #ifndef SHF_TLS
-#define SHF_TLS			0x400
-#endif
-#ifndef SHT_X86_64_UNWIND
-#define SHT_X86_64_UNWIND	0x70000001
+#define SHF_TLS 0x400
 #endif
 
-struct klet_loader {
-	const u8 *buf;
-	size_t len;
-	const Elf64_Ehdr *eh;
-	const Elf64_Shdr *sh;
-	unsigned int shnum;
-	const Elf64_Sym *sym;
-	unsigned int nsym, symtab;
-	const char *str;
-	size_t strsz;
-	/* Where each section went: 0 if it is not loaded. */
-	unsigned long *addr;
-	/* Its offset in its region, during the layout. */
-	size_t *off;
-	unsigned int nr_relocs;
-};
-
-static bool klet_sec_alloc(const Elf64_Shdr *s)
+// Does an interval fit in a bounded buffer without wrapping?
+static bool klet_image_range(u64 offset, u64 size, u64 limit)
 {
-	return (s->sh_flags & SHF_ALLOC) && s->sh_size;
+	return offset <= limit && size <= limit - offset;
 }
 
-static bool klet_sec_exec(const Elf64_Shdr *s)
+// Find a segment containing an entire interval, excluding page padding.
+static const struct klet_image_segment *klet_image_segment(
+	const struct klet_kind *kind, u64 offset, u64 size)
 {
-	return s->sh_flags & SHF_EXECINSTR;
-}
-
-static bool klet_sec_write(const Elf64_Shdr *s)
-{
-	return s->sh_flags & SHF_WRITE;
-}
-
-/* The checks on the headers: everything later indexes through them. */
-static int klet_image_check(struct klet_loader *l)
-{
-	const Elf64_Ehdr *eh = (const Elf64_Ehdr *)l->buf;
-	size_t sh_end;
 	unsigned int i;
 
-	if (l->len < sizeof(*eh) || memcmp(eh->e_ident, ELFMAG, SELFMAG) != 0 ||
-	    eh->e_ident[EI_CLASS] != ELFCLASS64 ||
-	    eh->e_ident[EI_DATA] != ELFDATA2LSB || eh->e_type != ET_REL ||
-	    eh->e_machine != EM_X86_64 ||
-	    eh->e_shentsize != sizeof(Elf64_Shdr) || eh->e_shnum == 0 ||
-	    eh->e_shnum >= SHN_LORESERVE) {
-		pr_err("kernelet: image: not an x86-64 ELF relocatable object\n");
-		return -ENOEXEC;
-	}
-	if (check_mul_overflow((size_t)eh->e_shnum, sizeof(Elf64_Shdr), &sh_end) ||
-	    check_add_overflow(sh_end, (size_t)eh->e_shoff, &sh_end) ||
-	    sh_end > l->len) {
-		pr_err("kernelet: image: section headers outside the file\n");
-		return -ENOEXEC;
-	}
-	l->eh = eh;
-	l->sh = (const Elf64_Shdr *)(l->buf + eh->e_shoff);
-	l->shnum = eh->e_shnum;
+	for (i = 0; i < kind->nr_segments; i++) {
+		const struct klet_image_segment *seg = &kind->segments[i];
 
-	for (i = 0; i < l->shnum; i++) {
-		const Elf64_Shdr *s = &l->sh[i];
-		size_t end;
+		if (offset >= seg->offset &&
+		    klet_image_range(offset - seg->offset, size, seg->memsz))
+			return seg;
+	}
+	return NULL;
+}
+
+// Validate optional section metadata; loading itself uses program headers.
+static int klet_image_sections(const void *buf, size_t len, const Elf64_Ehdr *eh)
+{
+	const Elf64_Shdr *sh;
+	unsigned int i;
+
+	if (!eh->e_shoff && !eh->e_shnum)
+		return 0;
+	if (!eh->e_shnum || eh->e_shentsize != sizeof(*sh) ||
+	    !IS_ALIGNED(eh->e_shoff, __alignof__(*sh)) ||
+	    !klet_image_range(eh->e_shoff, (u64)eh->e_shnum * sizeof(*sh), len))
+		return -ENOEXEC;
+	sh = buf + eh->e_shoff;
+	for (i = 0; i < eh->e_shnum; i++) {
+		const Elf64_Shdr *s = &sh[i];
+		unsigned int j;
 
 		if (s->sh_type != SHT_NOBITS &&
-		    (check_add_overflow((size_t)s->sh_offset, (size_t)s->sh_size, &end) ||
-		     end > l->len)) {
-			pr_err("kernelet: image: section %u outside the file\n", i);
+		    !klet_image_range(s->sh_offset, s->sh_size, len))
 			return -ENOEXEC;
-		}
-		if (s->sh_addralign > PAGE_SIZE ||
-		    (s->sh_addralign && !is_power_of_2(s->sh_addralign))) {
-			pr_err("kernelet: image: section %u has alignment %llu\n", i,
-			       s->sh_addralign);
-			return -ENOEXEC;
-		}
-		if (s->sh_type == SHT_SYMTAB) {
-			if (l->sym || s->sh_entsize != sizeof(Elf64_Sym) ||
-			    s->sh_link >= l->shnum ||
-			    l->sh[s->sh_link].sh_type != SHT_STRTAB) {
-				pr_err("kernelet: image: a second or malformed symbol table\n");
+		if (s->sh_flags & SHF_ALLOC) {
+			if ((s->sh_flags & SHF_TLS) ||
+			    s->sh_type == SHT_INIT_ARRAY || s->sh_type == SHT_FINI_ARRAY ||
+			    s->sh_type == SHT_PREINIT_ARRAY)
 				return -ENOEXEC;
-			}
-			l->sym = (const Elf64_Sym *)(l->buf + s->sh_offset);
-			l->nsym = s->sh_size / sizeof(Elf64_Sym);
-			l->symtab = i;
-			l->str = (const char *)(l->buf + l->sh[s->sh_link].sh_offset);
-			l->strsz = l->sh[s->sh_link].sh_size;
 		}
-		if (!klet_sec_alloc(s))
+		if (s->sh_type != SHT_SYMTAB && s->sh_type != SHT_DYNSYM)
 			continue;
-		/* Nothing in an image runs at load, so nothing may ask to. */
-		if (s->sh_flags & SHF_TLS) {
-			pr_err("kernelet: image: section %u is thread-local\n", i);
+		if (s->sh_entsize != sizeof(Elf64_Sym) || s->sh_size % sizeof(Elf64_Sym) ||
+		    !IS_ALIGNED(s->sh_offset, __alignof__(Elf64_Sym)))
 			return -ENOEXEC;
+		for (j = 1; j < s->sh_size / sizeof(Elf64_Sym); j++) {
+			const Elf64_Sym *sym = buf + s->sh_offset + j * sizeof(*sym);
+
+			if (sym->st_shndx == SHN_UNDEF || sym->st_shndx == SHN_COMMON ||
+			    ELF64_ST_TYPE(sym->st_info) == STT_TLS)
+				return -ENOEXEC;
 		}
-		switch (s->sh_type) {
-		case SHT_PROGBITS:
-		case SHT_NOBITS:
-		case SHT_NOTE:
-		case SHT_X86_64_UNWIND:
-			break;
-		default:
-			pr_err("kernelet: image: loaded section %u of type %u (constructors?)\n",
-			       i, s->sh_type);
-			return -ENOEXEC;
-		}
-	}
-	if (!l->sym || !l->strsz || l->str[l->strsz - 1] != '\0') {
-		pr_err("kernelet: image: no usable symbol table\n");
-		return -ENOEXEC;
 	}
 	return 0;
 }
 
-/* Lays out one region: the sections @pick selects, each at its alignment. */
-static size_t klet_layout(struct klet_loader *l, int pick, size_t off)
+// Record load segments and copy their file contents into the zeroed template.
+static int klet_image_layout(struct klet_kind *kind, const void *buf, size_t len,
+			     Elf64_Phdr *dynamic)
 {
-	unsigned int i;
-
-	for (i = 0; i < l->shnum; i++) {
-		const Elf64_Shdr *s = &l->sh[i];
-		int what;
-
-		if (!klet_sec_alloc(s))
-			continue;
-		what = klet_sec_write(s) ? 2 : klet_sec_exec(s) ? 0 : 1;
-		if (what != pick)
-			continue;
-		off = ALIGN(off, s->sh_addralign ? s->sh_addralign : 1);
-		l->off[i] = off;
-		off += s->sh_size;
-	}
-	return off;
-}
-
-/* Places every loaded section of one region at base + its offset, and copies it in. */
-static void klet_place(struct klet_loader *l, bool writable, void *base)
-{
-	unsigned int i;
-
-	for (i = 0; i < l->shnum; i++) {
-		const Elf64_Shdr *s = &l->sh[i];
-
-		if (!klet_sec_alloc(s) || klet_sec_write(s) != writable)
-			continue;
-		l->addr[i] = (unsigned long)base + l->off[i];
-		if (s->sh_type != SHT_NOBITS)
-			memcpy((void *)l->addr[i], l->buf + s->sh_offset, s->sh_size);
-	}
-}
-
-/* A symbol's address, or 0 if it is not one an image may refer to. */
-static int klet_sym_value(struct klet_loader *l, unsigned int idx, u64 *val)
-{
-	const Elf64_Sym *sym;
-
-	if (idx == 0 || idx >= l->nsym)
-		return -ENOEXEC;
-	sym = &l->sym[idx];
-	if (sym->st_shndx == SHN_UNDEF) {
-		pr_err("kernelet: image: undefined symbol %s\n",
-		       sym->st_name < l->strsz ? l->str + sym->st_name : "?");
-		return -ENOEXEC;
-	}
-	if (sym->st_shndx == SHN_ABS) {
-		*val = sym->st_value;
-		return 0;
-	}
-	if (sym->st_shndx >= l->shnum || !l->addr[sym->st_shndx]) {
-		pr_err("kernelet: image: symbol %u in section %u, which is not loaded\n",
-		       idx, sym->st_shndx);
-		return -ENOEXEC;
-	}
-	*val = l->addr[sym->st_shndx] + sym->st_value;
-	return 0;
-}
-
-/* One RELA section against a loaded section, as apply_relocate_add() applies it. */
-static int klet_relocate(struct klet_loader *l, const Elf64_Shdr *rs)
-{
-	const Elf64_Shdr *target = &l->sh[rs->sh_info];
-	const Elf64_Rela *rel = (const Elf64_Rela *)(l->buf + rs->sh_offset);
-	unsigned int i, n = rs->sh_size / sizeof(*rel);
-	unsigned long base = l->addr[rs->sh_info];
-
-	if (rs->sh_entsize != sizeof(*rel) || rs->sh_link != l->symtab)
-		return -ENOEXEC;
-	for (i = 0; i < n; i++) {
-		u32 type = ELF64_R_TYPE(rel[i].r_info);
-		unsigned int width;
-		void *loc;
-		u64 val;
-		int err;
-
-		switch (type) {
-		case R_X86_64_NONE:
-			continue;
-		case R_X86_64_64:
-		case R_X86_64_PC64:
-			width = 8;
-			break;
-		case R_X86_64_32:
-		case R_X86_64_32S:
-		case R_X86_64_PC32:
-		case R_X86_64_PLT32:
-			width = 4;
-			break;
-		default:
-			pr_err("kernelet: image: relocation of kind %u, which the loader does not apply\n",
-			       type);
-			return -ENOEXEC;
-		}
-		if (rel[i].r_offset > target->sh_size ||
-		    target->sh_size - rel[i].r_offset < width)
-			return -ENOEXEC;
-		err = klet_sym_value(l, ELF64_R_SYM(rel[i].r_info), &val);
-		if (err)
-			return err;
-		loc = (void *)(base + rel[i].r_offset);
-		val += rel[i].r_addend;
-
-		switch (type) {
-		case R_X86_64_64:
-			*(u64 *)loc = val;
-			break;
-		case R_X86_64_32:
-			if (val != (u32)val)
-				goto overflow;
-			*(u32 *)loc = val;
-			break;
-		case R_X86_64_32S:
-			if ((s64)val != (s32)val)
-				goto overflow;
-			*(s32 *)loc = val;
-			break;
-		case R_X86_64_PC32:
-		case R_X86_64_PLT32:
-			val -= (u64)loc;
-			if ((s64)val != (s32)val)
-				goto overflow;
-			*(s32 *)loc = val;
-			break;
-		case R_X86_64_PC64:
-			val -= (u64)loc;
-			*(u64 *)loc = val;
-			break;
-		}
-		l->nr_relocs++;
-		continue;
-overflow:
-		pr_err("kernelet: image: relocation %u of kind %u overflows (value %#llx at %px)\n",
-		       i, type, val, loc);
-		return -ENOEXEC;
-	}
-	return 0;
-}
-
-/*
- * The one global symbol, kernelet_entry_table: an image exports nothing else,
- * and refers to nothing it does not define.
- */
-static int klet_find_entry(struct klet_loader *l, const struct klet_entry_table **entry)
-{
-	const Elf64_Sym *found = NULL;
-	unsigned int i, globals = 0;
-	u64 val;
+	const Elf64_Ehdr *eh = buf;
+	const Elf64_Phdr *ph;
+	u64 end = 0;
+	unsigned int i, executable = 0, writable = 0, dynamics = 0;
 	int err;
 
-	for (i = 1; i < l->nsym; i++) {
-		const Elf64_Sym *sym = &l->sym[i];
-		unsigned int bind = ELF64_ST_BIND(sym->st_info);
-
-		if (sym->st_name >= l->strsz)
-			return -ENOEXEC;
-		if (sym->st_shndx == SHN_UNDEF) {
-			pr_err("kernelet: image: undefined symbol %s\n", l->str + sym->st_name);
-			return -ENOEXEC;
-		}
-		if (sym->st_shndx == SHN_COMMON) {
-			pr_err("kernelet: image: common symbol %s\n", l->str + sym->st_name);
-			return -ENOEXEC;
-		}
-		if (bind != STB_GLOBAL && bind != STB_WEAK)
-			continue;
-		globals++;
-		if (strcmp(l->str + sym->st_name, "kernelet_entry_table") == 0)
-			found = sym;
-	}
-	if (!found || globals != 1 || ELF64_ST_TYPE(found->st_info) != STT_OBJECT ||
-	    found->st_size < sizeof(struct klet_entry_table)) {
-		pr_err("kernelet: image: %u global symbol(s); the one allowed is kernelet_entry_table, %s\n",
-		       globals, found ? "malformed" : "missing");
+	if (len < sizeof(*eh) || memcmp(eh->e_ident, ELFMAG, SELFMAG) ||
+	    eh->e_ident[EI_CLASS] != ELFCLASS64 || eh->e_ident[EI_DATA] != ELFDATA2LSB ||
+	    eh->e_ident[EI_VERSION] != EV_CURRENT || eh->e_version != EV_CURRENT ||
+	    eh->e_type != ET_DYN || eh->e_machine != EM_X86_64 ||
+	    eh->e_ehsize != sizeof(*eh) || eh->e_phentsize != sizeof(*ph) ||
+	    !eh->e_phnum || eh->e_phnum > 32 ||
+	    !IS_ALIGNED(eh->e_phoff, __alignof__(*ph)) ||
+	    !klet_image_range(eh->e_phoff, (u64)eh->e_phnum * sizeof(*ph), len))
 		return -ENOEXEC;
-	}
-	err = klet_sym_value(l, found - l->sym, &val);
+	err = klet_image_sections(buf, len, eh);
 	if (err)
 		return err;
-	*entry = (const struct klet_entry_table *)(unsigned long)val;
+	ph = buf + eh->e_phoff;
+	for (i = 0; i < eh->e_phnum; i++) {
+		const Elf64_Phdr *p = &ph[i];
+		struct klet_image_segment *seg;
+
+		if (p->p_type == PT_DYNAMIC) {
+			if (++dynamics != 1 || p->p_filesz != p->p_memsz ||
+			    !p->p_filesz || p->p_filesz % sizeof(Elf64_Dyn) ||
+			    !IS_ALIGNED(p->p_vaddr, __alignof__(Elf64_Dyn)) ||
+			    !klet_image_range(p->p_offset, p->p_filesz, len))
+				return -ENOEXEC;
+			*dynamic = *p;
+			continue;
+		}
+		if (p->p_type == PT_GNU_STACK) {
+			if (p->p_flags & PF_X)
+				return -ENOEXEC;
+			continue;
+		}
+		if (p->p_type == PT_NULL || p->p_type == PT_PHDR || p->p_type == PT_NOTE ||
+		    p->p_type == PT_GNU_RELRO)
+			continue;
+		if (p->p_type != PT_LOAD || kind->nr_segments == KLET_IMAGE_SEGMENTS ||
+		    !p->p_memsz || p->p_filesz > p->p_memsz ||
+		    !IS_ALIGNED(p->p_vaddr, PAGE_SIZE) || !IS_ALIGNED(p->p_offset, PAGE_SIZE) ||
+		    p->p_align != PAGE_SIZE || p->p_vaddr != end ||
+		    !klet_image_range(p->p_offset, p->p_filesz, len) ||
+		    !klet_image_range(p->p_vaddr, p->p_memsz, KLET_IMAGE_SPAN_MAX) ||
+		    (p->p_flags != PF_R && p->p_flags != (PF_R | PF_X) &&
+		     p->p_flags != (PF_R | PF_W)))
+			return -ENOEXEC;
+		seg = &kind->segments[kind->nr_segments++];
+		seg->offset = p->p_vaddr;
+		seg->filesz = p->p_filesz;
+		seg->memsz = p->p_memsz;
+		seg->flags = p->p_flags;
+		end = PAGE_ALIGN(p->p_vaddr + p->p_memsz);
+		if (p->p_flags & PF_X) {
+			if (++executable != 1)
+				return -ENOEXEC;
+			kind->text_lo = p->p_vaddr;
+			kind->text_hi = p->p_vaddr + p->p_memsz;
+		}
+		if (p->p_flags & PF_W) {
+			writable++;
+			kind->data_size += PAGE_ALIGN(p->p_memsz);
+		} else {
+			kind->text_size += PAGE_ALIGN(p->p_memsz);
+		}
+	}
+	if (!executable || !writable || dynamics != 1)
+		return -ENOEXEC;
+	kind->image_size = end;
+	kind->nr_pages = end >> PAGE_SHIFT;
+	kind->entry_offset = eh->e_entry;
+	kind->image = vzalloc(end);
+	if (!kind->image)
+		return -ENOMEM;
+	for (i = 0; i < eh->e_phnum; i++)
+		if (ph[i].p_type == PT_LOAD)
+			memcpy(kind->image + ph[i].p_vaddr, buf + ph[i].p_offset, ph[i].p_filesz);
+	if (!klet_image_segment(kind, dynamic->p_vaddr, dynamic->p_memsz) ||
+	    memcmp(kind->image + dynamic->p_vaddr, buf + dynamic->p_offset, dynamic->p_filesz))
+		return -ENOEXEC;
 	return 0;
 }
 
+// Order relocation targets so overlapping writes can be rejected in linear time.
+static int klet_reloc_compare(const void *a, const void *b)
+{
+	const struct klet_image_reloc *x = a, *y = b;
+
+	return x->offset < y->offset ? -1 : x->offset > y->offset;
+}
+
+// Accept only metadata needed by a self-contained PIE with relative relocations.
+static int klet_image_dynamic(struct klet_kind *kind, const Elf64_Phdr *ph)
+{
+	const Elf64_Dyn *dyn = (const void *)(kind->image + ph->p_vaddr);
+	const struct klet_image_segment *rela_seg;
+	u64 rela = 0, relasz = 0, relaent = 0;
+	bool found_rela = false, found_size = false, found_ent = false, terminated = false;
+	bool found_pie = false;
+	unsigned int i;
+
+	for (i = 0; i < ph->p_filesz / sizeof(*dyn); i++) {
+		u64 val = dyn[i].d_un.d_val;
+
+		switch (dyn[i].d_tag) {
+		case DT_NULL:
+			terminated = true;
+			goto done;
+		case DT_RELA:
+			if (found_rela)
+				return -ENOEXEC;
+			found_rela = true;
+			rela = val;
+			break;
+		case DT_RELASZ:
+			if (found_size)
+				return -ENOEXEC;
+			found_size = true;
+			relasz = val;
+			break;
+		case DT_RELAENT:
+			if (found_ent)
+				return -ENOEXEC;
+			found_ent = true;
+			relaent = val;
+			break;
+		case DT_FLAGS:
+			if (val & ~DF_BIND_NOW)
+				return -ENOEXEC;
+			break;
+		case DT_FLAGS_1:
+			if (found_pie || !(val & DF_1_PIE) || (val & ~(DF_1_PIE | DF_1_NOW)))
+				return -ENOEXEC;
+			found_pie = true;
+			break;
+		case DT_DEBUG:
+			if (val)
+				return -ENOEXEC;
+			break;
+		case DT_HASH:
+		case DT_GNU_HASH:
+		case DT_STRTAB:
+		case DT_SYMTAB:
+			if (!klet_image_segment(kind, val, 1))
+				return -ENOEXEC;
+			break;
+		case DT_SYMENT:
+			if (val != sizeof(Elf64_Sym))
+				return -ENOEXEC;
+			break;
+		case DT_STRSZ:
+		case DT_RELACOUNT:
+			if (val > kind->image_size)
+				return -ENOEXEC;
+			break;
+		default:
+			return -ENOEXEC;
+		}
+	}
+done:
+	rela_seg = klet_image_segment(kind, rela, relasz);
+	if (!terminated || !found_pie || !found_rela || !found_size || !found_ent ||
+	    relaent != sizeof(Elf64_Rela) || relasz % sizeof(Elf64_Rela) ||
+	    !IS_ALIGNED(rela, __alignof__(Elf64_Rela)) ||
+	    !rela_seg || (rela_seg->flags & PF_W) ||
+	    !klet_image_range(rela - rela_seg->offset, relasz, rela_seg->filesz))
+		return -ENOEXEC;
+	kind->nr_relocs = relasz / sizeof(Elf64_Rela);
+	kind->relocs = kvcalloc(kind->nr_relocs, sizeof(*kind->relocs), GFP_KERNEL);
+	if (!kind->relocs)
+		return -ENOMEM;
+	for (i = 0; i < kind->nr_relocs; i++) {
+		const Elf64_Rela *r = (const void *)(kind->image + rela + i * sizeof(*r));
+		const struct klet_image_segment *seg = klet_image_segment(kind, r->r_offset, sizeof(u64));
+
+		if (ELF64_R_TYPE(r->r_info) != R_X86_64_RELATIVE || ELF64_R_SYM(r->r_info) ||
+		    !IS_ALIGNED(r->r_offset, sizeof(u64)) || !seg || !(seg->flags & PF_W) ||
+		    r->r_addend < 0 || !klet_image_segment(kind, r->r_addend, 1))
+			return -ENOEXEC;
+		kind->relocs[i].offset = r->r_offset;
+		kind->relocs[i].addend = r->r_addend;
+	}
+	sort(kind->relocs, kind->nr_relocs, sizeof(*kind->relocs), klet_reloc_compare, NULL);
+	for (i = 1; i < kind->nr_relocs; i++)
+		if (kind->relocs[i - 1].offset == kind->relocs[i].offset)
+			return -ENOEXEC;
+	return 0;
+}
+
+// Validate entry pointers before any sandbox maps or executes the image.
+static int klet_image_entry(struct klet_kind *kind)
+{
+	const struct klet_image_segment *seg;
+	const struct klet_entry_table *entry;
+	const size_t offsets[] = {
+		offsetof(struct klet_entry_table, kernelet_entry),
+		offsetof(struct klet_entry_table, vcpu_entry),
+		offsetof(struct klet_entry_table, virq_entry),
+	};
+	unsigned int i, j;
+
+	seg = klet_image_segment(kind, kind->entry_offset, sizeof(*entry));
+	if (!seg || !(seg->flags & PF_W) || !IS_ALIGNED(kind->entry_offset, __alignof__(*entry)))
+		return -ENOEXEC;
+	entry = (const void *)(kind->image + kind->entry_offset);
+	if (entry->abi_version != KLET_ABI_VERSION)
+		return -EPROTO;
+	for (j = 0; j < kind->nr_relocs; j++)
+		if (kind->relocs[j].offset == kind->entry_offset)
+			return -ENOEXEC;
+	for (i = 0; i < ARRAY_SIZE(offsets); i++) {
+		bool found = false;
+
+		for (j = 0; j < kind->nr_relocs; j++) {
+			const struct klet_image_reloc *r = &kind->relocs[j];
+
+			if (r->offset != kind->entry_offset + offsets[i])
+				continue;
+			seg = klet_image_segment(kind, r->addend, 1);
+			if (!seg || !(seg->flags & PF_X))
+				return -ENOEXEC;
+			found = true;
+		}
+		if (!found)
+			return -ENOEXEC;
+	}
+	return 0;
+}
+
+// Validate a PIE and allocate immutable backing pages for the kind's lifetime.
 int klet_image_load(struct klet_kind *kind, const void *buf, size_t len)
 {
-	struct klet_loader l = { .buf = buf, .len = len };
-	const struct klet_entry_table *entry = NULL;
-	size_t text_end, ro_end, data_end;
-	void *text = NULL, *data = NULL, *pristine = NULL;
-	unsigned int i;
+	Elf64_Phdr dynamic = {};
+	unsigned int i, j;
 	int err;
 
-	err = klet_image_check(&l);
+	err = klet_image_layout(kind, buf, len, &dynamic);
 	if (err)
-		return err;
-	l.addr = kvcalloc(l.shnum, sizeof(*l.addr), GFP_KERNEL);
-	l.off = kvcalloc(l.shnum, sizeof(*l.off), GFP_KERNEL);
+		goto fail;
+	err = klet_image_dynamic(kind, &dynamic);
+	if (err)
+		goto fail;
+	err = klet_image_entry(kind);
+	if (err)
+		goto fail;
+	kind->shared_pages = kvcalloc(kind->nr_pages, sizeof(*kind->shared_pages), GFP_KERNEL);
 	err = -ENOMEM;
-	if (!l.addr || !l.off)
-		goto out;
+	if (!kind->shared_pages)
+		goto fail;
+	for (i = 0; i < kind->nr_segments; i++) {
+		const struct klet_image_segment *seg = &kind->segments[i];
 
-	/* Text, then read-only data after it; the writable data on its own. */
-	text_end = klet_layout(&l, 0, 0);
-	ro_end = klet_layout(&l, 1, text_end);
-	data_end = klet_layout(&l, 2, 0);
-	err = -ENOEXEC;
-	if (!text_end) {
-		pr_err("kernelet: image: no executable section\n");
-		goto out;
-	}
-	err = -ENOMEM;
-	text = execmem_alloc(EXECMEM_MODULE_TEXT, PAGE_ALIGN(ro_end));
-	if (!text)
-		goto out;
-	memset(text, 0, PAGE_ALIGN(ro_end));
-	if (data_end) {
-		data = execmem_alloc(EXECMEM_MODULE_DATA, PAGE_ALIGN(data_end));
-		pristine = vmalloc(PAGE_ALIGN(data_end));
-		if (!data || !pristine)
-			goto out;
-		memset(data, 0, PAGE_ALIGN(data_end));
-	}
-	klet_place(&l, false, text);
-	if (data)
-		klet_place(&l, true, data);
-
-	for (i = 0; i < l.shnum; i++) {
-		const Elf64_Shdr *rs = &l.sh[i];
-
-		if (rs->sh_type != SHT_RELA && rs->sh_type != SHT_REL)
+		if (seg->flags & PF_W)
 			continue;
-		if (rs->sh_info >= l.shnum) {
-			err = -ENOEXEC;
-			goto out;
+		for (j = seg->offset >> PAGE_SHIFT; j < PAGE_ALIGN(seg->offset + seg->memsz) >> PAGE_SHIFT; j++) {
+			struct page *page = alloc_page(GFP_KERNEL | __GFP_ZERO);
+
+			if (!page)
+				goto fail;
+			kind->shared_pages[j] = page;
+			memcpy(page_address(page), kind->image + ((size_t)j << PAGE_SHIFT), PAGE_SIZE);
 		}
-		if (!l.addr[rs->sh_info])
-			continue;	/* against a section that is not loaded: debug info */
-		if (rs->sh_type == SHT_REL) {
-			pr_err("kernelet: image: a REL section; x86-64 uses RELA\n");
-			err = -ENOEXEC;
-			goto out;
-		}
-		err = klet_relocate(&l, rs);
-		if (err)
-			goto out;
 	}
-
-	err = klet_find_entry(&l, &entry);
-	if (err)
-		goto out;
-	if (entry->abi_version != KLET_ABI_VERSION) {
-		pr_err("kernelet: image ABI %llu, endovisor ABI %llu\n",
-		       entry->abi_version, KLET_ABI_VERSION);
-		err = -EPROTO;
-		goto out;
-	}
-	kind->text_lo = (unsigned long)text;
-	kind->text_hi = (unsigned long)text + text_end;
-	if (!klet_in_kernelet_text(kind, (unsigned long)entry->kernelet_entry) ||
-	    !klet_in_kernelet_text(kind, (unsigned long)entry->vcpu_entry) ||
-	    !klet_in_kernelet_text(kind, (unsigned long)entry->virq_entry)) {
-		pr_err("kernelet: image: an entry point outside the image's text\n");
-		err = -ENOEXEC;
-		goto out;
-	}
-
-	if (data)
-		memcpy(pristine, data, PAGE_ALIGN(data_end));
-	err = set_memory_rox((unsigned long)text, PAGE_ALIGN(ro_end) >> PAGE_SHIFT);
-	if (err)
-		goto out;
-
-	kind->text = text;
-	kind->text_size = PAGE_ALIGN(ro_end);
-	kind->data = data;
-	kind->data_size = data ? PAGE_ALIGN(data_end) : 0;
-	kind->pristine = pristine;
-	kind->entry = entry;
-	pr_info("kernelet: image loaded: %zu bytes of text at %px, %zu of read-only data, %zu of data and bss at %px, %u relocations applied\n",
-		text_end, text, ro_end - text_end, data_end, data, l.nr_relocs);
-	text = data = pristine = NULL;
-	err = 0;
-out:
-	if (text)
-		execmem_free(text);
-	if (data)
-		execmem_free(data);
-	vfree(pristine);
-	kvfree(l.addr);
-	kvfree(l.off);
+	pr_info("kernelet: PIE image loaded: %zu bytes, %zu shared, %zu private per instance, %u relative relocations\n",
+		kind->image_size, kind->text_size, kind->data_size, kind->nr_relocs);
+	return 0;
+fail:
+	klet_image_free(kind);
 	return err;
 }
 
-void klet_image_free(struct klet_kind *kind)
+// Unmap before releasing pages; executable aliases must leave every CPU's TLB.
+static void klet_image_stop_locked(struct klet_inst *inst)
 {
-	/* execmem's allocations reset their permissions when freed (VM_FLUSH_RESET_PERMS). */
-	if (kind->text)
-		execmem_free(kind->text);
-	if (kind->data)
-		execmem_free(kind->data);
-	vfree(kind->pristine);
-	kind->text = kind->data = kind->pristine = NULL;
-	kind->entry = NULL;
-	kind->text_lo = kind->text_hi = 0;
+	unsigned int i;
+
+	if (inst->image_base) {
+		vunmap(inst->image_base);
+		vm_unmap_aliases();
+	}
+	if (inst->image_pages)
+		for (i = 0; i < inst->kind->nr_pages; i++)
+			if (!inst->kind->shared_pages[i] && inst->image_pages[i])
+				__free_page(inst->image_pages[i]);
+	kvfree(inst->image_pages);
+	inst->image_pages = NULL;
+	inst->image_base = NULL;
+	inst->entry = NULL;
+	inst->text_lo = inst->text_hi = 0;
 }
 
-/* Every sandbox of the kind starts from the data as it was loaded: no kernelet code runs. */
-void klet_image_restore(struct klet_kind *kind)
+// Serialize instance mapping lifetimes with registration and sharing checks.
+void klet_image_stop(struct klet_inst *inst)
 {
-	if (kind->data)
-		memcpy(kind->data, kind->pristine, kind->data_size);
+	mutex_lock(&klet_table_lock);
+	klet_image_stop_locked(inst);
+	mutex_unlock(&klet_table_lock);
+}
+
+// Check physical sharing against a live peer before publishing the new mapping.
+static int klet_image_check_sharing(struct klet_inst *inst)
+{
+	struct klet_inst *peer;
+	unsigned int slot, i, shared, private;
+	int err = 0;
+
+	for (slot = 0; slot < KLET_MAX_SANDBOXES; slot++) {
+		peer = klet_sandboxes[slot];
+		if (!peer || peer == inst || peer->kind != inst->kind || !peer->image_base)
+			continue;
+		shared = private = 0;
+		if (peer->image_base == inst->image_base) {
+			err = -EINVAL;
+			break;
+		}
+		for (i = 0; i < inst->kind->nr_pages; i++) {
+			struct page *a = vmalloc_to_page(inst->image_base + ((size_t)i << PAGE_SHIFT));
+			struct page *b = vmalloc_to_page(peer->image_base + ((size_t)i << PAGE_SHIFT));
+
+			if (!a || !b || a != inst->image_pages[i] || b != peer->image_pages[i] ||
+			    (!!inst->kind->shared_pages[i] != (a == b))) {
+				err = -EINVAL;
+				break;
+			}
+			if (a == b)
+				shared++;
+			else
+				private++;
+		}
+		if (err)
+			break;
+		pr_info("kernelet: PIE sharing: sandboxes %d and %d: distinct mappings, %u shared pages, %u private pages each\n",
+			inst->slot, peer->slot, shared, private);
+	}
+	return err;
+}
+
+// Map an independent instance while preserving the linker's relative layout.
+int klet_image_start(struct klet_inst *inst)
+{
+	struct klet_kind *kind = inst->kind;
+	unsigned int i;
+	int err = -ENOMEM;
+
+	mutex_lock(&klet_table_lock);
+	inst->image_pages = kvcalloc(kind->nr_pages, sizeof(*inst->image_pages), GFP_KERNEL);
+	if (!inst->image_pages)
+		goto fail;
+	for (i = 0; i < kind->nr_pages; i++) {
+		if (kind->shared_pages[i]) {
+			inst->image_pages[i] = kind->shared_pages[i];
+			continue;
+		}
+		inst->image_pages[i] = alloc_page(GFP_KERNEL_ACCOUNT | __GFP_ZERO);
+		if (!inst->image_pages[i])
+			goto fail;
+		memcpy(page_address(inst->image_pages[i]), kind->image + ((size_t)i << PAGE_SHIFT), PAGE_SIZE);
+	}
+	inst->image_base = vmap(inst->image_pages, kind->nr_pages, VM_MAP, PAGE_KERNEL_RO);
+	if (!inst->image_base)
+		goto fail;
+	// No new writable alias of the shared code is ever created.
+	for (i = 0; i < kind->nr_segments; i++) {
+		const struct klet_image_segment *seg = &kind->segments[i];
+
+		if (!(seg->flags & PF_W))
+			continue;
+		err = set_memory_rw((unsigned long)inst->image_base + seg->offset,
+				    PAGE_ALIGN(seg->memsz) >> PAGE_SHIFT);
+		if (err)
+			goto fail;
+	}
+	for (i = 0; i < kind->nr_relocs; i++) {
+		const struct klet_image_reloc *r = &kind->relocs[i];
+
+		*(u64 *)(inst->image_base + r->offset) = (u64)(unsigned long)inst->image_base + r->addend;
+	}
+	for (i = 0; i < kind->nr_segments; i++) {
+		const struct klet_image_segment *seg = &kind->segments[i];
+		unsigned long address = (unsigned long)inst->image_base + seg->offset;
+		unsigned int pages = PAGE_ALIGN(seg->memsz) >> PAGE_SHIFT;
+
+		if (seg->flags & PF_W)
+			continue;
+		err = seg->flags & PF_X ? set_memory_rox(address, pages) : set_memory_ro(address, pages);
+		if (err)
+			goto fail;
+	}
+	inst->entry = inst->image_base + kind->entry_offset;
+	inst->text_lo = (unsigned long)inst->image_base + kind->text_lo;
+	inst->text_hi = (unsigned long)inst->image_base + kind->text_hi;
+	err = klet_image_check_sharing(inst);
+	if (err)
+		goto fail;
+	pr_info("kernelet: sandbox %d: PIE mapping [%#lx, %#lx), shared %zu bytes, private %zu bytes\n",
+		inst->slot, (unsigned long)inst->image_base,
+		(unsigned long)inst->image_base + kind->image_size, kind->text_size, kind->data_size);
+	mutex_unlock(&klet_table_lock);
+	return 0;
+fail:
+	klet_image_stop_locked(inst);
+	mutex_unlock(&klet_table_lock);
+	return err;
+}
+
+// Release backing pages only after every instance has been destroyed.
+void klet_image_free(struct klet_kind *kind)
+{
+	unsigned int i;
+
+	if (kind->shared_pages)
+		for (i = 0; i < kind->nr_pages; i++) {
+			struct page *page = kind->shared_pages[i];
+
+			if (!page)
+				continue;
+			// Permission changes also protected the direct-map alias.
+			if (WARN_ON(set_memory_rw((unsigned long)page_address(page), 1)))
+				continue;
+			__free_page(page);
+		}
+	kvfree(kind->shared_pages);
+	kvfree(kind->relocs);
+	vfree(kind->image);
+	memset(kind, 0, sizeof(*kind));
 }

@@ -6,7 +6,7 @@ This chapter first shows the interface in use, by the prototype's own holder pro
 
 ## A prototype kernelet runtime
 
-The program that drives a kernelet sandbox is its **holder**: the one process of the kernelet runtime that creates the sandbox, keeps its descriptor open for as long as the sandbox lives, and destroys it. A container runtime has such a process per container; the prototype's is `holder.c`, a static C program of two commands, `register` and `run`, around the client functions of `sandbox.c`, which the prototype's test drivers share. The prototype's tests run through the interface: the holder registers each kernel's image and runs the sandbox, and a self-test run before the hello kernel boots exercises every operation.
+The program that drives a kernelet sandbox is its **holder**: the one process of the kernelet runtime that creates the sandbox, keeps its descriptor open for as long as the sandbox lives, and closes it to release the sandbox. A container runtime has such a process per container; the prototype's is `holder.c`, a static C program of two commands, `register` and `run`, around the client functions of `sandbox.c`, which the prototype's test drivers share. The prototype's tests run through the interface: the holder registers each kernel's image and runs the sandbox, and a self-test run before the hello kernel boots exercises every operation.
 
 <div class="background">
 
@@ -83,13 +83,12 @@ int run_sandbox(int sys_fd, const char *name, unsigned int nr_vcpus, const char 
 		close(exec_fd);
 	}
 
-	wait_sandbox(sb.fd, sb.pids, nr_vcpus, &sb.ex);     /* KLET_WAIT, watching the children too: a child that
-	                                                   dies before its exec never became a carrier, so the
-	                                                   holder kills the sandbox itself if one does */
+	wait_sandbox(sb.fd, sb.pids, nr_vcpus, &sb.ex);     // Poll, then read the exit record.
+	// The helper also watches the children: a child that dies before its exec
+	// never became a carrier, so the holder kills the sandbox itself if one does.
 	for (i = 0; i < nr_vcpus; i++)
 		waitpid(sb.pids[i], NULL, 0);               /* the carriers died by SIGKILL */
-	ioctl(sb.fd, KLET_DESTROY);
-	close(sb.fd);
+	close(sb.fd);                                  // The last close releases the exited sandbox.
 
 	switch (sb.ex.how) {
 	case KLET_END_EXITED:   return sb.ex.code;      /* the kernel proper's exit code */
@@ -141,7 +140,7 @@ In summary, the whole life of a sandbox is, in order:
 3. The holder creates the sandbox with `KLET_CREATE`, opens the disk image and whatever else the sandbox is to have and passes each with `KLET_ATTACH_DEVICE`, and passes its console and log with `KLET_SET_CONSOLE` and `KLET_SET_LOG`.
 4. For each virtual CPU, the holder asks for the exec descriptor with `KLET_GET_VCPU_EXEC_FD` and forks a child, which arranges itself and executes the descriptor. The first of those `exec`s loads the kind's image as this sandbox's instance. From now on, the carrier no longer executes the holder's code, but the kernelet's.
 5. The sandbox runs. Linux schedules each carrier with the processors and the class its creator gave it; the kernelet schedules its own tasks on them.
-6. The kernel proper powers off, or the holder calls `KLET_KILL`, or a carrier is killed. The endovisor records why, marks the kernelet dying and stops every carrier; when the last of them is gone, the sandbox has exited. The holder's `KLET_WAIT` returns, it reaps the carriers, calls `KLET_DESTROY`, and exits; the runtime removes the group.
+6. The kernel proper powers off, or the holder calls `KLET_KILL`, or a carrier is killed. The endovisor records why, marks the kernelet dying and stops every carrier; when the last of them is gone, the sandbox has exited. The sandbox descriptor becomes readable. The holder reads the exit record, reaps the carriers, closes the sandbox descriptor to release its remaining resources, and exits; the runtime removes the group.
 
 ## Why it is shaped so
 
@@ -171,7 +170,7 @@ flowchart TB
 
 The UAPI of the endovisor differs from that of KVM in two major aspects.
 
-First, the endovisor has a dedicated API for image registration, whereas KVM leaves loading the guest's kernel to user space or to the guest's own boot loader. KVM is given guest memory and virtual CPU state; the kernel image is just bytes in that memory, and hardware virtualization confines the guest even if those bytes are hostile. A kernelet's image, by contrast, becomes executable code inside the host kernel. Its isolation rests on safe Rust and vOSTD, so the operator must trust how the image was built; checking its format cannot establish that trust. `KLET_KIND_REGISTER` therefore requires the right to load kernel code, while `KLET_CREATE` lets an unprivileged runtime create a sandbox from an already registered kind. Separating the two also lets the endovisor validate and relocate the image once and retain one copy of its code for all sandboxes of that kind, instead of repeating the work and storing another copy for each sandbox. The prototype reuses that copy across successive sandboxes; sharing it among concurrent sandboxes of the same kind remains to be implemented.
+First, the endovisor has a dedicated API for image registration, whereas KVM leaves loading the guest's kernel to user space or to the guest's own boot loader. KVM is given guest memory and virtual CPU state; the kernel image is just bytes in that memory, and hardware virtualization confines the guest even if those bytes are hostile. A kernelet's image, by contrast, becomes executable code inside the host kernel. Its isolation rests on safe Rust and vOSTD, so the operator must trust how the image was built; checking its format cannot establish that trust. `KLET_KIND_REGISTER` therefore requires the right to load kernel code, while `KLET_CREATE` lets an unprivileged runtime create a sandbox from an already registered kind. Separating the two also lets the endovisor validate the image once and retain one copy of its code for all sandboxes of that kind. Each sandbox maps those shared code pages at its own virtual address and gets private data pages, whose pointers are relocated for that address.
 
 Second, the endovisor uses the `execveat` syscall to run a vCPU, whereas KVM does the `KVM_RUN` ioctl. The reason is that a carrier must start with an address space that holds nothing of the host's, and only an exec gives it one. A carrier is to the kernelet what a processor is to an ordinary kernel: the kernelet runs its tenant's processes on it, one at a time. Those processes run in Linux's own user mode, on Linux's own page tables, so at every switch the kernelet switches the carrier's address space to the current process's, and the carrier's address space is always one of the tenant's. It must therefore start holding nothing of the host's: not the holder's program, not its heap, not a stack with the holder's secrets on it. The one operation in Linux that gives a process a fresh address space is `execve`. So the exec descriptor is not called; it is executed.
 
@@ -185,41 +184,42 @@ Second, the endovisor uses the `execveat` syscall to run a vCPU, whereas KVM doe
 
 The image passed to `KLET_KIND_REGISTER` contains the kernel proper and vOSTD in one file. Its format tells the endovisor how to load it; its code and data layout determine whether it can serve independent sandboxes. Those are separate concerns: a file being *relocatable* does not make its code *position-independent*, and neither property alone gives each sandbox private state.
 
-### The prototype's image format
+### A self-contained PIE image
 
-The prototype accepts a little-endian, 64-bit x86 ELF relocatable object, `ET_REL`. The build in `prototype/Makefile` compiles with `-C relocation-model=static -C code-model=kernel`, then combines the kernel proper and vOSTD with `ld -r`. This is a partial link: the file still contains sections, symbols and relocation records for the endovisor to finish placing in memory. The kernel code model constrains placement to the uppermost 2 GiB of the address space, where Linux keeps modules.
+The image must be a little-endian, 64-bit x86 position-independent executable, or **PIE**, marked `ET_DYN` in its ELF header. It contains the kernel proper and vOSTD, fully linked together. The build compiles position-independent code and performs the final link before registration, fixing the relative positions of code and data. The endovisor loads this image itself; it does not execute a user-space ELF interpreter or resolve symbols from Linux or other libraries.
 
-The loader in `prototype/linux/endovisor/image.c` requires:
+The image contract has four requirements:
 
-- **An image with no undefined symbols.** Every symbolic reference must resolve within the image. The only global or weak symbol is `kernelet_entry_table`, an object containing the entry table described in [the kernelet ABI](the-kernelet-abi.md#the-three-tables). Its ABI version must match the endovisor's, and its entry points must lie within the loaded code.
-- **Sections and symbols the loader knows how to place.** It loads initialized code and data, zero-initialized storage, notes and unwind information. The prototype does not implement ELF thread-local storage or allocation for common symbols, which leave storage assignment to the linker. It also rejects standard constructor and destructor array sections; initialization currently runs explicitly during sandbox boot. These are implementation restrictions, not requirements of kernelet isolation. Registration runs no image code.
-- **Supported relocation records.** Relocations against loaded sections must use `RELA` records, which carry explicit addends, and one of the types listed below. The loader rejects unsupported types, writes outside the target section and values that do not fit their relocation fields.
+- **A fixed relative layout.** The ELF program headers describe page-aligned loadable segments, `PT_LOAD`, with separate executable, read-only and writable regions. Each sandbox maps the same layout at its own base address. No segment may be both writable and executable, and segments must not overlap.
+- **Shared pages need no runtime patches.** The linker resolves references within the shared code and read-only data. Runtime relocations may modify only private writable data, including pointer tables. Data containing instance-dependent pointers belongs in that private region even if an ordinary executable might make it read-only after relocation.
+- **Only relative runtime relocations.** Each relocation is an x86-64 `R_X86_64_RELATIVE` record with an explicit addend. It writes the sandbox's load base plus the addend into a private 64-bit field. Its symbol index must be zero, its destination must lie wholly within writable image data, and its resulting pointer must refer to the image. There is no external symbol lookup.
+- **An explicit entry table.** By this image ABI's convention, ELF's `e_entry` identifies `kernelet_entry_table`, a data object rather than an instruction to execute. After relocation, its function pointers must point into that sandbox's executable segment, and its ABI version must match the endovisor's. The table is described in [the kernelet ABI](the-kernelet-abi.md#the-three-tables).
 
-At registration, the loader allocates memory for the code and read-only data, and a separate region for writable data. It places the sections, resolves their symbols and applies their relocations, then makes the code read-only and executable. It keeps a pristine copy of the relocated writable data, including the zeroed uninitialized storage, for starting a sandbox. This is a module-style loading scheme: `ET_REL` is the current loader's input format, not a general requirement for all possible kernelet implementations.
+The prototype rejects images requiring an ELF interpreter, external libraries, TLS, or automatic constructor and destructor execution. It also rejects unsupported dynamic relocation formats and relocations into shared pages. Common symbols must have been assigned storage by the final linker. TLS and automatic initialization are implementation restrictions rather than requirements of kernelet isolation: initialization currently runs explicitly during sandbox boot, and registration runs no image code.
 
-The format checks establish compatibility with that loader. They do not establish that arbitrary machine code obeys the safe-Rust and vOSTD boundary. That still depends on the trusted build, which is why registering an image requires the right to load kernel code.
+At registration, the loader in `prototype/linux/endovisor/image.c` validates the image and retains its shared pages and pristine data template. When a sandbox starts, it creates a mapping at the segment offsets specified by the linker, using the kind's physical pages for code and read-only data and fresh physical pages for writable data. It copies the data template, zeroes uninitialized storage, applies the private relocations and sets the mapping's permissions. The kind's shared pages stay alive until every sandbox of that kind has been destroyed and the kind is unregistered.
+
+These checks establish compatibility with the image contract. They do not establish that arbitrary machine code obeys the safe-Rust and vOSTD boundary. That still depends on the trusted build, which is why registering an image requires the right to load kernel code.
 
 <div class="background">
 
-**ELF: relocations.** ELF, the Executable and Linkable Format, records how code and data refer to symbols whose final addresses may not yet be known. A relocation is an instruction to the linker or loader to patch a location using a symbol's final address. A call between two sections, a reference to a global variable, or a function pointer stored in a table may need such a patch. Let `S` be the symbol's address, `A` the addend in the relocation record, and `P` the address of the field being patched. The prototype's `klet_relocate` supports the following subset of x86-64 ELF relocations:
+**ELF: relocations.** ELF, the Executable and Linkable Format, records how code and data refer to addresses that may not yet be known. A relocation is an instruction to a linker or loader to patch a field. A call between two sections, a reference to a global variable, or a function pointer stored in a table may need such a patch. Build-time relocations and runtime relocations do different work: the final linker can resolve distances within the image, while the loader must still fill in absolute pointers that depend on the chosen load address.
 
-| Relocation | Value written by this loader |
-|---|---|
-| `R_X86_64_NONE` | No patch |
-| `R_X86_64_64` | `S + A`, as a 64-bit absolute value |
-| `R_X86_64_32` | `S + A`, checked to fit unsigned 32 bits |
-| `R_X86_64_32S` | `S + A`, checked to fit signed 32 bits |
-| `R_X86_64_PC32` | `S + A - P`, checked to fit signed 32 bits |
-| `R_X86_64_PLT32` | `S + A - P`, checked to fit signed 32 bits; resolved directly to the image's own symbol |
-| `R_X86_64_PC64` | `S + A - P`, as a 64-bit relative value |
+Let `S` be a symbol's address, `P` the address of the field being patched, `A` an explicit addend, and `B` the image's load base. Some relevant x86-64 relocation calculations are:
 
-The absolute forms embed addresses. The relative forms embed distances: when the target and the patch location move by the same amount, their distance stays unchanged.
+| Relocation | Value written | Role in this image format |
+|---|---|---|
+| `R_X86_64_PC32` | `S + A - P`, signed 32 bits | Resolved by the build-time linker for references within the image |
+| `R_X86_64_64` | `S + A`, 64 bits | An absolute reference the linker must resolve or convert into a supported runtime relocation |
+| `R_X86_64_RELATIVE` | `B + A`, 64 bits | The only runtime relocation the endovisor accepts; it patches private data |
+
+The name `RELATIVE` here means relative to the load base, not relative to the instruction pointer. It produces an absolute pointer, so its result differs between sandbox mappings. It is suitable for private pointer tables, not shared code pages. Instruction-relative references such as `PC32` instead encode distances: when the target and the field being patched move by the same amount, their distance stays unchanged.
 
 </div>
 
 ### Requirements for sharing code across sandboxes
 
-Our goal is to share physical code pages while keeping each sandbox's mutable state private. One way to do that is to map the same code pages at a different kernel virtual address for each sandbox, with private data at a consistent offset from each code mapping. This requires instruction bytes that work at every mapping, without patches that differ between sandboxes: position-independent code, or **PIC**.
+The endovisor maps the same physical code pages at a different kernel virtual address for each sandbox, with private data at the offsets established by the final linker. This requires instruction bytes that work at every mapping, without patches that differ between sandboxes: position-independent code, or **PIC**.
 
 <div class="background">
 
@@ -233,9 +233,9 @@ PIC can still need relocations during linking and when initializing private data
 
 The precise sharing rule is that **every relocation applied to a physically shared page must produce identical bytes for every mapping**. An absolute relocation whose value depends on the sandbox's load address violates that rule. Absolute relocations can still appear in private data, such as a table of pointers to that sandbox's code mapping, or in shared pages when the resulting value is identical for all instances. Relative relocations remain identical only when the referenced target stays at the same distance from the field being patched. Merely banning the absolute relocation types from the whole image would therefore be both too restrictive for private data and insufficient to guarantee sharing.
 
-For the proposed layout, the loader must give each sandbox private data and any private pointer tables at the offsets its code expects. Choosing PIC or PIE requires a compatible compiler configuration and loader; simply changing the file type does not provide this layout. Another design could use one code mapping and pass a sandbox context explicitly; different code virtual addresses are a design choice, not a requirement of sharing itself.
+The PIE format makes those relative positions part of the image. The endovisor preserves them when mapping each sandbox and puts every runtime relocation in private pages. Consequently, concurrent sandboxes of the same kind can execute the same physical code while changing their globals and pointer tables independently. Their carrier entry points, interrupt upcalls and executable-address checks all use the individual sandbox's mapping.
 
-**The prototype does not implement concurrent sharing within a kind.** Its code is compiled with the static relocation model and patched to reach one data allocation at the addresses chosen during registration. The loader supports no GOT relocations, and the build checks that none remain in the image. Each successive sandbox restores the same data allocation from the pristine copy. A second sandbox of the kind is refused with `EBUSY` until the first is destroyed. Supporting concurrent instances requires the code-generation, mapping and data-access changes described above; it is not a property the current `ET_REL` requirement already provides.
+A sandbox's mapping remains valid throughout its carriers' execution. Destroying that sandbox releases its mapping and private pages; it does not release shared pages still owned by the registered kind. The shared pages can be released only after all sandboxes are destroyed and the kind is unregistered.
 
 ## The operations
 
@@ -253,7 +253,8 @@ The header `prototype/linux/endovisor/uapi/endovisor.h` is the interface's defin
 // - An exec descriptor, returned by `KLET_GET_VCPU_EXEC_FD`, starts one virtual CPU.
 //   Executing it with `execveat` and `AT_EMPTY_PATH` makes the caller that virtual CPU's carrier.
 //
-// The operations defined below are ioctls.
+// The descriptors support the ioctls defined below;
+// a sandbox descriptor also supports `read` and readiness notification.
 // They return -1 with `errno` set on failure,
 // and otherwise return what their comments specify, or zero when nothing is specified.
 ```
@@ -268,7 +269,7 @@ The system descriptor is `open("/dev/endovisor")`. The node is owned by root; an
 
 ```c
 // Returned by `KLET_GET_API_VERSION`; a runtime refuses any other value.
-#define KLET_API_VERSION	1
+#define KLET_API_VERSION	2
 
 // The ioctl type byte is chosen for the prototype.
 // `0xEB` is unassigned in `Documentation/userspace-api/ioctl/ioctl-number.rst` at v6.12.
@@ -296,15 +297,17 @@ The system descriptor is `open("/dev/endovisor")`. The node is owned by root; an
 ```c
 // The ioctl for registering a new kernelet kind by providing a new image.
 //
-// `image_fd` is an open descriptor on the image file:
-// an ELF relocatable object (`ET_REL`, x86-64) holding the kernel proper and vOSTD,
-// built so that it has no undefined symbol,
-// only relocations of the kinds the endovisor's loader applies,
-// and one exported symbol, `kernelet_entry_table`.
-// The endovisor repeats those checks on the file and refuses it (`EINVAL`, `ENOEXEC`) if any fails;
+// `image_fd` is an open descriptor on a self-contained x86-64 PIE image (`ET_DYN`)
+// holding the kernel proper and vOSTD, with no interpreter or external dependencies.
+// Its loadable segments fix the relative layout of shared code and private data.
+// Its only runtime relocations are `R_X86_64_RELATIVE` records targeting private data;
+// shared pages need no runtime patches.
+// `e_entry` identifies the `kernelet_entry_table` object, not an executable entry point.
+// The endovisor validates the image and refuses incompatible files (`EINVAL`, `ENOEXEC`);
 // it also refuses an image whose ABI version is not its own (`EPROTO`).
-// It copies the image's code into pages it keeps for the kind's life,
-// shared by every sandbox of the kind.
+// It retains one copy of the shared pages for the kind's life.
+// Each sandbox maps those pages at its own virtual address,
+// receives fresh writable data, and relocates its pointers for that address.
 //
 // The name of the new kind is given in `name`, which `KLET_KIND_LIST` reports.
 // This name must be unique among all registered kinds (`EEXIST` otherwise).
@@ -427,8 +430,6 @@ struct klet_kind_list {
 //
 // # Prototype limitations
 //
-// A kind has at most one sandbox at a time,
-// because its one loaded copy is position-dependent (`EBUSY` while one exists).
 // `memory_initial` must round to 2 or 4 MiB,
 // the grant being one physically contiguous run (`EINVAL` otherwise).
 struct klet_create {
@@ -561,6 +562,8 @@ struct klet_device {
 #define KLET_SET_LOG		_IOW(KLET_IOC, 0x13, __s32)
 ```
 
+#### `KLET_KILL`
+
 *Unchanged from `prototype/linux/endovisor/uapi/endovisor.h`: `KLET_KILL`.*
 
 ```c
@@ -571,22 +574,54 @@ struct klet_device {
 // values with the high bit set are reserved for the endovisor and refused with `EINVAL`.
 //
 // The ioctl returns zero without waiting for the carriers to stop.
-// Stopping is asynchronous; `KLET_WAIT` says when it is done.
+// Stopping is asynchronous; `read` waits for completion and reports the exit reason.
 // A sandbox that has no carrier exits at once.
 // The operation is idempotent: a second kill changes nothing.
+//
+// Closing the last copy of the sandbox descriptor also requests termination.
+// The endovisor releases the sandbox's remaining memory, mappings, and records
+// once both its last descriptor is closed and every carrier has stopped.
+// Closing an exited sandbox releases those resources;
+// closing a live sandbox arranges cleanup after exit without waiting for its carriers.
+// Copies made with `dup` or inherited through `fork` keep the descriptor alive
+// until they too are closed.
+//
+// # Security
+//
+// Automatic cleanup releases a crashed holder's sandbox
+// once no other process holds a copy of its descriptor.
 #define KLET_KILL			_IOW(KLET_IOC, 0x15, __u32)
 ```
 
-*Unchanged from `prototype/linux/endovisor/uapi/endovisor.h`: `klet_exit`, `klet_end`, `KLET_WAIT`.*
+Closing the last copy of the sandbox descriptor requests the same stop if the sandbox is still live, using the endovisor's reason `KLET_KILLED_REQUESTED`. That close does not wait for the carriers to stop. Once the sandbox has exited, the endovisor releases its remaining resources automatically; if it had already exited, the last close releases them then. Duplicated or inherited copies keep the descriptor alive until they too are closed. This ties cleanup to the holder's lifetime, including when it crashes.
+
+#### Reading and polling the sandbox descriptor
+
+After a termination request, the sandbox exits when every carrier is gone; if it has no carriers, it exits immediately. Reading the sandbox descriptor then returns a `struct klet_exit` describing the outcome. Before exit, `read` waits interruptibly; with `O_NONBLOCK` set, it fails with `EAGAIN` instead. A zero-length read returns zero immediately. A nonzero buffer smaller than the record fails with `EINVAL`; a buffer large enough receives exactly `sizeof(struct klet_exit)` bytes.
+
+The record is a persistent result, not a stream: reads do not consume it or advance to an end-of-file condition. The descriptor is not seekable; `lseek` fails with `ESPIPE`. Each successful read returns the same complete record. The descriptor becomes readable to `poll`, `select` and `epoll` after exit and stays readable. A runtime can therefore wait for the sandbox alongside its carriers' process descriptors, then read its final result. `KLET_GET_STATS` also includes this record once its reported state is `KLET_STATE_EXITED`.
+
+*Unchanged from `prototype/linux/endovisor/uapi/endovisor.h`: `klet_exit`, `klet_end`.*
 
 ```c
-// The ioctl for waiting until a sandbox has exited and reporting how it ended.
+// The exit record returned by `read` on a sandbox descriptor.
 //
-// A sandbox has exited when, after it was marked dying, every carrier it had is gone,
-// or at once if it never had one.
-// The sandbox descriptor is also pollable: it reports `POLLIN` once the sandbox has exited.
+// After a termination request, the sandbox exits when every carrier is gone;
+// if it has no carriers, it exits immediately.
+// A blocking `read` waits interruptibly for that state;
+// with `O_NONBLOCK`, it fails with `EAGAIN` until the sandbox has exited.
+// A caught signal can interrupt the wait with `EINTR`.
 //
-// The ioctl fills in the exit record and returns zero on success.
+// A read buffer must hold at least one `struct klet_exit` (`EINVAL` otherwise).
+// A successful read copies one complete record and returns its size in bytes.
+// A zero-length read returns zero immediately.
+// An invalid destination fails with `EFAULT`.
+// Reads do not consume the record: repeated reads return the same result.
+// The descriptor is not seekable (`ESPIPE` from `lseek`).
+//
+// `poll`, `select`, and `epoll` report readability once the sandbox has exited.
+// `poll` reports `POLLIN | POLLRDNORM`; readiness persists after a read.
+// After readiness notification, either `read` or `KLET_GET_STATS` retrieves the exit record.
 // `how` identifies which of three things ended the sandbox:
 //
 // - `KLET_END_EXITED`: `code` is the kernel proper's exit code.
@@ -618,18 +653,21 @@ struct klet_exit {
 	__u32	pad;
 	char	message[KLET_MESSAGE_LEN];
 };
-#define KLET_WAIT			_IOR(KLET_IOC, 0x16, struct klet_exit)
 ```
+
+#### `KLET_GET_STATS`
 
 *Unchanged from `prototype/linux/endovisor/uapi/endovisor.h`: `klet_stats`, `klet_vcpu_stat`, `KLET_GET_STATS`.*
 
 ```c
-// The ioctl for reading a sandbox's state, counters, and virtual CPU statistics.
+// The ioctl for reading a sandbox's state, exit record, counters, and virtual CPU statistics.
 //
 // The caller supplies an array of `capacity` rows at `vcpus`.
 // The endovisor sets `nr_vcpus` to the sandbox's number of virtual CPUs
 // and fills in `min(capacity, nr_vcpus)` rows.
-// It also reports the sandbox's `slot`, `state`, and counters.
+// It also reports the sandbox's `slot`, `state`, counters, and `exit` record.
+// `exit` is zero until `state` is `KLET_STATE_EXITED`;
+// it then holds the same final record as `read`, without blocking.
 // The rows let a tool find the sandbox's carriers without walking its control group;
 // `pid` is the process identifier that `taskset` and `chrt` take.
 //
@@ -663,28 +701,9 @@ struct klet_stats {
 	__u64	vcpus;				// `struct klet_vcpu_stat *`, user memory
 	__u32	capacity;			// rows available at `vcpus`
 	__u32	slot;				// out: the sandbox's index in the endovisor's table; names its carriers
+	struct klet_exit exit;			// out: final exit record, zero before exit
 };
 #define KLET_GET_STATS		_IOWR(KLET_IOC, 0x17, struct klet_stats)
-```
-
-*Unchanged from `prototype/linux/endovisor/uapi/endovisor.h`: `KLET_DESTROY`.*
-
-```c
-// The ioctl for destroying an exited sandbox and releasing its resources.
-//
-// The operation returns the memory, instance, and records to Linux.
-// It is legal once the sandbox has exited (`EBUSY` before)
-// and returns zero on success.
-// The exit status stays readable through the sandbox descriptor until it is closed.
-//
-// Closing the last copy of the sandbox descriptor performs `KLET_KILL`;
-// the endovisor then destroys the sandbox once it has exited.
-// Release never waits.
-//
-// # Security
-//
-// Automatic cleanup ensures that nothing a crashed holder held keeps a sandbox alive.
-#define KLET_DESTROY		_IO(KLET_IOC, 0x18)
 ```
 
 ### On the exec descriptor
@@ -701,10 +720,10 @@ The exec changes two aspects of how those task interfaces work. First, the carri
 
 Second, signals control the carrier's execution but do not deliver events to the tenant. `SIGSTOP` stops the virtual CPU until `SIGCONT`; `SIGKILL` to any carrier ends the whole sandbox. Other signals are discarded. The runtime can therefore stop the sandbox through `kill -KILL` on a carrier or `cgroup.kill` on its group, as well as through `KLET_KILL` on the sandbox descriptor.
 
-**What this book's prototype leaves out.** The interface is written for a full endovisor, and the header's comments say where this book's falls short of it. It has no devices, so `KLET_ATTACH_DEVICE` fails with `EOPNOTSUPP`. Its console carries output only, so the input half of `KLET_SET_CONSOLE` does not exist, and a sandbox given no console or log file has both printed to the host's kernel log. Its memory is one fixed grant of 2 or 4 MiB, selected by `memory_initial` at creation; `memory_max` is recorded, but there is no mechanism to grow the grant. A kind runs one sandbox at a time, because its one loaded copy is linked for fixed addresses, so a second `KLET_CREATE` of a kind fails with `EBUSY` until the first sandbox is destroyed. A panic ends the kernelet as a power-off does, with no message for `KLET_WAIT` to report, and of the endovisor's own kill reasons it detects only a lost carrier. Each of those is named where the book reaches the place it would go.
+**What this book's prototype leaves out.** The interface is written for a full endovisor, and the header's comments say where this book's falls short of it. It has no devices, so `KLET_ATTACH_DEVICE` fails with `EOPNOTSUPP`. Its console carries output only, so the input half of `KLET_SET_CONSOLE` does not exist, and a sandbox given no console or log file has both printed to the host's kernel log. Its memory is one fixed grant of 2 or 4 MiB, selected by `memory_initial` at creation; `memory_max` is recorded, but there is no mechanism to grow the grant. A panic ends the kernelet as a power-off does, with no message in the exit record, and of the endovisor's own kill reasons it detects only a lost carrier. Each of those is named where the book reaches the place it would go.
 
 <div class="recap">
 
-**Recap.** The endovisor's user-space interface is one device node and three kinds of descriptor. The system descriptor, from `/dev/endovisor`, is where an operator with the right to load kernel code registers an image file, one that can name nothing outside itself, as a kind whose code every sandbox of it shares, and where anyone with the node creates a sandbox of a kind. The sandbox descriptor is what the holder keeps: through it the holder attaches files, asks for one exec descriptor per virtual CPU, waits for the end and destroys, and when its last copy closes the sandbox dies. An exec descriptor is executed, not called, by a child the holder forked and configured with Linux's ordinary system calls, because a carrier needs an address space that holds nothing of the host's; the endovisor checks the child's control group and its no-new-privileges bit, starts each virtual CPU once, and turns the child into its carrier. The holder's control group is the sandbox's, its main thread owns the tenant's address spaces, and every task of a sandbox is one that user space made and can govern.
+**Recap.** The endovisor's user-space interface is one device node and three kinds of descriptor. The system descriptor, from `/dev/endovisor`, is where an operator with the right to load kernel code registers an image file, one that can name nothing outside itself, as a kind whose code every sandbox of it shares, and where anyone with the node creates a sandbox of a kind. The sandbox descriptor is what the holder keeps: through it the holder attaches files, asks for one exec descriptor per virtual CPU, reads the exit record and closes the descriptor. Closing its last copy requests termination if needed and releases the remaining resources once the sandbox has exited. An exec descriptor is executed, not called, by a child the holder forked and configured with Linux's ordinary system calls, because a carrier needs an address space that holds nothing of the host's; the endovisor checks the child's control group and its no-new-privileges bit, starts each virtual CPU once, and turns the child into its carrier. The holder's control group is the sandbox's, its main thread owns the tenant's address spaces, and every task of a sandbox is one that user space made and can govern.
 
 </div>

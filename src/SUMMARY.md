@@ -4,7 +4,7 @@
 
 - [Why a kernel of your own](why-a-kernel-of-your-own.md)
 - [The endovisor UAPI](the-endovisor-uapi.md)
-- [The kernel we will run](the-kernel-we-will-run.md)
+- [The first kernel we will run](the-first-kernel-we-will-run.md)
 - [The kernelet ABI](the-kernelet-abi.md)
 - [Carrier hooks and patch overview](carrier-hooks.md)
 - [Carriers](carriers.md)

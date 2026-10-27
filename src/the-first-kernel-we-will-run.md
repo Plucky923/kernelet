@@ -1,4 +1,4 @@
-# The kernel we will run
+# The first kernel we will run
 
 This chapter reads the kernel the book is built around: Asterinas's teaching example, a kernel in about a hundred lines of safe Rust.
 

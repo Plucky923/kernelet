@@ -10,9 +10,9 @@ A kernelet image is two layers of code compiled into one file, held together by 
 
 The first two are the image's contents; the third is this chapter's subject.
 
-Registering an image loads it as Linux loads a module, without its being one. The image file is a relocatable object, the `ld -r` of the kernel proper and vOSTD, built for the kernel's code model so that its code can run where Linux keeps modules. The endovisor's `image.c` does what the module loader does: every section is placed in the range modules live in, every relocation is applied as Linux's own module loader applies it, the text is made read-only and executable, and the one symbol looked up is the entry table below, which must be the image's only global symbol. An image that refers to any symbol it does not define is refused, which is the mechanical form of chapter 1's rule that the image calls nothing of the host's.
+Registering an image validates the restricted PIE format described in [the endovisor UAPI](the-endovisor-uapi.md#the-image-format-and-its-requirements). The build links the kernel proper and vOSTD into one self-contained `ET_DYN` image, whose program headers fix the relative layout of code and data. The image imports no host symbols; it calls Linux through the service table supplied at entry. The ELF header's `e_entry` identifies the entry-table object below, which the endovisor reads rather than executing as an instruction.
 
-One loaded copy of an image serves one sandbox at a time in this prototype. The image is linked for fixed addresses, so its code reaches its data where the loader placed it; the loader therefore keeps a pristine copy of the writable data as relocated, and every sandbox of the kind starts from that copy, with the uninitialized data zeroed. A second sandbox of a kind must wait for the first to be destroyed.
+The registered kind owns one physical copy of the code and read-only data and a pristine template for writable data. Each sandbox gets a separate virtual mapping of that layout: shared physical pages for code and read-only data, fresh pages for writable data and zero-initialized storage. `R_X86_64_RELATIVE` relocations initialize its private pointers using its own load base. The entry table therefore contains addresses within that sandbox's code mapping. Multiple sandboxes of one kind can run concurrently; the code is shared, while globals, pointer tables and vOSTD's state are private.
 
 <div class="background">
 
@@ -77,7 +77,7 @@ vOSTD is the only crate in the image that can reach the service table, which it 
 
 Two rules shape every service. Arguments are integers or pointers into the kernelet's own memory: a space number, a virtual address, a physical address, a buffer to log. The one exception is `mem_free`, whose pointer is into host memory that `mem_alloc` returned, below; the endovisor checks it against a table of the blocks it handed out, kept where the kernelet cannot reach, reads the block's number below the pointer with a read that tolerates a fault, and refuses what it does not recognize (a stale pointer to a block that was freed and handed out again at the same address is the one case it cannot tell apart). And the host writes into the kernelet only through the two pointers vOSTD hands it for that purpose, the user context that `user_run` is given and the area that `fpu_save` is given, and keeps no other. Both keep a buggy vOSTD from steering the endovisor into writing wherever the kernelet says.
 
-The image's one exported symbol is the entry table:
+vOSTD defines the entry table under the symbol `kernelet_entry_table`; the final linker records its address in ELF's `e_entry` field:
 
 *Simplified from `prototype/vostd/src/abi.rs`: `kernelet_entry_table`.*
 
@@ -104,7 +104,9 @@ int klet_sandbox_start(struct klet_inst *inst)
 {
 	unsigned int order = get_order(inst->memory_initial);       /* 2^10 pages for 4 MiB */
 
-	klet_image_restore(inst->kind);                              /* the pristine data, the bss zeroed */
+	int err = klet_image_start(inst);                          // Shared code, private data and relocated pointers.
+	if (err)
+		return err;
 	pages = alloc_pages(GFP_KERNEL_ACCOUNT | __GFP_ZERO | __GFP_NOWARN, order);
 	if (!pages)
 		return -ENOMEM;

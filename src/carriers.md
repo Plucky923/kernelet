@@ -57,7 +57,7 @@ static int klet_load_binary(struct linux_binprm *bprm)
 	inst->vcpus[vcpu] = c;
 
 	if (!inst->started)                         /* the first arrival starts the sandbox: */
-		klet_sandbox_start(inst);               /* the image's data restored, the grant, the boot arguments */
+		klet_sandbox_start(inst);               // The private image mapping, the grant, the boot arguments.
 	inst->arrived++;
 	wake_up_all(&inst->arrive_wq);              /* virtual CPU 0 may be waiting for this one */
 
@@ -161,7 +161,7 @@ static int klet_lifeline_release(struct inode *inode, struct file *file)
 
 Only the carrier's death can close its lifeline. It is installed after the `exec`, so no other task holds a copy of it: the exec made sure the child's table is shared with no other task. A tenant cannot close it, because closing a descriptor is a Linux system call, and the syscall hook takes those. A copy taken later with `pidfd_getfd`, which needs `CAP_SYS_PTRACE` against a non-dumpable task, delays the notice until that copy closes.
 
-A closed lifeline ends the sandbox, and the last one to close marks it exited. When a lifeline closes, the endovisor takes the carrier off its lists. If the sandbox was still running, whichever carrier's lifeline it was, the sandbox is over: the endovisor marks the kernelet dying and ends every other carrier. When the last lifeline closes, no carrier is left and the sandbox has exited, which is what the holder's `KLET_WAIT` was waiting for.
+A closed lifeline ends the sandbox, and the last one to close marks it exited. When a lifeline closes, the endovisor takes the carrier off its lists. If the sandbox was still running, whichever carrier's lifeline it was, the sandbox is over: the endovisor marks the kernelet dying and ends every other carrier. When the last lifeline closes, no carrier is left and the sandbox has exited, which makes the sandbox descriptor readable and wakes the holder waiting for its exit record.
 
 <div class="recap">
 

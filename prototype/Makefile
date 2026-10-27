@@ -3,7 +3,7 @@
 # The suite and the measurements:
 #
 #   make test         every functional test, in order, stopping at the first
-#                     failure: hello probe yield sched-policy sched-coop
+#                     failure: hello pie probe yield sched-policy sched-coop
 #                     sched-fpu mem-func mem-r2 mem-conc mem-kill mem-pressure
 #   make bench        the three measurements, sched-fair sched-perf mem-perf,
 #                     reported but never failing the suite: their assertions
@@ -14,6 +14,7 @@
 #   make hello        the unedited 100-line kernel: Hello, world
 #   make hello        (also) uapi-check, the endovisor UAPI's refusals, and
 #                     two sandboxes of two kinds at once
+#   make pie          concurrent instances of one PIE kind: sharing and private state
 #   make probe        demand paging, a 4 MiB write the heap refuses,
 #                     exceptions other than page faults (ud2 twice, int3,
 #                     hlt), eviction of a spinner by the watch timer after a
@@ -108,8 +109,10 @@ else ifeq ($(KLET_KERNEL),schedk)
 KERNEL_PROPER_DEP := $(CURDIR)/kernels/sched/sched
 else ifeq ($(KLET_KERNEL),mem)
 KERNEL_PROPER_DEP := $(CURDIR)/kernels/mem/mem
+else ifeq ($(KLET_KERNEL),piecheck)
+KERNEL_PROPER_DEP :=
 else
-$(error KLET_KERNEL=$(KLET_KERNEL) is not a kernel proper of this repository: hello, probe, yieldk, schedk or mem)
+$(error KLET_KERNEL=$(KLET_KERNEL) is not a kernel proper of this repository: hello, probe, yieldk, schedk, mem or piecheck)
 endif
 IMAGE      := $(BUILD)/$(KLET_KERNEL).image
 HELLO_ELF  := $(CURDIR)/kernels/hello/hello
@@ -120,13 +123,10 @@ ENDOVISOR_KO := $(CURDIR)/linux/endovisor/endovisor.ko
 HOLDER     := $(BUILD)/holder
 RUNTEST    := $(BUILD)/run-test
 
-# `-Z plt=yes` is not cosmetic: the x86_64-unknown-none target sets
-# plt-by-default=false, which makes LLVM reach its own libcalls (memcpy,
-# __adddf3, ...) through the GOT, and the module loader rejects every GOT
-# relocation. The image target checks that none is left.
-KLET_RUSTFLAGS := -C relocation-model=static -C code-model=kernel \
-                  -C no-redzone=y -C panic=abort -C force-unwind-tables=no \
-                  -Z plt=yes
+# The final PIE link resolves code-relative references before registration.
+# Data pointers use per-sandbox R_X86_64_RELATIVE relocations; shared text has none.
+KLET_RUSTFLAGS := -C relocation-model=pic -C code-model=small \
+                  -C no-redzone=y -C panic=abort -C force-unwind-tables=no
 KLET_BUILD_STD := -Zbuild-std=core,alloc,compiler_builtins \
                   -Zbuild-std-features=compiler-builtins-mem
 
@@ -142,7 +142,7 @@ all: linux initramfs
 # Each test's whole output goes to .build/test-<name>.out and only its verdict
 # lines are shown; the first failure stops the suite and prints the tail of
 # that output. Every test's serial log stays in .build (see each target).
-TESTS := hello probe yield sched-policy sched-coop sched-fpu \
+TESTS := hello pie probe yield sched-policy sched-coop sched-fpu \
          mem-func mem-r2 mem-conc mem-kill mem-pressure
 BENCHES := sched-fair sched-perf mem-perf
 BENCH_OUT := $(BUILD)/bench
@@ -295,40 +295,26 @@ kernel-proper-check:
 $(HELLO_ELF): $(CURDIR)/kernels/hello/hello.S
 	gcc -static -nostdlib $< -o $@
 
-# vostd + the kernel proper -> one relocatable object, the kernelet image: a
-# file of its own, which the holder registers as a kind (KLET_KIND_REGISTER)
-# and the endovisor loads and relocates itself.
+# vOSTD and the kernel proper form one self-contained PIE (`ET_DYN`) image.
+# The linker fixes segment offsets; the endovisor maps shared code and private
+# data at those offsets and applies only relative relocations to private pages.
 #
 # The kernelet-stack size the endovisor's pool hands out (KLET_STACK_SIZE, 256 KiB)
 # and the one OSTD's task layer asks for have to be the same number.
 KLET_STACK_PAGES := 64
+KLET_LINKER_SCRIPT := linux/endovisor/kernelet.lds
 
-# The checks the endovisor repeats on the file: no GOT relocation (its loader
-# applies none), no undefined symbol (an image can name nothing outside
-# itself), and exactly one global symbol, kernelet_entry_table: `objcopy
-# --keep-global-symbol` makes every other one local, so that nothing of
-# compiler_builtins' or the Rust crates' is exported.
-image: $(CRATES_STAMP) $(KERNEL_PROPER_DEP)
+image: $(CRATES_STAMP) $(KERNEL_PROPER_DEP) $(KLET_LINKER_SCRIPT) tools/check-image.py
 	cd $(CURDIR) && CARGO_TARGET_DIR=$(CARGO_DIR) RUSTFLAGS="$(KLET_RUSTFLAGS)" \
 	  OSTD_TASK_STACK_SIZE_IN_PAGES=$(KLET_STACK_PAGES) \
 	  $(CARGO) build --offline --release -p $(KLET_KERNEL) \
 	    --target $(RUST_TARGET) $(KLET_BUILD_STD) || \
 	  { echo "image: the build failed; it is --offline, so if a crate is missing, run make crates (once, with a network)"; exit 1; }
-	ld -r --gc-sections -u kernelet_entry_table -o $(IMAGE).o \
+	ld -pie --no-dynamic-linker --no-undefined --gc-sections --exclude-libs ALL \
+	  --build-id=none -z text -z noexecstack -z max-page-size=0x1000 \
+	  -T $(KLET_LINKER_SCRIPT) -u kernelet_entry_table -o $(IMAGE) \
 	  --whole-archive $(STATICLIB) --no-whole-archive
-	objcopy --keep-global-symbol=kernelet_entry_table $(IMAGE).o $(IMAGE)
-	rm -f $(IMAGE).o
-	@if readelf -rW $(IMAGE) | grep -q GOT; then \
-	   echo "$(IMAGE) has GOT relocations, which the endovisor's loader does not apply"; \
-	   readelf -rW $(IMAGE) | grep GOT | head; exit 1; fi
-	@if nm -u $(IMAGE) | grep -q .; then \
-	   echo "$(IMAGE) has undefined symbols:"; nm -u $(IMAGE); exit 1; fi
-	@g=$$(nm -g --defined-only $(IMAGE) | awk '{print $$3}' | tr '\n' ' '); \
-	 if [ "$$g" != "kernelet_entry_table " ]; then \
-	   echo "$(IMAGE) exports more than kernelet_entry_table: $$g" | cut -c1-300; exit 1; fi
-	@echo "image: $(IMAGE), $$(stat -c %s $(IMAGE)) bytes, relocations:" \
-	  "$$(readelf -rW $(IMAGE) | awk '$$3 ~ /^R_X86_64/ { print $$3 }' | sort -u | tr '\n' ' ')"
-	@readelf -rW $(IMAGE) | awk '{print $$3}' | grep -E '^R_' | sort | uniq -c
+	python3 tools/check-image.py $(IMAGE)
 
 $(PROBE_ELF): $(CURDIR)/kernels/probe/probe.S
 	gcc -static -nostdlib $< -o $@
@@ -351,12 +337,13 @@ RT_SRC := host/runtime
 RT_CC  := gcc -static -O2 -Wall -Wextra -I linux/endovisor/uapi
 runtime: $(RT_SRC)/sandbox.c $(RT_SRC)/sandbox.h $(RT_SRC)/holder.c $(RT_SRC)/run-test.c \
          $(RT_SRC)/yield-rival.c $(RT_SRC)/run-sched.c $(RT_SRC)/run-mem.c \
-         $(RT_SRC)/uapi-check.c linux/endovisor/uapi/endovisor.h
+         $(RT_SRC)/uapi-check.c $(RT_SRC)/run-pie.c linux/endovisor/uapi/endovisor.h
 	@mkdir -p $(BUILD)
 	$(RT_CC) -o $(HOLDER) $(RT_SRC)/holder.c $(RT_SRC)/sandbox.c
 	$(RT_CC) -o $(RUNTEST) $(RT_SRC)/run-test.c
 	$(RT_CC) -o $(BUILD)/yield-rival $(RT_SRC)/yield-rival.c
 	$(RT_CC) -o $(BUILD)/uapi-check $(RT_SRC)/uapi-check.c $(RT_SRC)/sandbox.c
+	$(RT_CC) -o $(BUILD)/run-pie $(RT_SRC)/run-pie.c $(RT_SRC)/sandbox.c
 	$(RT_CC) -o $(BUILD)/run-sched $(RT_SRC)/run-sched.c $(RT_SRC)/sandbox.c -lpthread
 	$(RT_CC) -o $(BUILD)/run-mem $(RT_SRC)/run-mem.c $(RT_SRC)/sandbox.c
 
@@ -432,6 +419,15 @@ stage-hello: endovisor-module image runtime
 	  'show /hello.console' \
 	  'show /hello.log' > $(STAGE)/tests/10-hello.cmd
 	@echo "staged: endovisor.ko, /hello.image, /tests/10-hello"
+
+# One registered PIE kind runs several overlapping instances with private state.
+.PHONY: stage-pie pie
+stage-pie: endovisor-module image runtime
+	$(call stage_base,)
+	cp $(BUILD)/run-pie $(STAGE)/run-pie
+	$(call stage_cmd,pie)
+	printf '%s\n' 'run /run-pie /piecheck.image' > $(STAGE)/tests/10-pie.cmd
+	@echo "staged: endovisor.ko, /piecheck.image, /tests/10-pie"
 
 # WATCH=0 loads the module with the per-processor watch timer turned off, which
 # is the control for the yield test. The carrier of the sandbox's one virtual
@@ -981,6 +977,21 @@ hello:
 	cp $(SERIAL) $(BUILD)/serial-hello.log
 	@$(MAKE) --no-print-directory check-log
 
+# The same physical image pages serve different virtual mappings concurrently.
+pie:
+	$(MAKE) KLET_KERNEL=piecheck linux stage-pie initramfs
+	$(MAKE) run SERIAL=$(BUILD)/serial-pie.log
+	@grep -q 'PIE-TEST: PASS concurrent same-kind instances' $(BUILD)/serial-pie.log
+	@test "$$(grep -c 'PIE sharing: sandboxes .* distinct mappings, .* shared pages, .* private pages each' $(BUILD)/serial-pie.log)" -ge 2
+	@if grep -qE 'PIE-TEST: FAIL|PIE-CHECK.*FAIL|Kernel panic' $(BUILD)/serial-pie.log; then \
+	  tail -80 $(BUILD)/serial-pie.log; exit 1; fi
+	@rc=0; $(call CHECK_UNLOAD,$(BUILD)/serial-pie.log); \
+	for pat in $(CHECK_BAD); do \
+	  if grep -qF "$$pat" $(BUILD)/serial-pie.log; then \
+	    echo "  BAD     the log contains $$pat"; rc=1; fi; \
+	done; exit $$rc
+	@echo "make pie: PASS"
+
 # Three boots of the same image: the probe itself, ended by a SIGKILL to its
 # carrier; then the same tenant under a seccomp filter that kills it on its
 # endless system call; then the probe ended by KLET_KILL, which leaves the
@@ -1175,7 +1186,7 @@ check-probe-seccomp:
 	exit $$rc
 
 # uapi-check's checks, every one of which must pass (host/runtime/uapi-check.c).
-UAPI_CHECKS := 66
+UAPI_CHECKS := 114
 # The probe ended by KLET_KILL: the sandbox is marked dying first, so the
 # watch timer stops and leaves the carrier spinning in kernelet code to the
 # eviction sweep, which the kill arms because no root carrier is left to.
@@ -1255,7 +1266,7 @@ clean:
 	rm -rf $(STAGE) $(INIT) $(INITRAMFS) $(SERIAL)
 	-$(KBUILD) M=$(CURDIR)/linux/endovisor clean
 	rm -f $(BUILD)/*.image $(HELLO_ELF) $(PROBE_ELF) $(YIELD_ELF) $(SCHED_ELF) $(CURDIR)/kernels/mem/mem
-	rm -f $(HOLDER) $(RUNTEST) $(BUILD)/yield-rival $(BUILD)/uapi-check $(BUILD)/run-sched $(BUILD)/run-mem
+	rm -f $(HOLDER) $(RUNTEST) $(BUILD)/yield-rival $(BUILD)/uapi-check $(BUILD)/run-pie $(BUILD)/run-sched $(BUILD)/run-mem
 	rm -f $(INITRAMFS_LIST)
 	rm -f $(BUILD)/*.log $(BUILD)/*.out
 	rm -rf $(CARGO_DIR) $(MEM_LOGDIR) $(BENCH_OUT)

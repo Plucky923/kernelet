@@ -1,9 +1,9 @@
-# The prototype's Rust workspace: vOSTD, the five kernels proper built against
+# The prototype's Rust workspace: vOSTD, the six kernels proper built against
 # it, and the two small crates copied from the Asterinas tree that they use.
 
 [workspace]
 resolver = "2"
-members = ["libs/align_ext", "libs/ostd-macros", "vostd", "kernels/hello", "kernels/probe", "kernels/yield", "kernels/sched", "kernels/mem"]
+members = ["libs/align_ext", "libs/ostd-macros", "vostd", "kernels/hello", "kernels/probe", "kernels/yield", "kernels/sched", "kernels/mem", "kernels/pie"]
 
 # The one lint setting of the Asterinas workspace the kernels need: OSTD's
 # `#[ostd::main]` expands to code under `cfg(ktest)`, Asterinas's test

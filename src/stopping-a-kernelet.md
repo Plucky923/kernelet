@@ -6,13 +6,13 @@ However a kernelet ends, every carrier stops, everything the kernelet held goes 
 
 1. The kernelet is **marked** stopped or dying, which is a single store.
 2. Every carrier is **stopped**, at a point where it holds nothing of Linux's.
-3. When no carrier is left, the sandbox has **exited**: what the kernelet held goes back and the holder's `KLET_WAIT` returns.
+3. When no carrier is left, the sandbox has **exited**: what the kernelet held goes back and the holder can read the exit record from the sandbox descriptor.
 
 A kernelet's state is abandoned, not tidied: nothing is unwound and no destructor runs, because tidying would mean running the tenant's kernel on the host's behalf at the moment it is least trusted. Once a carrier has left the image for good, no code from it runs on that carrier again, and the endovisor never runs kernelet code on the host's behalf. What the endovisor gave the kernelet it takes back as a whole, without looking inside: the address spaces, every heap block the kernelet still held, which the endovisor tracks in a table of its own, and the pool of kernelet stacks.
 
 ## Stopping from inside
 
-Both the kernel proper's `poweroff` and a panic in the kernelet end in the service `stop`, which marks the instance dying and kills every carrier, its caller included. On the endovisor's side it records the exit code for the holder's `KLET_WAIT`, marks the instance as dying, sends `SIGKILL` to every carrier, the caller included, and arms the eviction sweep of the end of this chapter; then the calling carrier leaves its kernelet stack for the last time.
+Both the kernel proper's `poweroff` and a panic in the kernelet end in the service `stop`, which marks the instance dying and kills every carrier, its caller included. On the endovisor's side it records the exit code for the holder to read from the sandbox descriptor, marks the instance as dying, sends `SIGKILL` to every carrier, the caller included, and arms the eviction sweep of the end of this chapter; then the calling carrier leaves its kernelet stack for the last time.
 
 *Simplified from `prototype/linux/endovisor/carrier.c`: `klet_stop_instance`, `klet_svc_stop`, `klet_carrier_die`.*
 
@@ -68,7 +68,7 @@ void klet_carrier_lifeline_closed(struct klet_carrier *c)
 	if (live)
 		klet_end(inst, KLET_END_KILLED, 0, KLET_KILLED_CARRIER_LOST);   /* a carrier's death is the sandbox's death */
 	else if (claim)
-		klet_sandbox_exited(inst);               /* the address spaces, the heap blocks still held, the stack pool; KLET_WAIT returns */
+		klet_sandbox_exited(inst);               // Release the address spaces, heap blocks and stack pool; wake exit-record readers.
 	if (c->task == current) {                    /* undo its attachment, which only its own task may do */
 		current->carrier_hooks = NULL;
 		klet_sched_detach(c);
@@ -85,7 +85,7 @@ void klet_carrier_lifeline_closed(struct klet_carrier *c)
 ```c
 void klet_end(struct klet_inst *inst, u32 how, s32 code, u32 reason)
 {
-	if (!inst->exit.how) {                       /* the first end records why, for KLET_WAIT */
+	if (!inst->exit.how) {                       // The first end records the final exit reason.
 		inst->exit.how = how;
 		inst->exit.code = code;
 		inst->exit.reason = reason;
@@ -106,7 +106,7 @@ Any carrier's death while the sandbox is running ends it: a sandbox that had los
 
 Every end of a sandbox goes through `klet_end`, which records why, marks it dying, kills every carrier and arms the eviction sweep. The sweep is armed even for the kernelet's own stop, for a reason the next section makes clear: a virtual CPU that the stop left spinning in kernel mode never passes through a hook again to die, and only eviction gets it out.
 
-The last carrier's death is the sandbox's exit, which releases what the kernelet held and wakes the holder's `KLET_WAIT`.
+The last carrier's death is the sandbox's exit. It releases what the kernelet held, makes the sandbox descriptor readable, and wakes the holder waiting for its exit record.
 
 A carrier killed in user mode before any mark never detaches, so its lifeline's release is where its records are freed and the sandbox is told to die. Such a carrier passes through the resume hook once more, since the signal counts as pending work, but the hook, finding no mark and (usually) no virtual interrupt pending, steps aside; Linux kills the task, and `klet_detach` never runs for it. (With a tick pending, the hook enters the kernelet, a service dooms the carrier, and it dies by the route of the next paragraph instead.) The lifeline's release frees what the detach would have: this is why the death notice, not the detach, is the place where a carrier's records are finally released, and, since the sandbox was running, where the rest of the sandbox is told to die.
 

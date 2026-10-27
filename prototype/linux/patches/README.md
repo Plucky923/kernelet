@@ -20,24 +20,22 @@ needs; everything else is the endovisor module. It adds, behind
   (`kernel/fork.c`);
 - `kernelet_mm_alloc()`, `mm_alloc()` with the sandbox's owner task as the
   memory controller's owner of the new address space (`kernel/fork.c`);
-- two exports, of the two functions the endovisor needs that Linux does not
-  already export: `kernel_clone` (`kernel/fork.c`), which clones the vCPU
-  carriers, and `flush_tlb_mm_range` (`arch/x86/mm/tlb.c`), the synchronous
+- two exports not already provided to modules: `kernel_clone`
+  (`kernel/fork.c`), retained from the earlier carrier implementation,
+  and `flush_tlb_mm_range` (`arch/x86/mm/tlb.c`), the synchronous
   flush of `vm_flush`;
 - the Kconfig entry, which selects `PREEMPT_NOTIFIERS` (`init/Kconfig`);
-- four more exports, for the endovisor's own image loader and its
-  registration of an image: `execmem_alloc` and `execmem_free`
-  (`mm/execmem.c`), which allocate an image's memory where modules live,
-  within 2 GiB of the kernel's text as the image's code model needs;
-  `set_memory_rox` (`arch/x86/mm/pat/set_memory.c`), which makes its text
-  read-only and executable once it is relocated; and the variable
-  `modules_disabled` (`kernel/module/main.c`), which `KLET_KIND_REGISTER`
-  checks as `init_module` does. Each is one `EXPORT_SYMBOL_GPL` line:
+- four more exports, for the endovisor's PIE image loader and registration:
+  `set_memory_rox`, `set_memory_ro`, and `set_memory_rw`
+  (`arch/x86/mm/pat/set_memory.c`) set executable/read-only permissions and
+  restore backing-page writability before freeing; `modules_disabled`
+  (`kernel/module/main.c`) is checked by `KLET_KIND_REGISTER` as by `init_module`.
+  Each is one `EXPORT_SYMBOL_GPL` line:
 
   ```text
-  mm/execmem.c                  +EXPORT_SYMBOL_GPL(execmem_alloc);
-  mm/execmem.c                  +EXPORT_SYMBOL_GPL(execmem_free);
   arch/x86/mm/pat/set_memory.c  +EXPORT_SYMBOL_GPL(set_memory_rox);
+  arch/x86/mm/pat/set_memory.c  +EXPORT_SYMBOL_GPL(set_memory_ro);
+  arch/x86/mm/pat/set_memory.c  +EXPORT_SYMBOL_GPL(set_memory_rw);
   kernel/module/main.c          +EXPORT_SYMBOL_GPL(modules_disabled);
   ```
 
@@ -61,4 +59,4 @@ it. The patch was generated with `diff -u` against pristine v6.12 files. A
 tree that has an older version of the patch applied is not brought up to
 date by `make patch`: the reverse dry run of the new patch fails and the
 forward one finds most of it applied already. Apply the difference by hand
-(the four export hunks were applied so) or start from a pristine tree.
+(the PIE permission-export changes were applied so) or start from a pristine tree.

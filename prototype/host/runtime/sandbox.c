@@ -304,8 +304,8 @@ void wait_sandbox(int sandbox_fd, const pid_t *pids, unsigned int nr_vcpus, stru
 	for (i = 0; i < nr_vcpus; i++)
 		if (pfd[i + 1].fd >= 0)
 			close(pfd[i + 1].fd);
-	if (ioctl(sandbox_fd, KLET_WAIT, ex) < 0)
-		die("KLET_WAIT");
+	if (read(sandbox_fd, ex, sizeof(*ex)) != sizeof(*ex))
+		die("read sandbox exit");
 }
 
 /* ------------------------------------------------------------------ */
@@ -529,8 +529,6 @@ int run_sandbox(int sys_fd, const char *name, unsigned int nr_vcpus, const char 
 	for (i = 0; i < nr_vcpus; i++)
 		waitpid(sb.pids[i], NULL, 0);		/* the carriers died by SIGKILL */
 	sandbox_print_stats(&sb, "at its end");
-	if (ioctl(sb.fd, KLET_DESTROY) < 0)
-		die("KLET_DESTROY");
 	close(sb.fd);
 
 	switch (sb.ex.how) {

@@ -271,34 +271,35 @@ Page faults on tenant memory take a shorter path through the endovisor's own fau
 
 ## Hello, world
 
-With chapters 4 to 8 built, `make hello` boots Linux in QEMU, loads the module, runs the holder, and this appears in the serial log (the run is `prototype/.build/uapi2-run1-serial-hello.log`; one line of Linux's own about an out-of-tree module, the lines of a self-test of the interface that the test runs first, and the counters printed at unload are left out):
+With chapters 4 to 8 built, `make hello` boots Linux in QEMU, loads the module, runs the holder, and this appears in the serial log (the run is `prototype/.build/serial-hello.log`; one line of Linux's own about an out-of-tree module, the lines of a self-test of the interface that the test runs first, and the counters printed at unload are left out):
 
 ```
 INIT: loading endovisor.ko
-kernelet: endovisor loaded: /dev/endovisor, API 1, image ABI 6, watch on, mirror on, fpu area 1088 B, tsc 3791992 kHz
+kernelet: endovisor loaded: /dev/endovisor, API 2, image ABI 6, watch on, mirror on, fpu area 1088 B, tsc 3791992 kHz
 INIT: running /tests/10-hello
 RUN-TEST: running /holder register hello /hello.image
-kernelet: image loaded: 59877 bytes of text at ffffffffc0207000, 32983 of read-only data, 50656 of data and bss at ffffffffc021f000, 2798 relocations applied
-kernelet: kind 0 "hello" registered: an image of 328680 bytes, text [0xffffffffc0207000, 0xffffffffc02159e5), 94208 bytes shared
+kernelet: PIE image loaded: 155648 bytes, 94208 shared, 61440 private per instance, 358 relative relocations
+kernelet: kind 0 "hello" registered: an image of 144984 bytes, PIE text offsets [0x0, 0xec05), 94208 bytes shared
 holder: kind 0 registered: hello from /hello.image
 RUN-TEST: /holder register hello /hello.image exited 0
 RUN-TEST: running /holder run -c /sys/fs/cgroup/sandbox --console /hello.console --log /hello.log hello 1
 kernelet: sandbox 0 created: kind 0 "hello", 1 vcpu(s), memory 4096 KiB (max 65536 KiB), max_tasks 256, cmdline ""
 holder: sandbox 0 created: kind hello, 1 vcpu(s), cmdline ""
-kernelet: sandbox 0: vcpu 0 carrier (pid 47) arrived as kernelet/0/0: address space emptied, every signal ignored, dumpable 1 -> 0
+kernelet: sandbox 0: vcpu 0 carrier (pid 50) arrived as kernelet/0/0: address space emptied, every signal ignored, dumpable 1 -> 0
+kernelet: sandbox 0: PIE mapping [0xffffac31c009b000, 0xffffac31c00c1000), shared 94208 bytes, private 61440 bytes
 kernelet: sandbox 0: host offsets: gs:current 0x1fac0, gs:preempt_count 0x1fac8, task->carrier_hooks +1968, hooks->vrec +16
-kernelet: sandbox 0 started: kind "hello" loaded as its instance (53248 bytes of data restored), grant 4096 KiB at 0x1000000, charged to its control group
+kernelet: sandbox 0 started: kind "hello" loaded as its instance (61440 bytes of private data), grant 4096 KiB at 0xc00000, charged to its control group
 kernelet: sandbox 0: every virtual CPU's carrier has arrived (1); booting the kernelet
-kernelet: service stub: 36 cycles through the stack switch, 24 for the service body alone (least of 7 rounds of 2000, rdtsc, interrupts off)
-kernelet: space 1 created: root 0x7c1000, area [0x10000, 0x7ffffffff000), its own inode, mm owner a task
+kernelet: service stub: 71 cycles through the stack switch, 42 for the service body alone (least of 7 rounds of 2000, rdtsc, interrupts off)
+kernelet: space 1 created: root 0x7c9000, area [0x10000, 0x7ffffffff000), its own inode, mm owner a task
 kernelet: stopped, exit code 0
 kernelet: arming the eviction sweep every 1000 us on 2 cpu(s)
-kernelet: sandbox 0: vcpu 0 carrier (pid 47) dying
-kernelet: sandbox 0: vcpu 0 carrier (pid 47) lifeline closed, the last one
+kernelet: sandbox 0: vcpu 0 carrier (pid 50) dying
+kernelet: sandbox 0: vcpu 0 carrier (pid 50) lifeline closed, the last one
 kernelet: sandbox 0 is gone: 7 heap block(s) the kernelet still held freed (752 bytes), 2 kernelet stack(s) returned to vmalloc (1 still in use)
 kernelet: sandbox 0 exited: the kernel proper powered off, exit code 0
 holder: sandbox 0 at its end: state 5 (exited), 1 vcpu(s), 4096 KiB granted, 14022 service call(s), 0 virtual interrupt(s), 0 line(s) dropped
-holder: sandbox 0 at its end: vcpu 0 pid 47 state 3 (gone), ran 13 ms, waited 0 ms runnable
+holder: sandbox 0 at its end: vcpu 0 pid 50 state 3 (gone), ran 34 ms, waited 0 ms runnable
 kernelet: sandbox 0 destroyed
 holder: sandbox 0 exited: the kernel proper powered off, exit code 0
 holder: no carrier left (module references: 0)
@@ -306,8 +307,8 @@ RUN-TEST: /holder run -c /sys/fs/cgroup/sandbox --console /hello.console --log /
 RUN-TEST: /hello.console: Hello, world
 RUN-TEST: /hello.console: 
 RUN-TEST: /hello.console: 2 line(s)
-RUN-TEST: /hello.log: vOSTD up: grant 0x1000000..0x1400000, linear map 0xffff9a7480000000, 1 vCPU(s), tsc 3791992 kHz, fpu area 1088 B
-RUN-TEST: /hello.log: vOSTD: heap: a 64-byte allocation and its free, 449 cycles the pair (least of 7 rounds of 1000, rdtsc)
+RUN-TEST: /hello.log: vOSTD up: grant 0xc00000..0x1000000, linear map 0xffff93d1c0000000, 1 vCPU(s), tsc 3791992 kHz, fpu area 1088 B
+RUN-TEST: /hello.log: vOSTD: heap: a 64-byte allocation and its free, 748 cycles the pair (least of 7 rounds of 1000, rdtsc)
 RUN-TEST: /hello.log: 2 line(s)
 RUN-TEST: done
 INIT: /tests/10-hello exited 0
@@ -316,7 +317,7 @@ kernelet: endovisor unloaded
 INIT: done
 ```
 
-The log follows one sandbox from registration to destruction. The holder registers the image as a kind, and the endovisor loads it where modules live (chapter 4); the holder creates the sandbox with a console file and a log file, and forks and execs its one carrier, which the handler turns into one (chapter 6); the endovisor publishes the offsets by which vOSTD will find its way around Linux, restores the image's data and allocates the grant (chapter 4), and, every carrier having arrived, boots the kernelet, which enters the image and, before anything else, times a heap allocation and its free and then, at its first log line, a service call that does nothing (the numbers are the subject of the last chapter); the kernel proper creates its address space; the program's `write` arrives by the syscall hook and the kernel proper prints the message through `console_write` to the console file, followed by the message's own newline as an empty line; its `exit` becomes the `stop` service, which arms the sweep that takes a processor back from a virtual CPU left spinning; the carrier dies and its lifeline closes, and the last release returns what the kernelet held, the stack the stopping carrier was still standing on included; the holder reads the sandbox's statistics, destroys it, and the test prints the two files; the module's reference count reaches zero and it unloads.
+The log follows one sandbox from registration to destruction. The holder registers the image as a kind, and the endovisor validates its PIE layout and retains its shared pages (chapter 2); the holder creates the sandbox with a console file and a log file, and forks and execs its one carrier, which the handler turns into one (chapter 6); the endovisor maps the shared code with private relocated data, publishes the offsets by which vOSTD will find its way around Linux, and allocates the grant (chapters 2 and 4), and, every carrier having arrived, boots the kernelet, which enters the image and, before anything else, times a heap allocation and its free and then, at its first log line, a service call that does nothing (the numbers are the subject of the last chapter); the kernel proper creates its address space; the program's `write` arrives by the syscall hook and the kernel proper prints the message through `console_write` to the console file, followed by the message's own newline as an empty line; its `exit` becomes the `stop` service, which arms the sweep that takes a processor back from a virtual CPU left spinning; the carrier dies and its lifeline closes, and the last release returns what the kernelet held, the stack the stopping carrier was still standing on included; the holder reads the sandbox's statistics and closes its descriptor, releasing the remaining resources; the test prints the two files; the module's reference count reaches zero and it unloads.
 
 The build checks that the console file holds the greeting, that the serial log has the exit code, a clean unload, and no Linux error report.
 

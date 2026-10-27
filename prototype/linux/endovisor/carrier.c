@@ -25,7 +25,7 @@
  *                          <- Linux stack
  *                          resume hook: adopt the space's mm, apply regs, iret
  *                          syscall hook: -> coroutine
- *   KLET_WAIT ...
+ *   read(sandbox_fd, &exit, sizeof(exit)) ...
  *
  * Three rules the code exists to keep:
  *
@@ -661,9 +661,9 @@ void klet_coro_main(struct klet_carrier *c)
 	struct klet_inst *inst = c->inst;
 
 	if (c->vcpu == 0)
-		inst->kind->entry->kernelet_entry(&inst->boot, &klet_services);
+		inst->entry->kernelet_entry(&inst->boot, &klet_services);
 	else
-		inst->kind->entry->vcpu_entry(c->vcpu);
+		inst->entry->vcpu_entry(c->vcpu);
 
 	/* The kernelet came back out of its entry point. Abandon this stack. */
 	for (;;)

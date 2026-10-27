@@ -36,18 +36,19 @@ each layer and the chapter of the book that explains it:
   QEMU with KVM        the Makefile's `run`
 ```
 
-The top level holds five directories: `kernels/` (the five kernels proper, each
-with its tenant program), `vostd/` and `libs/` (the framework and the two
+The source directories are: `kernels/` (the five teaching kernels and a PIE isolation test kernel), `vostd/` and `libs/` (the framework and the two
 crates it and the kernels take unchanged from the Asterinas tree), `linux/`
 (everything that is Linux's: the configuration fragment, the patch and the
 endovisor module), `host/` (what runs in the booted Linux's user space: the
-kernelet runtimes and PID 1) and `bench/` (the scripts that turn the
-measurement logs into tables).
+kernelet runtimes and PID 1), `bench/` (the scripts that turn the
+measurement logs into tables), and `tools/` (the build-time ELF image checker).
 
-The kernel proper and vOSTD are one Rust static library, pre-linked into one
-relocatable object, the **image**, a file of its own (`.build/<kernel>.image`),
-which the holder registers as a *kind* and the endovisor loads and relocates
-itself; one `endovisor.ko` serves every kernel proper. The image calls no
+The kernel proper and vOSTD are compiled as position-independent code and
+linked into one self-contained PIE (`ET_DYN`), the **image**, a file of its own
+(`.build/<kernel>.image`). The holder registers it as a *kind*. The endovisor
+maps its shared physical code pages at a separate virtual address for each
+sandbox, with private writable data and relative pointer relocations; one
+`endovisor.ko` serves every kernel proper. The image calls no
 Linux symbol: everything it needs from the host is a service in the table the
 endovisor hands it at entry. The endovisor is an ordinary out-of-tree module
 apart from the patch to Linux, which adds 223 lines (202 of them not blank)
@@ -147,7 +148,7 @@ the mem kernel). Every build is `--offline`, so only the toolchain (once,
 through `rustup`), the crates and the one download of Linux need the network;
 an offline build that finds a crate missing says to run `make crates`.
 
-`make test` runs, in order, and stops at the first failure: `hello`, `probe`,
+`make test` runs, in order, and stops at the first failure: `hello`, `pie`, `probe`,
 `yield`, `sched-policy`, `sched-coop`, `sched-fpu`, `mem-func`, `mem-r2`,
 `mem-conc`, `mem-kill`, `mem-pressure`. It prints one line per test; each
 test's whole output is in `.build/test-<name>.out`. `make bench` runs
@@ -165,9 +166,10 @@ Run them from `prototype/`, or from the repository root as
 
 | target | what it does | chapter |
 |---|---|---|
-| `make test` | the eleven tests below, in order | – |
+| `make test` | the twelve tests below, in order | – |
 | `make bench` | `sched-fair`, `sched-perf`, `mem-perf`, reported | 14 |
-| `make hello` | first `uapi-check`, the endovisor UAPI's refusals and promises one by one (67 checks, two sandboxes of two kinds at once among them); then the 100-line kernel, byte-identical to `kernels/hello/upstream/`, with its console and log in files: "Hello, world" in the console file, a clean stop, a clean module unload; also the one-off measurements of what a service costs ("service stub: N cycles") and of what a heap allocation and its free cost ("heap: ... N cycles the pair") | 2, 3, 6, 7 |
+| `make hello` | first `uapi-check`, the endovisor UAPI's refusals and promises one by one (114 checks, including descriptor reads and readiness, last-close cleanup, malformed PIE images, and multiple sandboxes of one kind); then the 100-line kernel, byte-identical to `kernels/hello/upstream/`, with its console and log in files: "Hello, world" in the console file, a clean stop, a clean module unload; also the one-off measurements of what a service costs ("service stub: N cycles") and of what a heap allocation and its free cost ("heap: ... N cycles the pair") | 2, 3, 6, 7 |
+| `make pie` | one registered image, concurrent mappings with shared physical code and private data; relocated pointers, survivor progress after peer destruction, and fresh state on replacement | 2 |
 | `make probe` | three boots. The probe: demand paging, a 4 MiB `write` whose buffer the heap refuses (the kernel proper answers `-ENOMEM`, and Linux's page allocator is never asked), exceptions other than page faults (`ud2` twice in a row, trap 6; `int3`, trap 3; `hlt`, trap 13, a general-protection fault), each fault signal ignored again after it was drained, and eviction of a kernelet spinning in kernel mode when its carrier is sent `SIGKILL` (by the watch timer). Then the same tenant under a seccomp filter that kills the process on its endless system call: Linux forces `SIGSYS` on the carrier as a fatal signal, the resume hook leaves it to Linux, the carrier dies by it, and its death ends the sandbox, with no warning. Then the probe ended by `KLET_KILL`, which leaves the spinner to the eviction sweep | 2, 4, 7, 11, 12 |
 | `make yield` | two boots under `preempt=none`, the watch timer off (the competitor starves) and on (it does not, and the checksums agree) | 9, 10 |
 | `make sched-policy` | the kernelet's own scheduler: its trace checked against a reference model | 8 |
@@ -186,7 +188,7 @@ Run them from `prototype/`, or from the repository root as
 | `make source` | download and unpack Linux v6.12 if `.build/linux-6.12/Makefile` is not there, and apply the patch | 4 |
 | `make patch` | apply the patch; idempotent | 4 |
 | `make linux` | configure (once, from `linux/config.fragment`; `make config` does only that) and build `bzImage`, `modules` (which writes the tree's `Module.symvers`, without which no out-of-tree module links) and `modules_prepare` | 4 |
-| `make image` | build vOSTD and the kernel proper named by `KLET_KERNEL` (`hello`, `probe`, `yieldk`, `schedk`, `mem`) and pre-link the image, `.build/<kernel>.image`, checking it as the endovisor will: no GOT relocation, no undefined symbol, one global symbol | 2, 3 |
+| `make image` | build vOSTD and the kernel proper named by `KLET_KERNEL` (`hello`, `probe`, `yieldk`, `schedk`, `mem`, `piecheck`) and link `.build/<kernel>.image` as a self-contained PIE; check its load segments, entry table and private `R_X86_64_RELATIVE` relocations | 2, 3 |
 | `make endovisor-module` | `linux/endovisor/endovisor.ko`, which carries no image | 3 |
 | `make runtime`, `make initramfs`, `make run` | the runtimes (the holder, `run-test`, the drivers); the initramfs from `.build/stage`; one boot | 2, 5, 7 |
 | `make clean` | remove the harness's artifacts: the image and module, the runtimes, the staging area and the initramfs, the Rust build, every log and test output. It leaves the Linux tree, its build, the Cargo registry and `.build/crates.stamp` (which says the registry has the crates) | – |
@@ -329,9 +331,9 @@ requires 0 live in each of the last three.
   that a stopped or evicted kernelet's tasks, address spaces and run queues
   do not leak), and returns the whole kernelet-stack pool to `vmalloc`, the
   stacks still in use included. The grant, the exec files, the console and
-  log, the control group and the owner go when the sandbox is destroyed, by
-  `KLET_DESTROY` or by the endovisor once the sandbox has exited and its last
-  descriptor is closed.
+  log, the control group and the owner go when the sandbox has exited and
+  its last descriptor is closed. Closing the last descriptor while it is live
+  requests its death; that close does not wait for the carriers to stop.
 - **Memory.** What the kernelet allocates through the host is charged to the
   memory cgroup of the carrier that asked, which is the sandbox's: its heap
   (`mem_alloc`, `GFP_KERNEL_ACCOUNT`, and the table that records its blocks), its kernelet stacks (`__vmalloc` with

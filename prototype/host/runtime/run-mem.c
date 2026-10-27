@@ -336,7 +336,7 @@ static void during(struct sandbox *sb, void *arg)
 			     strcmp(mode, "killidle") == 0 ? "idle in vcpu_idle" : "running a kernel task");
 			t0 = now_ms();
 			kill((pid_t)cpid, SIGKILL);
-			/* Exited: KLET_WAIT would return, every carrier is gone. */
+			// Exited: a sandbox read would return; every carrier is gone.
 			if (sandbox_exited(sb, 10000))
 				outf("RUN-MEM: the sandbox ended %lld ms after the kill\n", now_ms() - t0);
 			else

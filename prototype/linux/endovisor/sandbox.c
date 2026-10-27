@@ -1,29 +1,19 @@
 // SPDX-License-Identifier: GPL-2.0
-/*
- * The sandbox: KLET_CREATE, the sandbox descriptor and its operations, the
- * exec descriptors, the start, the end and the destroy.
- *
- * A sandbox is one struct klet_inst, in a table of KLET_MAX_SANDBOXES slots;
- * its slot is the sandbox's slot of the UAPI, which names its carriers. The
- * instance is reference-counted: the sandbox file holds one reference, and
- * every carrier record one, so that it outlives both its descriptor and its
- * carriers, whichever goes last.
- *
- * The end, exactly as the header says it. Whatever ends a sandbox (the
- * kernel proper powering off, KLET_KILL, the last copy of the descriptor
- * closing, a carrier dying while it is live) goes through klet_end(): the
- * exit record is written by the first of them and never again, the sandbox is
- * marked dying, every carrier is sent SIGKILL and the eviction sweep is armed,
- * since with no root carrier nothing else would take a processor back from a
- * virtual CPU spinning in kernelet code. The sandbox has *exited* when, after
- * that, its last carrier is gone, or at once if it had none: one caller, and
- * only one, finds the count at zero with the sandbox dying, under the
- * instance's lock (klet_check_exited_locked), and runs klet_sandbox_exited().
- * The exit record is then final, KLET_WAIT returns it and poll says POLLIN.
- * A sandbox is destroyed by KLET_DESTROY, or by the endovisor itself once it
- * has exited and its last descriptor is closed, whichever of the two comes
- * second; release never waits for carriers.
- */
+// The sandbox owns its descriptor, exec descriptors, image mapping, and lifecycle.
+//
+// `KLET_CREATE` allocates one `struct klet_inst` in the sandbox table.
+// The sandbox file and every carrier record hold references to the instance,
+// so it outlives whichever of its descriptor or carriers goes last.
+//
+// Every termination path goes through `klet_end`:
+// power-off, `KLET_KILL`, the last descriptor closing, or a live carrier dying.
+// The first request records the reason and marks the sandbox dying.
+// It sends `SIGKILL` to the carriers and arms the eviction sweep.
+// Once the last carrier is gone, `klet_sandbox_exited` finishes teardown,
+// wakes blocked readers, and makes the descriptor readable to polling callers.
+// The endovisor releases the remaining resources once the sandbox has exited
+// and its last descriptor is closed, whichever happens last.
+// Closing a live sandbox never waits for its carriers.
 
 #include <linux/anon_inodes.h>
 #include <linux/binfmts.h>
@@ -252,8 +242,6 @@ long klet_sandbox_create(struct klet_create __user *uarg)
 	kind = cr.kind < KLET_MAX_KINDS ? &klet_kinds[cr.kind] : NULL;
 	if (!kind || !kind->used)
 		err = -ENOENT;
-	else if (kind->nr_sandboxes)
-		err = -EBUSY;	/* one live sandbox per kind: the image is position-dependent */
 	else {
 		err = -ENOSPC;
 		for (slot = 0; slot < KLET_MAX_SANDBOXES; slot++)
@@ -463,13 +451,13 @@ void klet_exec_unclaim(struct klet_inst *inst, unsigned int vcpu)
 /* The start                                                          */
 /* ------------------------------------------------------------------ */
 
-/*
- * The first carrier has arrived: load the kind's image as this sandbox's
- * instance (its data restored, its bss zeroed), grant memory_initial, charged
- * to the sandbox's group (the carrier is in it, which the exec checked), and
- * write the boot arguments. No kernelet code runs until every carrier has
- * arrived, and only then does vCPU 0 enter the image.
- */
+// Prepare the image, initial grant, and boot arguments for the first carrier.
+//
+// Map the kind's immutable pages with private data for this instance.
+// Charge the private image pages and `memory_initial` grant to the sandbox's group:
+// the carrier is in that group, as the exec handler checked.
+// No kernelet code runs until every carrier has arrived,
+// and only then does vCPU 0 enter the image.
 int klet_sandbox_start(struct klet_inst *inst)
 {
 	struct klet_kind *kind = inst->kind;
@@ -477,7 +465,9 @@ int klet_sandbox_start(struct klet_inst *inst)
 	unsigned int order = get_order(inst->memory_initial);
 	int err;
 
-	klet_image_restore(kind);
+	err = klet_image_start(inst);
+	if (err)
+		return err;
 	pages = alloc_pages(GFP_KERNEL_ACCOUNT | __GFP_ZERO | __GFP_NOWARN, order);
 	if (!pages)
 		return -ENOMEM;
@@ -493,13 +483,13 @@ int klet_sandbox_start(struct klet_inst *inst)
 	inst->boot.fpu_area_align = 64;
 	inst->boot.tsc_khz = tsc_khz;
 	inst->boot.mirror_preempt = klet_mirror ? 1 : 0;
-	inst->boot.image_text_lo = kind->text_lo;
-	inst->boot.image_text_hi = kind->text_hi;
+	inst->boot.image_text_lo = inst->text_lo;
+	inst->boot.image_text_hi = inst->text_hi;
 	inst->boot.pgtable_levels = pgtable_l5_enabled() ? 5 : 4;
 	err = klet_publish_host_offsets(inst);
 	if (err)
 		return err;
-	pr_info("kernelet: sandbox %d started: kind \"%s\" loaded as its instance (%zu bytes of data restored), grant %llu KiB at %#llx, charged to its control group\n",
+	pr_info("kernelet: sandbox %d started: kind \"%s\" loaded as its instance (%zu bytes of private data), grant %llu KiB at %#llx, charged to its control group\n",
 		inst->slot, kind->name, kind->data_size, inst->boot.grant_len >> 10,
 		inst->boot.grant_paddr);
 	return 0;
@@ -632,11 +622,7 @@ static void klet_fold_counters(struct klet_inst *inst)
 	atomic_add(inst->kstack_returned, &t->kstack_returned);
 }
 
-/*
- * KLET_DESTROY, or the endovisor's own once the sandbox has exited and its
- * last descriptor is closed: give back everything that is left. The exit
- * record stays in the instance, which the descriptor still references.
- */
+// Release remaining resources after exit and the last descriptor close.
 static long klet_sandbox_destroy(struct klet_inst *inst)
 {
 	unsigned int i;
@@ -657,6 +643,7 @@ static long klet_sandbox_destroy(struct klet_inst *inst)
 	if (inst->grant_pages)
 		__free_pages(inst->grant_pages, inst->grant_order);
 	inst->grant_pages = NULL;
+	klet_image_stop(inst);
 	for (i = 0; i < inst->nr_vcpus; i++)
 		if (inst->vslot[i].exec_file) {
 			fput(inst->vslot[i].exec_file);
@@ -741,6 +728,9 @@ static long klet_get_stats(struct klet_inst *inst, struct klet_stats __user *uar
 	}
 	spin_lock(&inst->lock);
 	st.state = klet_sandbox_state(inst);
+	memset(&st.exit, 0, sizeof(st.exit));
+	if (inst->exited)
+		st.exit = inst->exit;
 	spin_unlock(&inst->lock);
 	st.nr_vcpus = inst->nr_vcpus;
 	st.memory_granted = inst->grant_pages ? PAGE_SIZE << inst->grant_order : 0;
@@ -777,22 +767,36 @@ static long klet_sandbox_ioctl(struct file *file, unsigned int cmd, unsigned lon
 		klet_end(inst, KLET_END_KILLED, 0, reason);
 		return 0;
 	}
-	case KLET_WAIT: {
-		int err = wait_event_interruptible(inst->exit_wq, READ_ONCE(inst->exited));
-
-		if (err)
-			return err;
-		if (copy_to_user(uarg, &inst->exit, sizeof(inst->exit)))
-			return -EFAULT;
-		return 0;
-	}
 	case KLET_GET_STATS:
 		return klet_get_stats(inst, uarg);
-	case KLET_DESTROY:
-		return klet_sandbox_destroy(inst);
 	default:
 		return -ENOTTY;
 	}
+}
+
+// Wait for exit and return the immutable record without consuming it.
+static ssize_t klet_sandbox_read(struct file *file, char __user *buf,
+				size_t count, loff_t *pos)
+{
+	struct klet_inst *inst = file->private_data;
+	struct klet_exit exit;
+	int err;
+
+	if (!count)
+		return 0;
+	if (count < sizeof(exit))
+		return -EINVAL;
+	if ((file->f_flags & O_NONBLOCK) && !READ_ONCE(inst->exited))
+		return -EAGAIN;
+	err = wait_event_interruptible(inst->exit_wq, READ_ONCE(inst->exited));
+	if (err)
+		return err;
+	spin_lock(&inst->lock);
+	exit = inst->exit;
+	spin_unlock(&inst->lock);
+	if (copy_to_user(buf, &exit, sizeof(exit)))
+		return -EFAULT;
+	return sizeof(exit);
 }
 
 static __poll_t klet_sandbox_poll(struct file *file, struct poll_table_struct *pt)
@@ -834,8 +838,8 @@ static int klet_sandbox_release(struct inode *inode, struct file *file)
 
 static const struct file_operations klet_sandbox_fops = {
 	.owner = THIS_MODULE,
+	.read = klet_sandbox_read,
 	.unlocked_ioctl = klet_sandbox_ioctl,
 	.poll = klet_sandbox_poll,
 	.release = klet_sandbox_release,
-	.llseek = noop_llseek,
 };

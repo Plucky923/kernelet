@@ -133,7 +133,7 @@ bool klet_virq_redirect(struct klet_carrier *c, struct pt_regs *regs)
 	WRITE_ONCE(c->vrec.virq_ip, regs->ip);
 	/* Order: mask first, then divert, so the stub always sees it masked. */
 	WRITE_ONCE(c->vrec.irq_off, 1);
-	regs->ip = (unsigned long)c->inst->kind->entry->virq_entry;
+	regs->ip = (unsigned long)c->inst->entry->virq_entry;
 	atomic_inc(&c->inst->n.virqs);
 	return true;
 }
