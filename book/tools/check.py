@@ -20,6 +20,8 @@ So a sentence such as
     *Simplified from `prototype/endovisor/carrier.c`: `klet_on_syscall` and `klet_enter`.*
 
 is a promise the checker keeps: the file exists, and both names are in it.
+References in prose to generated logs under prototype/.build/ are provenance,
+not prerequisites for building the book; source captions are always checked.
 """
 
 import os
@@ -164,7 +166,8 @@ def main():
             # captions promise that their files and identifiers already exist.
             if proposal_area and not CAPTION_RE.match(line):
                 continue
-            files = [s for s in spans if s.startswith("prototype/")]
+            files = [s for s in spans if s.startswith("prototype/") and
+                     (CAPTION_RE.match(line) or not s.startswith("prototype/.build/"))]
             bodies = []
             for fspan in files:
                 fpath = os.path.join(ROOT, fspan)
