@@ -17,7 +17,6 @@ read the [proposal guide](src/design-proposals/README.md) and copy the
 | `src/design-proposals/` | Proposal guide, template, and dated proposals |
 | `assets/` | Styles and diagram rendering scripts |
 | `tools/` | Source checker and browser renderer |
-| `tmp.md` | Existing working notes, outside the published book |
 | `build/` | Generated HTML, ignored by Git |
 
 Run these commands from this directory:
