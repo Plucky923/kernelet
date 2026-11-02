@@ -1,0 +1,330 @@
+<!DOCTYPE HTML>
+<html lang="en" class="light sidebar-visible" dir="ltr">
+    <head>
+        <!-- Book generated using mdBook -->
+        <meta charset="UTF-8">
+        <title>Why a kernel of your own - Building Kernelets on Linux</title>
+
+
+        <!-- Custom HTML head -->
+
+        <meta name="description" content="The accepted design and implementation of kernelets on Linux, with proposals for their evolution">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <meta name="theme-color" content="#ffffff">
+
+        <link rel="icon" href="../favicon-de23e50b.svg">
+        <link rel="shortcut icon" href="../favicon-8114d1fc.png">
+        <link rel="stylesheet" href="../css/variables-8adf115d.css">
+        <link rel="stylesheet" href="../css/general-2459343d.css">
+        <link rel="stylesheet" href="../css/chrome-ae938929.css">
+        <link rel="stylesheet" href="../css/print-9e4910d8.css" media="print">
+
+        <!-- Fonts -->
+        <link rel="stylesheet" href="../fonts/fonts-9644e21d.css">
+
+        <!-- Highlight.js Stylesheets -->
+        <link rel="stylesheet" id="mdbook-highlight-css" href="../highlight-493f70e1.css">
+        <link rel="stylesheet" id="mdbook-tomorrow-night-css" href="../tomorrow-night-4c0ae647.css">
+        <link rel="stylesheet" id="mdbook-ayu-highlight-css" href="../ayu-highlight-3fdfc3ac.css">
+
+        <!-- Custom theme stylesheets -->
+        <link rel="stylesheet" href="../assets/book-46594365.css">
+
+
+        <!-- Provide site root and default themes to javascript -->
+        <script>
+            const path_to_root = "../";
+            const default_light_theme = "light";
+            const default_dark_theme = "navy";
+            window.path_to_searchindex_js = "../searchindex-1dd0c655.js";
+        </script>
+        <!-- Start loading toc.js asap -->
+        <script src="../toc-e271ffef.js"></script>
+    </head>
+    <body>
+    <div id="mdbook-help-container">
+        <div id="mdbook-help-popup">
+            <h2 class="mdbook-help-title">Keyboard shortcuts</h2>
+            <div>
+                <p>Press <kbd>←</kbd> or <kbd>→</kbd> to navigate between chapters</p>
+                <p>Press <kbd>S</kbd> or <kbd>/</kbd> to search in the book</p>
+                <p>Press <kbd>?</kbd> to show this help</p>
+                <p>Press <kbd>Esc</kbd> to hide this help</p>
+            </div>
+        </div>
+    </div>
+    <div id="mdbook-body-container">
+        <!-- Work around some values being stored in localStorage wrapped in quotes -->
+        <script>
+            try {
+                let theme = localStorage.getItem('mdbook-theme');
+                let sidebar = localStorage.getItem('mdbook-sidebar');
+
+                if (theme.startsWith('"') && theme.endsWith('"')) {
+                    localStorage.setItem('mdbook-theme', theme.slice(1, theme.length - 1));
+                }
+
+                if (sidebar.startsWith('"') && sidebar.endsWith('"')) {
+                    localStorage.setItem('mdbook-sidebar', sidebar.slice(1, sidebar.length - 1));
+                }
+            } catch (e) { }
+        </script>
+
+        <!-- Set the theme before any content is loaded, prevents flash -->
+        <script>
+            const default_theme = window.matchMedia("(prefers-color-scheme: dark)").matches ? default_dark_theme : default_light_theme;
+            let theme;
+            try { theme = localStorage.getItem('mdbook-theme'); } catch(e) { }
+            if (theme === null || theme === undefined) { theme = default_theme; }
+            const html = document.documentElement;
+            html.classList.remove('light')
+            html.classList.add(theme);
+            html.classList.add("js");
+        </script>
+
+        <input type="checkbox" id="mdbook-sidebar-toggle-anchor" class="hidden">
+
+        <!-- Hide / unhide sidebar before it is displayed -->
+        <script>
+            let sidebar = null;
+            const sidebar_toggle = document.getElementById("mdbook-sidebar-toggle-anchor");
+            if (document.body.clientWidth >= 1080) {
+                try { sidebar = localStorage.getItem('mdbook-sidebar'); } catch(e) { }
+                sidebar = sidebar || 'visible';
+            } else {
+                sidebar = 'hidden';
+                sidebar_toggle.checked = false;
+            }
+            if (sidebar === 'visible') {
+                sidebar_toggle.checked = true;
+            } else {
+                html.classList.remove('sidebar-visible');
+            }
+        </script>
+
+        <nav id="mdbook-sidebar" class="sidebar" aria-label="Table of contents">
+            <!-- populated by js -->
+            <mdbook-sidebar-scrollbox class="sidebar-scrollbox"></mdbook-sidebar-scrollbox>
+            <noscript>
+                <iframe class="sidebar-iframe-outer" src="../toc.html"></iframe>
+            </noscript>
+            <div id="mdbook-sidebar-resize-handle" class="sidebar-resize-handle">
+                <div class="sidebar-resize-indicator"></div>
+            </div>
+        </nav>
+
+        <div id="mdbook-page-wrapper" class="page-wrapper">
+
+            <div class="page">
+                <div id="mdbook-menu-bar-hover-placeholder"></div>
+                <div id="mdbook-menu-bar" class="menu-bar sticky">
+                    <div class="left-buttons">
+                        <label id="mdbook-sidebar-toggle" class="icon-button" for="mdbook-sidebar-toggle-anchor" title="Toggle Table of Contents" aria-label="Toggle Table of Contents" aria-controls="mdbook-sidebar">
+                            <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M0 96C0 78.3 14.3 64 32 64H416c17.7 0 32 14.3 32 32s-14.3 32-32 32H32C14.3 128 0 113.7 0 96zM0 256c0-17.7 14.3-32 32-32H416c17.7 0 32 14.3 32 32s-14.3 32-32 32H32c-17.7 0-32-14.3-32-32zM448 416c0 17.7-14.3 32-32 32H32c-17.7 0-32-14.3-32-32s14.3-32 32-32H416c17.7 0 32 14.3 32 32z"/></svg></span>
+                        </label>
+                        <button id="mdbook-theme-toggle" class="icon-button" type="button" title="Change theme" aria-label="Change theme" aria-haspopup="true" aria-expanded="false" aria-controls="mdbook-theme-list">
+                            <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 576 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M371.3 367.1c27.3-3.9 51.9-19.4 67.2-42.9L600.2 74.1c12.6-19.5 9.4-45.3-7.6-61.2S549.7-4.4 531.1 9.6L294.4 187.2c-24 18-38.2 46.1-38.4 76.1L371.3 367.1zm-19.6 25.4l-116-104.4C175.9 290.3 128 339.6 128 400c0 3.9 .2 7.8 .6 11.6c1.8 17.5-10.2 36.4-27.8 36.4H96c-17.7 0-32 14.3-32 32s14.3 32 32 32H240c61.9 0 112-50.1 112-112c0-2.5-.1-5-.2-7.5z"/></svg></span>
+                        </button>
+                        <ul id="mdbook-theme-list" class="theme-popup" aria-label="Themes" role="menu">
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-default_theme">Auto</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-light">Light</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-rust">Rust</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-coal">Coal</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-navy">Navy</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-ayu">Ayu</button></li>
+                        </ul>
+                        <button id="mdbook-search-toggle" class="icon-button" type="button" title="Search (`/`)" aria-label="Toggle Searchbar" aria-expanded="false" aria-keyshortcuts="/ s" aria-controls="mdbook-searchbar">
+                            <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M416 208c0 45.9-14.9 88.3-40 122.7L502.6 457.4c12.5 12.5 12.5 32.8 0 45.3s-32.8 12.5-45.3 0L330.7 376c-34.4 25.2-76.8 40-122.7 40C93.1 416 0 322.9 0 208S93.1 0 208 0S416 93.1 416 208zM208 352c79.5 0 144-64.5 144-144s-64.5-144-144-144S64 128.5 64 208s64.5 144 144 144z"/></svg></span>
+                        </button>
+                    </div>
+
+                    <h1 class="menu-title">Building Kernelets on Linux</h1>
+
+                    <div class="right-buttons">
+                        <a href="../print.html" title="Print this book" aria-label="Print this book">
+                            <span class=fa-svg id="print-button"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M128 0C92.7 0 64 28.7 64 64v96h64V64H354.7L384 93.3V160h64V93.3c0-17-6.7-33.3-18.7-45.3L400 18.7C388 6.7 371.7 0 354.7 0H128zM384 352v32 64H128V384 368 352H384zm64 32h32c17.7 0 32-14.3 32-32V256c0-35.3-28.7-64-64-64H64c-35.3 0-64 28.7-64 64v96c0 17.7 14.3 32 32 32H64v64c0 35.3 28.7 64 64 64H384c35.3 0 64-28.7 64-64V384zm-16-88c-13.3 0-24-10.7-24-24s10.7-24 24-24s24 10.7 24 24s-10.7 24-24 24z"/></svg></span>
+                        </a>
+
+                    </div>
+                </div>
+
+                <div id="mdbook-search-wrapper" class="hidden">
+                    <form id="mdbook-searchbar-outer" class="searchbar-outer">
+                        <div class="search-wrapper">
+                            <input type="search" id="mdbook-searchbar" name="searchbar" placeholder="Search this book ..." aria-controls="mdbook-searchresults-outer" aria-describedby="searchresults-header">
+                            <div class="spinner-wrapper">
+                                <span class=fa-svg id="fa-spin"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M304 48c0-26.5-21.5-48-48-48s-48 21.5-48 48s21.5 48 48 48s48-21.5 48-48zm0 416c0-26.5-21.5-48-48-48s-48 21.5-48 48s21.5 48 48 48s48-21.5 48-48zM48 304c26.5 0 48-21.5 48-48s-21.5-48-48-48s-48 21.5-48 48s21.5 48 48 48zm464-48c0-26.5-21.5-48-48-48s-48 21.5-48 48s21.5 48 48 48s48-21.5 48-48zM142.9 437c18.7-18.7 18.7-49.1 0-67.9s-49.1-18.7-67.9 0s-18.7 49.1 0 67.9s49.1 18.7 67.9 0zm0-294.2c18.7-18.7 18.7-49.1 0-67.9S93.7 56.2 75 75s-18.7 49.1 0 67.9s49.1 18.7 67.9 0zM369.1 437c18.7 18.7 49.1 18.7 67.9 0s18.7-49.1 0-67.9s-49.1-18.7-67.9 0s-18.7 49.1 0 67.9z"/></svg></span>
+                            </div>
+                        </div>
+                    </form>
+                    <div id="mdbook-searchresults-outer" class="searchresults-outer hidden">
+                        <div id="mdbook-searchresults-header" class="searchresults-header"></div>
+                        <ul id="mdbook-searchresults">
+                        </ul>
+                    </div>
+                </div>
+
+                <!-- Apply ARIA attributes after the sidebar and the sidebar toggle button are added to the DOM -->
+                <script>
+                    document.getElementById('mdbook-sidebar-toggle').setAttribute('aria-expanded', sidebar === 'visible');
+                    document.getElementById('mdbook-sidebar').setAttribute('aria-hidden', sidebar !== 'visible');
+                    Array.from(document.querySelectorAll('#mdbook-sidebar a')).forEach(function(link) {
+                        link.setAttribute('tabIndex', sidebar === 'visible' ? 0 : -1);
+                    });
+                </script>
+
+                <div id="mdbook-content" class="content">
+                    <main>
+                        <h1 id="why-a-kernel-of-your-own"><a class="header" href="#why-a-kernel-of-your-own">Why a kernel of your own</a></h1>
+<p>A cloud provider, the <strong>operator</strong> of its machines, must keep its customers, called <strong>tenants</strong>, from reading or corrupting each other’s data, or starving each other of the machine. The business is profitable only because one physical computer runs programs from many tenants. Tenants do not trust each other, and the operator trusts none of them.</p>
+<p>There are two established ways to keep them apart. This chapter introduces a third.</p>
+<h2 id="two-ways-to-share-a-machine"><a class="header" href="#two-ways-to-share-a-machine">Two ways to share a machine</a></h2>
+<p>A <strong>virtual machine</strong> separates tenants strongly, at the price of a second layer of everything. It gives each tenant a whole simulated computer, in which the tenant installs a kernel and runs programs on that kernel. A layer underneath, the <em>hypervisor</em>, shares the real machine among the simulated ones. The separation is the hardware’s own: the processor refuses to let a guest touch anything outside its simulated machine. The second layer is a second kernel per tenant, a second translation of every memory address (once through the guest’s page table, once through the hypervisor’s), and a trap into the hypervisor whenever a guest touches a device the hypervisor simulates.</p>
+<p>A <strong>container</strong> costs almost nothing, but separates tenants only as deeply as the shared kernel is correct. It gives each tenant a slice of one kernel; what separates tenants is bookkeeping inside it, which hides one tenant’s processes and files from another’s. There is one kernel and one translation of every address, which is why it is cheap. But every tenant can call nearly every system call of the shared kernel, in practice Linux, which is built from tens of millions of lines of C, and a bug anywhere in that surface is a hole between tenants.</p>
+<pre class="mermaid">flowchart LR
+    subgraph KL["Kernelets"]
+        direction TB
+        b3["tenant B's&lt;br/&gt;programs"] --&gt; bkl
+        a3["tenant A's&lt;br/&gt;programs"] --&gt; akl
+        subgraph hk["the host kernel"]
+            direction TB
+            bkl["tenant B's&lt;br/&gt;kernelet"] --&gt; endo["the endovisor"]
+            akl["tenant A's&lt;br/&gt;kernelet"] --&gt; endo
+        end
+        endo --&gt; hw3[hardware]
+    end
+    subgraph CT["Containers"]
+        direction TB
+        a2["tenant A's&lt;br/&gt;programs"] --&gt; sk["one shared&lt;br/&gt;kernel"]
+        b2["tenant B's&lt;br/&gt;programs"] --&gt; sk
+        sk --&gt; hw2[hardware]
+    end
+    subgraph VM["Virtual machines"]
+        direction TB
+        a1["tenant A's&lt;br/&gt;programs"] --&gt; ak["tenant A's&lt;br/&gt;kernel"]
+        b1["tenant B's&lt;br/&gt;programs"] --&gt; bk["tenant B's&lt;br/&gt;kernel"]
+        ak --&gt; hv[hypervisor]
+        bk --&gt; hv
+        hv --&gt; hw1[hardware]
+    end
+    VM ~~~ CT ~~~ KL
+</pre>
+
+<p>In each panel an arrow points from code to the layer that serves its requests; a kernelet’s requests go to the endovisor, introduced below.</p>
+<h2 id="a-kernel-inside-the-kernel"><a class="header" href="#a-kernel-inside-the-kernel">A kernel inside the kernel</a></h2>
+<p>The third panel is the <strong>kernelet</strong>: a tenant’s own kernel, loaded <em>into</em> the kernel that runs the machine, the <strong>host kernel</strong>, and run there in kernel mode beside the host’s own code. Each tenant gets a kernel of its own, as with a virtual machine, but with no hypervisor and no simulated hardware: a kernelet is an ordinary piece of code that the host loads into its own memory.</p>
+<p>A component of the host kernel, the <strong>endovisor</strong>, creates, serves and destroys kernelets, as a hypervisor does its guests, but from inside the host rather than beneath it.</p>
+<p>A kernel of its own means one that no other tenant shares, not one the tenant wrote. The operator, not the tenant, compiles every kernelet. Code in kernel mode can do anything: read any memory, write any page table, halt the machine. Loading a binary a tenant supplied would hand the tenant the whole computer. So the operator builds each kernelet from source, with a compiler the operator trusts, and offers tenants a choice among those kernels.</p>
+<p>A kernelet must keep even its own bugs inside its tenant. Compiling the kernelet does not make it correct, and the tenant’s programs are hostile. A kernelet has two layers, described in the next section: a large one, the <em>kernel proper</em>, which implements the system calls the tenant’s programs make and certainly has bugs, and a small one underneath it. What has to hold is that even a kernel proper that a tenant’s program has taken over through such a bug cannot touch anything outside its own tenant: a bug in a kernelet should hurt only the tenant it serves. The next two sections show why the way a kernelet’s source is written makes that true.</p>
+<h2 id="a-kernel-in-two-layers"><a class="header" href="#a-kernel-in-two-layers">A kernel in two layers</a></h2>
+<p>A kernelet’s source is written the way Asterinas is: as a <em>framekernel</em>, split into two layers with a hard rule between them. Asterinas is a Rust kernel that aims to run the programs Linux runs.</p>
+<ul>
+<li><strong>OSTD</strong>, the <em>framework</em>, is the small part of the kernel that may use Rust’s <code>unsafe</code>. It wraps the machine (page tables, tasks, interrupts, entry to user mode) in an interface that cannot be misused to corrupt memory.</li>
+<li><strong>The kernel proper</strong> is everything else: system calls, file systems, the network stack, process and memory management. It is written entirely in <em>safe</em> Rust against OSTD’s interface, in every one of its crates.</li>
+</ul>
+<p>So the kernel proper can reach the machine only through OSTD’s interface. It cannot read through a forged address, because safe Rust cannot dereference one. It cannot execute a privileged instruction, because that takes inline assembly, which is <code>unsafe</code>. It can change a page table only by asking OSTD, which checks every request before carrying it out.</p>
+<p>The libraries the kernel proper uses must not give it a way around OSTD either. Every crate from outside the kernel proper must offer no safe function that does what only <code>unsafe</code> code should, such as running a privileged instruction or handing the hardware an unchecked physical address. Rust’s <code>core</code>, <code>alloc</code> and <code>compiler_builtins</code> are the exception: they contain <code>unsafe</code> code that every Rust program trusts.</p>
+<p>Asterinas’s own kernel proper does not yet keep that rule in every crate it links. Its default build pulls in a confidential-computing crate whose safe functions hand the hardware an unchecked physical address, which Asterinas’s own source marks as a fault to fix, and a processor-support crate whose safe functions run privileged instructions. A kernelet build must leave both out.</p>
+<p>This book’s kernels link nothing beyond <code>core</code>, <code>alloc</code>, <code>compiler_builtins</code>, one small helper crate shared with OSTD, and vOSTD.</p>
+<p>The kernel proper’s confinement to OSTD’s interface rests on a property of OSTD called <strong>soundness</strong>: no safe Rust code written against its interface can break memory safety, whatever that code does. Soundness is the foundation of kernelets, as the next section shows.</p>
+<p>OSTD’s soundness is argued, not proved. Its authors lay out the argument in a written soundness analysis and rely on review; research on Asterinas adds fuzzing, model checking and a verified memory-management design.</p>
+<h2 id="the-same-kernel-a-different-framework"><a class="header" href="#the-same-kernel-a-different-framework">The same kernel, a different framework</a></h2>
+<p>Now give the kernel proper a <em>different</em> OSTD, one that confines every request it passes to the host to one tenant’s resources. It keeps the same interface, so the kernel proper needs no change at all. Underneath, most operations that would touch hardware become requests to the host, and the few that are harmless to it, such as reading the cycle counter, the framework still does itself. The book calls that framework <strong>vOSTD</strong>, <em>virtual OSTD</em>, as a virtual machine is a virtual computer. The kernel proper is linked with vOSTD into one image, which is what runs as a kernelet.</p>
+<p>Whether a kernelet can corrupt the host, and through it another tenant, then comes down to four things being right: vOSTD, which is new code that uses <code>unsafe</code> as OSTD does; the <code>unsafe</code> code inside <code>core</code>, <code>alloc</code> and the library crates; the compiler; and the host’s handling of each request. OSTD’s soundness analysis does not carry over to vOSTD, so the chapters that build vOSTD argue its soundness piece by piece.</p>
+<p>That covers corruption, and reads the program asks for. Side channels, by which code learns what it may not read through timing or speculative execution, are not stopped by the language; this book treats them as out of scope.</p>
+<p>A kernelet reaches the host in only a few fixed ways, because its boundary is the language, not a hardware mode. What the kernel proper can call or refer to is only what is linked into its image: its own crates; Rust’s <code>core</code>, <code>alloc</code> and <code>compiler_builtins</code>; the library crates it depends on; and vOSTD. The image calls no symbol of the host’s. What vOSTD can ask of the host is a fixed list of functions, the <strong>service table</strong>, that it is handed when it starts. Besides those calls, vOSTD touches the host’s memory only where the host hands it a place: the arguments it is started with; the memory its services hand it; a few words of the host’s own; one shared record per virtual CPU (one of the fixed number of processors a kernelet is given) and per tenant address space; the tenant’s page tables, which the host keeps; and the host’s direct map, its mapping of all physical memory, through which vOSTD reaches the tenant’s pages and must reach nothing else. The chapter on the kernelet ABI lists them.</p>
+<p>The language confines what a kernelet can touch, not how long it holds a processor. Keeping a kernelet from starving its neighbors is the host’s job: the endovisor’s per-processor timer takes a processor back even from kernelet code running in kernel mode. The kernel proper can hold that off only through vOSTD’s guards, which the timer overrides after about two ticks. The chapters on virtual interrupts and on sharing a processor show how.</p>
+<h2 id="what-the-book-builds"><a class="header" href="#what-the-book-builds">What the book builds</a></h2>
+<p>Any kernel that implements the service table and hands over those places could host kernelets; in this book the host is <strong>Linux</strong>. Hosting kernelets costs it a small patch, two configuration settings, and the endovisor as one kernel module. The operator rebuilds Linux 6.12 for x86-64 with the patch’s option on and with vsyscall emulation off, which would otherwise let a tenant have Linux run a system call the endovisor never sees; runs it with four-level page tables and without indirect branch tracking, since the image carries no branch-target markers; and loads the module.</p>
+<p>The book runs five small teaching kernels as kernelets inside that Linux. Through them it exercises the hardest parts of OSTD’s interface with the real Linux mechanisms. The first is a teaching example from the Asterinas project, run <strong>with its source unchanged</strong>: a kernel of about a hundred lines of safe Rust that runs one user program and serves its two system calls, <code>write</code> and <code>exit</code>. The other four, written for the prototype, exercise what the hundred lines do not reach: a scheduler of the kernelet’s own, the host taking a processor back from kernel code, exceptions and being stopped, and a tenant address space under load. A sixth kernel tests the PIE image format by running concurrent instances with shared code and private state.</p>
+<p>The prototype gives each sandbox a fixed grant of 2 or 4 MiB of physical memory and has no devices. Its PIE image format lets sandboxes of the same kind run concurrently, sharing physical code pages through separate virtual mappings while keeping their writable data private. The tests exercise this separation; they do not constitute a proof of isolation against every possible kernel bug.</p>
+<p>Its kernels and vOSTD are smaller than Asterinas’s. Its vOSTD offers the part of OSTD’s interface that its kernels use, plus a small instrumentation module, outside OSTD’s interface, that one test kernel uses to read counters and to slow one service down. None of its kernels is Asterinas’s full, Linux-compatible kernel proper, which has not yet run as a kernelet.</p>
+<h2 id="the-words"><a class="header" href="#the-words">The words</a></h2>
+<p>These are used in one sense throughout the book.</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>word</th><th>meaning</th></tr>
+</thead>
+<tbody>
+<tr><td><strong>tenant</strong></td><td>whoever’s programs run in a sandbox; assumed hostile</td></tr>
+<tr><td><strong>operator</strong></td><td>whoever runs the machine: builds the kernelets, configures the host, and is trusted</td></tr>
+<tr><td><strong>kernelet</strong></td><td>one instance of a kernel proper written in safe Rust against OSTD’s interface (in principle Asterinas’s full kernel proper; in this book, a hundred-line example kernel from the Asterinas project and four small test kernels), linked with vOSTD and running in kernel mode inside the host kernel</td></tr>
+<tr><td><strong>sandbox</strong></td><td>one tenant’s environment: a kernelet plus the user-mode programs it serves. What a virtual machine or a container is to its tenant</td></tr>
+<tr><td><strong>host kernel</strong>, or <strong>host</strong></td><td>the kernel that owns the machine. In this book, Linux</td></tr>
+<tr><td><strong>endovisor</strong></td><td>the component of the host kernel that creates, serves and destroys kernelets. <em>Endo-</em> because it sits inside the host kernel, beside the kernelets, where a hypervisor sits beneath its guests. In this book, a Linux kernel module</td></tr>
+<tr><td><strong>vOSTD</strong></td><td>the framework inside a kernelet: OSTD’s interface with a different implementation underneath</td></tr>
+<tr><td><strong>service table</strong></td><td>the fixed list of host functions vOSTD may call; its only way to call the host</td></tr>
+<tr><td><strong>grant</strong></td><td>the physical memory a kernelet has been given, from which it maps its tenant’s pages</td></tr>
+<tr><td><strong>virtual CPU</strong></td><td>one of the fixed number of processors a kernelet is given when it is created; the kernelet schedules its tasks on them as a kernel does on real processors (chapter 9)</td></tr>
+<tr><td><strong>carrier</strong></td><td>a Linux task (Linux’s word for a thread) that carries one of a kernelet’s virtual CPUs: Linux schedules the task, and the kernelet runs its own code and the tenant’s programs on it (chapters 2 and 6)</td></tr>
+<tr><td><strong>kernelet runtime</strong></td><td>the host program that creates and configures sandboxes, as a container runtime does (chapter 2)</td></tr>
+<tr><td><strong>carrier event hooks</strong></td><td>the two functions Linux calls for a carrier, at a system call and on the way back to user mode, which is where a carrier enters and leaves kernelet code; the core of the one small patch to Linux (chapter 5)</td></tr>
+</tbody>
+</table>
+</div>
+<p>A term with a chapter beside it is defined in full there.</p>
+<div class="recap">
+<p><strong>Recap.</strong> A kernelet is a tenant’s own kernel: a kernel proper in safe Rust, compiled by the operator, over a framework, vOSTD, that offers the same interface as the real framework but confines every request to the tenant’s own resources. A bug in it should hurt only the tenant it serves. It reaches the host only through the service table and the memory the host hands it, and the host’s timer, not the language, keeps it from holding a processor. Linux is the host in this book; the endovisor is the Linux module that serves kernelets.</p>
+</div>
+
+
+                    </main>
+
+                    <nav class="nav-wrapper" aria-label="Page navigation">
+                        <!-- Mobile navigation buttons -->
+                            <a rel="prev" href="../README.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                                <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M41.4 233.4c-12.5 12.5-12.5 32.8 0 45.3l160 160c12.5 12.5 32.8 12.5 45.3 0s12.5-32.8 0-45.3L109.3 256 246.6 118.6c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0l-160 160z"/></svg></span>
+                            </a>
+
+                            <a rel="next prefetch" href="../accepted-design/the-endovisor-uapi.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                                <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M278.6 233.4c12.5 12.5 12.5 32.8 0 45.3l-160 160c-12.5 12.5-32.8 12.5-45.3 0s-12.5-32.8 0-45.3L210.7 256 73.4 118.6c-12.5-12.5-12.5-32.8 0-45.3s32.8-12.5 45.3 0l160 160z"/></svg></span>
+                            </a>
+
+                        <div style="clear: both"></div>
+                    </nav>
+                </div>
+            </div>
+
+            <nav class="nav-wide-wrapper" aria-label="Page navigation">
+                    <a rel="prev" href="../README.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                        <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M41.4 233.4c-12.5 12.5-12.5 32.8 0 45.3l160 160c12.5 12.5 32.8 12.5 45.3 0s12.5-32.8 0-45.3L109.3 256 246.6 118.6c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0l-160 160z"/></svg></span>
+                    </a>
+
+                    <a rel="next prefetch" href="../accepted-design/the-endovisor-uapi.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                        <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M278.6 233.4c12.5 12.5 12.5 32.8 0 45.3l-160 160c-12.5 12.5-32.8 12.5-45.3 0s-12.5-32.8 0-45.3L210.7 256 73.4 118.6c-12.5-12.5-12.5-32.8 0-45.3s32.8-12.5 45.3 0l160 160z"/></svg></span>
+                    </a>
+            </nav>
+
+        </div>
+
+        <template id=fa-eye><span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 576 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M288 32c-80.8 0-145.5 36.8-192.6 80.6C48.6 156 17.3 208 2.5 243.7c-3.3 7.9-3.3 16.7 0 24.6C17.3 304 48.6 356 95.4 399.4C142.5 443.2 207.2 480 288 480s145.5-36.8 192.6-80.6c46.8-43.5 78.1-95.4 93-131.1c3.3-7.9 3.3-16.7 0-24.6c-14.9-35.7-46.2-87.7-93-131.1C433.5 68.8 368.8 32 288 32zM432 256c0 79.5-64.5 144-144 144s-144-64.5-144-144s64.5-144 144-144s144 64.5 144 144zM288 192c0 35.3-28.7 64-64 64c-11.5 0-22.3-3-31.6-8.4c-.2 2.8-.4 5.5-.4 8.4c0 53 43 96 96 96s96-43 96-96s-43-96-96-96c-2.8 0-5.6 .1-8.4 .4c5.3 9.3 8.4 20.1 8.4 31.6z"/></svg></span></template>
+        <template id=fa-eye-slash><span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M38.8 5.1C28.4-3.1 13.3-1.2 5.1 9.2S-1.2 34.7 9.2 42.9l592 464c10.4 8.2 25.5 6.3 33.7-4.1s6.3-25.5-4.1-33.7L525.6 386.7c39.6-40.6 66.4-86.1 79.9-118.4c3.3-7.9 3.3-16.7 0-24.6c-14.9-35.7-46.2-87.7-93-131.1C465.5 68.8 400.8 32 320 32c-68.2 0-125 26.3-169.3 60.8L38.8 5.1zM223.1 149.5C248.6 126.2 282.7 112 320 112c79.5 0 144 64.5 144 144c0 24.9-6.3 48.3-17.4 68.7L408 294.5c5.2-11.8 8-24.8 8-38.5c0-53-43-96-96-96c-2.8 0-5.6 .1-8.4 .4c5.3 9.3 8.4 20.1 8.4 31.6c0 10.2-2.4 19.8-6.6 28.3l-90.3-70.8zm223.1 298L373 389.9c-16.4 6.5-34.3 10.1-53 10.1c-79.5 0-144-64.5-144-144c0-6.9 .5-13.6 1.4-20.2L83.1 161.5C60.3 191.2 44 220.8 34.5 243.7c-3.3 7.9-3.3 16.7 0 24.6c14.9 35.7 46.2 87.7 93 131.1C174.5 443.2 239.2 480 320 480c47.8 0 89.9-12.9 126.2-32.5z"/></svg></span></template>
+        <template id=fa-copy><span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M502.6 70.63l-61.25-61.25C435.4 3.371 427.2 0 418.7 0H255.1c-35.35 0-64 28.66-64 64l.0195 256C192 355.4 220.7 384 256 384h192c35.2 0 64-28.8 64-64V93.25C512 84.77 508.6 76.63 502.6 70.63zM464 320c0 8.836-7.164 16-16 16H255.1c-8.838 0-16-7.164-16-16L239.1 64.13c0-8.836 7.164-16 16-16h128L384 96c0 17.67 14.33 32 32 32h47.1V320zM272 448c0 8.836-7.164 16-16 16H63.1c-8.838 0-16-7.164-16-16L47.98 192.1c0-8.836 7.164-16 16-16H160V128H63.99c-35.35 0-64 28.65-64 64l.0098 256C.002 483.3 28.66 512 64 512h192c35.2 0 64-28.8 64-64v-32h-47.1L272 448z"/></svg></span></template>
+        <template id=fa-play><span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 384 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M73 39c-14.8-9.1-33.4-9.4-48.5-.9S0 62.6 0 80V432c0 17.4 9.4 33.4 24.5 41.9s33.7 8.1 48.5-.9L361 297c14.3-8.7 23-24.2 23-41s-8.7-32.2-23-41L73 39z"/></svg></span></template>
+        <template id=fa-clock-rotate-left><span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M75 75L41 41C25.9 25.9 0 36.6 0 57.9V168c0 13.3 10.7 24 24 24H134.1c21.4 0 32.1-25.9 17-41l-30.8-30.8C155 85.5 203 64 256 64c106 0 192 86 192 192s-86 192-192 192c-40.8 0-78.6-12.7-109.7-34.4c-14.5-10.1-34.4-6.6-44.6 7.9s-6.6 34.4 7.9 44.6C151.2 495 201.7 512 256 512c141.4 0 256-114.6 256-256S397.4 0 256 0C185.3 0 121.3 28.7 75 75zm181 53c-13.3 0-24 10.7-24 24V256c0 6.4 2.5 12.5 7 17l72 72c9.4 9.4 24.6 9.4 33.9 0s9.4-24.6 0-33.9l-65-65V152c0-13.3-10.7-24-24-24z"/></svg></span></template>
+
+
+
+        <script>
+            window.playground_copyable = true;
+        </script>
+
+
+        <script src="../elasticlunr-ef4e11c1.min.js"></script>
+        <script src="../mark-09e88c2c.min.js"></script>
+        <script src="../searcher-c2a407aa.js"></script>
+
+        <script src="../clipboard-1626706a.min.js"></script>
+        <script src="../highlight-abc7f01d.js"></script>
+        <script src="../book-a0b12cfe.js"></script>
+
+        <!-- Custom JS scripts -->
+        <script src="../assets/mermaid-eefea253.min.js"></script>
+        <script src="../assets/mermaid-init-9b03b796.js"></script>
+
+
+
+    </div>
+    </body>
+</html>

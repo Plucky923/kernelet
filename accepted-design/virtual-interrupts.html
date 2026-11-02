@@ -1,0 +1,469 @@
+<!DOCTYPE HTML>
+<html lang="en" class="light sidebar-visible" dir="ltr">
+    <head>
+        <!-- Book generated using mdBook -->
+        <meta charset="UTF-8">
+        <title>Virtual interrupts - Building Kernelets on Linux</title>
+
+
+        <!-- Custom HTML head -->
+
+        <meta name="description" content="The accepted design and implementation of kernelets on Linux, with proposals for their evolution">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <meta name="theme-color" content="#ffffff">
+
+        <link rel="icon" href="../favicon-de23e50b.svg">
+        <link rel="shortcut icon" href="../favicon-8114d1fc.png">
+        <link rel="stylesheet" href="../css/variables-8adf115d.css">
+        <link rel="stylesheet" href="../css/general-2459343d.css">
+        <link rel="stylesheet" href="../css/chrome-ae938929.css">
+        <link rel="stylesheet" href="../css/print-9e4910d8.css" media="print">
+
+        <!-- Fonts -->
+        <link rel="stylesheet" href="../fonts/fonts-9644e21d.css">
+
+        <!-- Highlight.js Stylesheets -->
+        <link rel="stylesheet" id="mdbook-highlight-css" href="../highlight-493f70e1.css">
+        <link rel="stylesheet" id="mdbook-tomorrow-night-css" href="../tomorrow-night-4c0ae647.css">
+        <link rel="stylesheet" id="mdbook-ayu-highlight-css" href="../ayu-highlight-3fdfc3ac.css">
+
+        <!-- Custom theme stylesheets -->
+        <link rel="stylesheet" href="../assets/book-46594365.css">
+
+
+        <!-- Provide site root and default themes to javascript -->
+        <script>
+            const path_to_root = "../";
+            const default_light_theme = "light";
+            const default_dark_theme = "navy";
+            window.path_to_searchindex_js = "../searchindex-1dd0c655.js";
+        </script>
+        <!-- Start loading toc.js asap -->
+        <script src="../toc-e271ffef.js"></script>
+    </head>
+    <body>
+    <div id="mdbook-help-container">
+        <div id="mdbook-help-popup">
+            <h2 class="mdbook-help-title">Keyboard shortcuts</h2>
+            <div>
+                <p>Press <kbd>←</kbd> or <kbd>→</kbd> to navigate between chapters</p>
+                <p>Press <kbd>S</kbd> or <kbd>/</kbd> to search in the book</p>
+                <p>Press <kbd>?</kbd> to show this help</p>
+                <p>Press <kbd>Esc</kbd> to hide this help</p>
+            </div>
+        </div>
+    </div>
+    <div id="mdbook-body-container">
+        <!-- Work around some values being stored in localStorage wrapped in quotes -->
+        <script>
+            try {
+                let theme = localStorage.getItem('mdbook-theme');
+                let sidebar = localStorage.getItem('mdbook-sidebar');
+
+                if (theme.startsWith('"') && theme.endsWith('"')) {
+                    localStorage.setItem('mdbook-theme', theme.slice(1, theme.length - 1));
+                }
+
+                if (sidebar.startsWith('"') && sidebar.endsWith('"')) {
+                    localStorage.setItem('mdbook-sidebar', sidebar.slice(1, sidebar.length - 1));
+                }
+            } catch (e) { }
+        </script>
+
+        <!-- Set the theme before any content is loaded, prevents flash -->
+        <script>
+            const default_theme = window.matchMedia("(prefers-color-scheme: dark)").matches ? default_dark_theme : default_light_theme;
+            let theme;
+            try { theme = localStorage.getItem('mdbook-theme'); } catch(e) { }
+            if (theme === null || theme === undefined) { theme = default_theme; }
+            const html = document.documentElement;
+            html.classList.remove('light')
+            html.classList.add(theme);
+            html.classList.add("js");
+        </script>
+
+        <input type="checkbox" id="mdbook-sidebar-toggle-anchor" class="hidden">
+
+        <!-- Hide / unhide sidebar before it is displayed -->
+        <script>
+            let sidebar = null;
+            const sidebar_toggle = document.getElementById("mdbook-sidebar-toggle-anchor");
+            if (document.body.clientWidth >= 1080) {
+                try { sidebar = localStorage.getItem('mdbook-sidebar'); } catch(e) { }
+                sidebar = sidebar || 'visible';
+            } else {
+                sidebar = 'hidden';
+                sidebar_toggle.checked = false;
+            }
+            if (sidebar === 'visible') {
+                sidebar_toggle.checked = true;
+            } else {
+                html.classList.remove('sidebar-visible');
+            }
+        </script>
+
+        <nav id="mdbook-sidebar" class="sidebar" aria-label="Table of contents">
+            <!-- populated by js -->
+            <mdbook-sidebar-scrollbox class="sidebar-scrollbox"></mdbook-sidebar-scrollbox>
+            <noscript>
+                <iframe class="sidebar-iframe-outer" src="../toc.html"></iframe>
+            </noscript>
+            <div id="mdbook-sidebar-resize-handle" class="sidebar-resize-handle">
+                <div class="sidebar-resize-indicator"></div>
+            </div>
+        </nav>
+
+        <div id="mdbook-page-wrapper" class="page-wrapper">
+
+            <div class="page">
+                <div id="mdbook-menu-bar-hover-placeholder"></div>
+                <div id="mdbook-menu-bar" class="menu-bar sticky">
+                    <div class="left-buttons">
+                        <label id="mdbook-sidebar-toggle" class="icon-button" for="mdbook-sidebar-toggle-anchor" title="Toggle Table of Contents" aria-label="Toggle Table of Contents" aria-controls="mdbook-sidebar">
+                            <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M0 96C0 78.3 14.3 64 32 64H416c17.7 0 32 14.3 32 32s-14.3 32-32 32H32C14.3 128 0 113.7 0 96zM0 256c0-17.7 14.3-32 32-32H416c17.7 0 32 14.3 32 32s-14.3 32-32 32H32c-17.7 0-32-14.3-32-32zM448 416c0 17.7-14.3 32-32 32H32c-17.7 0-32-14.3-32-32s14.3-32 32-32H416c17.7 0 32 14.3 32 32z"/></svg></span>
+                        </label>
+                        <button id="mdbook-theme-toggle" class="icon-button" type="button" title="Change theme" aria-label="Change theme" aria-haspopup="true" aria-expanded="false" aria-controls="mdbook-theme-list">
+                            <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 576 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M371.3 367.1c27.3-3.9 51.9-19.4 67.2-42.9L600.2 74.1c12.6-19.5 9.4-45.3-7.6-61.2S549.7-4.4 531.1 9.6L294.4 187.2c-24 18-38.2 46.1-38.4 76.1L371.3 367.1zm-19.6 25.4l-116-104.4C175.9 290.3 128 339.6 128 400c0 3.9 .2 7.8 .6 11.6c1.8 17.5-10.2 36.4-27.8 36.4H96c-17.7 0-32 14.3-32 32s14.3 32 32 32H240c61.9 0 112-50.1 112-112c0-2.5-.1-5-.2-7.5z"/></svg></span>
+                        </button>
+                        <ul id="mdbook-theme-list" class="theme-popup" aria-label="Themes" role="menu">
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-default_theme">Auto</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-light">Light</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-rust">Rust</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-coal">Coal</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-navy">Navy</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-ayu">Ayu</button></li>
+                        </ul>
+                        <button id="mdbook-search-toggle" class="icon-button" type="button" title="Search (`/`)" aria-label="Toggle Searchbar" aria-expanded="false" aria-keyshortcuts="/ s" aria-controls="mdbook-searchbar">
+                            <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M416 208c0 45.9-14.9 88.3-40 122.7L502.6 457.4c12.5 12.5 12.5 32.8 0 45.3s-32.8 12.5-45.3 0L330.7 376c-34.4 25.2-76.8 40-122.7 40C93.1 416 0 322.9 0 208S93.1 0 208 0S416 93.1 416 208zM208 352c79.5 0 144-64.5 144-144s-64.5-144-144-144S64 128.5 64 208s64.5 144 144 144z"/></svg></span>
+                        </button>
+                    </div>
+
+                    <h1 class="menu-title">Building Kernelets on Linux</h1>
+
+                    <div class="right-buttons">
+                        <a href="../print.html" title="Print this book" aria-label="Print this book">
+                            <span class=fa-svg id="print-button"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M128 0C92.7 0 64 28.7 64 64v96h64V64H354.7L384 93.3V160h64V93.3c0-17-6.7-33.3-18.7-45.3L400 18.7C388 6.7 371.7 0 354.7 0H128zM384 352v32 64H128V384 368 352H384zm64 32h32c17.7 0 32-14.3 32-32V256c0-35.3-28.7-64-64-64H64c-35.3 0-64 28.7-64 64v96c0 17.7 14.3 32 32 32H64v64c0 35.3 28.7 64 64 64H384c35.3 0 64-28.7 64-64V384zm-16-88c-13.3 0-24-10.7-24-24s10.7-24 24-24s24 10.7 24 24s-10.7 24-24 24z"/></svg></span>
+                        </a>
+
+                    </div>
+                </div>
+
+                <div id="mdbook-search-wrapper" class="hidden">
+                    <form id="mdbook-searchbar-outer" class="searchbar-outer">
+                        <div class="search-wrapper">
+                            <input type="search" id="mdbook-searchbar" name="searchbar" placeholder="Search this book ..." aria-controls="mdbook-searchresults-outer" aria-describedby="searchresults-header">
+                            <div class="spinner-wrapper">
+                                <span class=fa-svg id="fa-spin"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M304 48c0-26.5-21.5-48-48-48s-48 21.5-48 48s21.5 48 48 48s48-21.5 48-48zm0 416c0-26.5-21.5-48-48-48s-48 21.5-48 48s21.5 48 48 48s48-21.5 48-48zM48 304c26.5 0 48-21.5 48-48s-21.5-48-48-48s-48 21.5-48 48s21.5 48 48 48zm464-48c0-26.5-21.5-48-48-48s-48 21.5-48 48s21.5 48 48 48s48-21.5 48-48zM142.9 437c18.7-18.7 18.7-49.1 0-67.9s-49.1-18.7-67.9 0s-18.7 49.1 0 67.9s49.1 18.7 67.9 0zm0-294.2c18.7-18.7 18.7-49.1 0-67.9S93.7 56.2 75 75s-18.7 49.1 0 67.9s49.1 18.7 67.9 0zM369.1 437c18.7 18.7 49.1 18.7 67.9 0s18.7-49.1 0-67.9s-49.1-18.7-67.9 0s-18.7 49.1 0 67.9z"/></svg></span>
+                            </div>
+                        </div>
+                    </form>
+                    <div id="mdbook-searchresults-outer" class="searchresults-outer hidden">
+                        <div id="mdbook-searchresults-header" class="searchresults-header"></div>
+                        <ul id="mdbook-searchresults">
+                        </ul>
+                    </div>
+                </div>
+
+                <!-- Apply ARIA attributes after the sidebar and the sidebar toggle button are added to the DOM -->
+                <script>
+                    document.getElementById('mdbook-sidebar-toggle').setAttribute('aria-expanded', sidebar === 'visible');
+                    document.getElementById('mdbook-sidebar').setAttribute('aria-hidden', sidebar !== 'visible');
+                    Array.from(document.querySelectorAll('#mdbook-sidebar a')).forEach(function(link) {
+                        link.setAttribute('tabIndex', sidebar === 'visible' ? 0 : -1);
+                    });
+                </script>
+
+                <div id="mdbook-content" class="content">
+                    <main>
+                        <h1 id="virtual-interrupts"><a class="header" href="#virtual-interrupts">Virtual interrupts</a></h1>
+<p>The kernelet’s scheduler needs interrupts, and Linux leaves it none; this chapter gives it virtual ones. A time slice ends because a timer interrupt fires, and a wake-up on another processor is noticed because an interrupt arrives there. But Linux owns the interrupt controller, the vector table and every physical line, and nothing in vOSTD can register a handler for any of them.</p>
+<h2 id="bits-in-a-record"><a class="header" href="#bits-in-a-record">Bits in a record</a></h2>
+<p>A virtual interrupt is a bit in the <code>pending</code> word of a virtual CPU’s record (chapter 9). The endovisor sets it from interrupt context or from another processor. The kernelet’s handler for it runs as kernelet code on that virtual CPU’s carrier, never in Linux’s interrupt context, soon after. Two bits are raised in this prototype; a third, LINES, is reserved for devices:</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>bit</th><th>meaning</th><th>set by</th></tr>
+</thead>
+<tbody>
+<tr><td>TICK</td><td>this processor’s watch period (the watch timer’s one-millisecond period, below) expired while this carrier was current; also raised whenever the virtual CPU wakes from <code>vcpu_idle</code></td><td>the watch timer, below; <code>vcpu_idle</code> on waking</td></tr>
+<tr><td>KICK</td><td>another virtual CPU wants this one to look at its run queue</td><td>the <code>vcpu_kick</code> service</td></tr>
+</tbody>
+</table>
+</div>
+<p>Each bit stands in for a hardware interrupt the kernel proper already handles. The kernel proper’s <em>timer callbacks</em>, functions it registers with OSTD to run on every timer interrupt, run from TICK as they would from a hardware timer interrupt. One of them, registered by OSTD when the kernel proper calls <code>enable_preemption_on_cpu</code>, calls the injected run queue’s <code>update_current(Tick)</code> and sets <em>need-preempt</em>, a bit in OSTD’s preemption word meaning <em>switch tasks at the next chance</em>, if the run queue asks for it. KICK does what a reschedule interrupt does on a machine: it makes the virtual CPU ask its scheduler whether something more urgent has become runnable.</p>
+<p>vOSTD computes the kernelet’s <em>jiffies</em>, its count of ticks since boot, from the cycle counter rather than by counting ticks, because a virtual CPU that Linux has not scheduled gets none.</p>
+<p>When the handler runs depends on what the virtual CPU is doing when the bit is set, and above all on whether it is in a critical section. A virtual CPU is in a <strong>critical section</strong> when the kernelet task on it holds at least one preemption guard or spin lock, or has its virtual interrupts masked. The chapter’s closing section lists the paths by which a bit reaches its handler; each path has a section of its own first.</p>
+<h2 id="the-watch-timer"><a class="header" href="#the-watch-timer">The watch timer</a></h2>
+<div class="background">
+<p><strong>Linux: high-resolution timers and preemption notifiers.</strong> An <a href="https://elixir.bootlin.com/linux/v6.12/source/kernel/time/hrtimer.c"><code>hrtimer</code></a> is a timer whose callback runs in interrupt context, normally on the processor that armed it. A <em>pinned</em> timer is guaranteed to stay there. A <em>hard</em> one runs in the interrupt itself even on a real-time kernel, a kernel built to run most interrupt work in threads. A callback returns <code>HRTIMER_RESTART</code> to run again, after moving its expiry forward by whole periods past now with <code>hrtimer_forward_now()</code>, or <code>HRTIMER_NORESTART</code> to stop. <code>hrtimer_active()</code> says whether a timer is queued or its callback is running, <code>hrtimer_cb_get_time()</code> gives the time a callback runs at, and <code>hrtimer_set_expires()</code> sets the next expiry directly.</p>
+<p>A timer callback can make the interrupted code resume somewhere else. The timer interrupt publishes the registers of whatever it interrupted, and a callback reads them with <a href="https://elixir.bootlin.com/linux/v6.12/source/include/asm-generic/irq_regs.h"><code>get_irq_regs()</code></a>, which is how Linux’s profiler samples programs; a callback that changes the saved instruction pointer makes the interrupt return somewhere else.</p>
+<p>A <strong>preemption notifier</strong> (<a href="https://elixir.bootlin.com/linux/v6.12/source/kernel/sched/core.c#L4866"><code>preempt_notifier_register()</code></a>) is a pair of callbacks Linux runs for one task every time it switches that task out of a processor and in to one; KVM, Linux’s own hypervisor, uses it to load a virtual CPU’s state onto the processor it is switched in on and to save it when it is switched out. Notifiers are compiled in only if another configuration option requires them (<code>CONFIG_PREEMPT_NOTIFIERS</code> cannot be turned on by itself); the patch’s <code>CONFIG_KERNELET</code> requires it.</p>
+</div>
+
+<p>The <strong>watch timer</strong>, a pinned, hard, one-millisecond <code>hrtimer</code> on each processor, is armed while the task running there is the carrier of a virtual CPU, and for at most one more period after it leaves. Each carrier registers a preemption notifier when it starts. The notifier’s switch-in callback arms the timer of whatever processor the carrier has just landed on, and so does every entry into kernelet code and every return from a service, which no switch-in need precede. The timer’s own callback re-arms itself if it interrupted the carrier of a virtual CPU of a live sandbox, and stops otherwise. So a carrier that Linux migrates is watched wherever it lands, and a processor that has no carrier is soon unwatched.</p>
+<p><em>Simplified from <code>prototype/linux/endovisor/watch.c</code> and <code>prototype/linux/endovisor/sched.c</code>: <code>klet_watch_arm</code>, <code>klet_sched_in</code>.</em></p>
+<pre><code class="language-c">static void klet_sched_in(struct preempt_notifier *pn, int cpu)   /* Linux just put this carrier on a processor */
+{
+	struct klet_carrier *c = container_of(pn, struct klet_carrier, pnotifier);
+	klet_watch_arm(c);
+}
+
+void klet_watch_arm(struct klet_carrier *c)
+{
+	struct hrtimer *timer = this_cpu_ptr(&amp;klet_watch_timer);
+	if (!hrtimer_active(timer))
+		hrtimer_start(timer, ns_to_ktime(KLET_WATCH_INTERVAL_NS), HRTIMER_MODE_REL_PINNED_HARD);
+}
+</code></pre>
+<p>Every time a period expires, the callback raises TICK and then decides how to deliver whatever is pending:</p>
+<p><em>Simplified from <code>prototype/linux/endovisor/watch.c</code>: <code>klet_watch_fn</code>.</em></p>
+<pre><code class="language-c">static enum hrtimer_restart klet_watch_fn(struct hrtimer *timer)
+{
+	struct pt_regs *regs = get_irq_regs();      /* the interrupted registers; NULL if whatever ran this callback did not publish them */
+	struct klet_carrier *c;
+	bool tick = true;
+
+	if (this_cpu_read(klet_watch_requested)) {  /* a kick asked for this firing (below): it counts as a tick only if the period it cut short has run out */
+		this_cpu_write(klet_watch_requested, false);
+		tick = !ktime_before(hrtimer_cb_get_time(timer), this_cpu_read(klet_watch_period_end));
+	}
+
+	if (!current-&gt;carrier_hooks)                     /* not a carrier any more: stop */
+		return HRTIMER_NORESTART;
+	c = klet_current_carrier();
+
+	if (tick)
+		klet_virq_raise(c, KLET_VIRQ_TICK);     /* 1. the tick */
+
+	if (!regs || user_mode(regs) || !klet_in_image_text(regs-&gt;ip) || !klet_in_kernelet(c)) {
+		/* no registers, user mode (klet_virq_raise flagged the carrier), a service, or Linux: leave it pending */
+	} else if (!klet_critical(c)) {
+		klet_virq_redirect(c, regs);            /* 2. in kernelet code, not in a critical section: deliver now */
+	} else {
+		/* in a critical section: the kernelet delivers it itself when the section ends */
+	}
+	/* 3. the bound on critical sections: the next chapter */
+
+	if (!tick) {                                /* a requested firing goes back to its period's own expiry */
+		hrtimer_set_expires(timer, this_cpu_read(klet_watch_period_end));
+		return HRTIMER_RESTART;
+	}
+	hrtimer_forward_now(timer, ns_to_ktime(KLET_WATCH_INTERVAL_NS));
+	return HRTIMER_RESTART;
+}
+</code></pre>
+<p>The callback’s two tests keep it from redirecting anything but kernelet code. <code>klet_in_image_text</code> asks whether the interrupted instruction lies in the kernelet image’s code; Linux’s code and the endovisor’s never do. <code>klet_in_kernelet</code> asks whether the carrier is running kernelet code and not a service: state <code>RUNNING</code>, depth 0, not asleep in <code>vcpu_idle</code>, and not <em>evicted</em>, that is, not already being forced out of kernelet code by the endovisor, as happens when the sandbox is being stopped. A carrier inside a service call is never redirected, because it may hold Linux’s locks.</p>
+<p><code>klet_virq_raise</code> sets the bit and does the two cheap things that get it noticed. It wakes the carrier if it is asleep in <code>vcpu_idle</code>. It flags the carrier (chapter 6) if it is in user mode, so that it comes back through the resume hook and <code>user_run</code> returns 2.</p>
+<p>When the carrier is in kernelet code outside a critical section, the endovisor delivers at once, as a machine would, by changing one saved register:</p>
+<p><em>Simplified from <code>prototype/linux/endovisor/watch.c</code>: <code>klet_virq_redirect</code>.</em></p>
+<pre><code class="language-c">bool klet_virq_redirect(struct klet_carrier *c, struct pt_regs *regs)
+{
+	if (user_mode(regs) || !klet_in_image_text(regs-&gt;ip) || !klet_in_kernelet(c))
+		return false;
+	if (klet_irq_off(c))                         /* interrupts masked: wait */
+		return false;
+	limit = READ_ONCE(c-&gt;vrec.stack_limit);
+	if (!limit || regs-&gt;sp &lt; limit || regs-&gt;sp - limit &lt; KLET_UPCALL_HEADROOM)
+		return false;                            /* no limit published, or not enough stack for the handler */
+
+	WRITE_ONCE(c-&gt;vrec.virq_ip, regs-&gt;ip);       /* where we interrupted the kernelet */
+	WRITE_ONCE(c-&gt;vrec.irq_off, 1);              /* mask, as hardware clears IF when it takes an interrupt */
+	regs-&gt;ip = (unsigned long)kernelet_entry_table.virq_entry;   /* return there instead */
+	return true;
+}
+</code></pre>
+<p>The redirect is refused when interrupts are masked or when the task’s kernelet stack has too little room. vOSTD publishes each task’s stack limit at every task switch. The endovisor requires 32 KiB below the interrupted stack pointer (<code>KLET_UPCALL_HEADROOM</code>): 16 KiB for the upcall and the callbacks it runs, and 16 KiB reserved for Linux, which runs on whatever stack it interrupts until it switches to its interrupt stack, runs its scheduler there when it preempts the carrier on the way out of an interrupt, and runs the whole handler of a kernel-mode exception there.</p>
+<h2 id="the-upcall"><a class="header" href="#the-upcall">The upcall</a></h2>
+<p>When the timer interrupt returns, it lands not on the interrupted instruction but in the kernelet’s <strong>upcall</strong> stub: the kernelet’s own interrupt handler, which only a redirected interrupt enters.</p>
+<p>The stub, in vOSTD’s assembly, saves everything on the <em>current task’s</em> kernelet stack, calls a Rust function, and returns to the interrupted instruction. It is assembly because it is entered between two arbitrary instructions and must put every general register and the flags back exactly.</p>
+<p>Two build settings keep the stub short. The kernelet is built without vector instructions, so there is no vector state to save. The kernelet, like Linux, is compiled without a red zone, the 128 bytes below the stack pointer that user-mode code may use without moving it, so the stub may push below the interrupted <code>rsp</code>.</p>
+<p>The excerpt is in Intel syntax, destination first, as Rust’s <code>global_asm!</code> has it; chapter 7’s switch was in AT&amp;T syntax, the GNU assembler’s default, source first.</p>
+<p><em>Simplified from <code>prototype/vostd/src/vcpu.rs</code>: <code>klet_virq_entry</code>, <code>klet_virq_body</code>.</em></p>
+<pre><code class="language-asm">klet_virq_entry:
+    lea rsp, [rsp - 8]       ; a slot for the interrupted instruction pointer (lea, not sub: sub would change the flags)
+    pushfq                   ; the flags, exactly as the interrupted code left them
+    push rax ... push r15    ; every general register but rsp
+    mov rbp, rsp
+    and rsp, -16             ; align for the call
+    call klet_virq_body      ; returns the instruction pointer to resume at
+    mov rsp, rbp
+    mov [rsp + 128], rax     ; into the slot: 15 registers and the flags (128 bytes) above rsp
+    pop r15 ... pop rax
+    popfq
+    ret                      ; to the interrupted instruction
+</code></pre>
+<pre><code class="language-rust">extern "C" fn klet_virq_body() -&gt; u64 {
+    let rec = vrec();
+    let ip = unsafe { read_volatile(rec.virq_ip.get()) } as usize;   // copied to this frame first: the record's field may be reused
+    assert!(IMAGE_TEXT_LO &lt;= ip &amp;&amp; ip &lt; IMAGE_TEXT_HI);   // never resume at an address the host made up
+
+    let owns_mirror = get_guard_count() == 0;            // this upcall begins a critical section of its own
+    if owns_mirror { host_preempt_inc(); }               // the mirror of the next chapter: tell Linux so
+
+    run_handlers(rec);                                   // TICK: the timer callbacks; KICK: a look at the run queue
+
+    let host_wants_cpu = if owns_mirror { host_preempt_dec_and_test() } else { false };
+    unsafe { write_volatile(rec.irq_off.get(), 0) };     // unmask: what a machine's interrupt return would do
+    if host_wants_cpu { host_yield(); }                  // Linux was waiting for this processor
+    if get_guard_count() == 0 {                          // kernel-mode preemption: switch if the scheduler wants to
+        crate::task::scheduler::might_preempt();
+    }
+    ip as u64
+}
+
+fn run_handlers(rec: &amp;VcpuRec) {
+    loop {
+        let pending = rec.pending.swap(0, Ordering::AcqRel);
+        if pending == 0 { break; }
+        if pending &amp; VIRQ_TICK != 0 { crate::timer::call_timer_callback_functions(); }
+        if pending &amp; VIRQ_KICK != 0 { cpu_local::set_need_preempt(); }
+    }
+}</code></pre>
+<p>The check against the image’s text range catches a bug in the endovisor’s bookkeeping, so that a wrong address stops the kernelet instead of being jumped to. The host is trusted, so this is not a defense against it.</p>
+<p>Four lines raise Linux’s preemption count while the handlers run, so that Linux does not take the processor in the middle; the next chapter explains them. <code>owns_mirror</code> is always true, since the endovisor redirects only when no guard is held (below); the test keeps the function correct if that ever changes.</p>
+<p>The <code>might_preempt</code> at the end adds <strong>kernel-mode preemption</strong>, which OSTD on a machine lacks: the handler may switch to another task before returning. That is how a tick ends a time slice in the middle of a kernel task’s computation, as it does on a machine with a preemptible kernel.</p>
+<p>A switch inside the upcall is safe for the interrupted address because the body’s first act copies <code>virq_ip</code> into a local variable, so the address lives in this frame, on the task’s own stack. The record’s field is free for the next upcall on this virtual CPU. The stub copies the local into the slot only once the body has returned, perhaps much later. The interrupted task resumes from the same frame.</p>
+<p>vOSTD assumes that a preempted task resumes on the virtual CPU that preempted it. On a machine a per-CPU word is one <code>gs:</code> instruction, so it cannot straddle a switch; vOSTD finds the slot first and touches it second, so a task preempted between the two and resumed on another virtual CPU would write the first virtual CPU’s slot. The schedulers of this book’s kernels, like Asterinas’s, never move a task they preempted, but OSTD allows a scheduler that balances load, and nothing in vOSTD enforces the assumption: it is a requirement vOSTD places on the kernel proper’s scheduler.</p>
+<p>Kernel-mode preemption has a hazard of its own with floating-point state. From a thread’s <code>FpuContext::load</code> until <code>user_run</code>, and from <code>execute</code>’s return until <code>save</code>, the thread’s floating-point and vector registers are live on the processor, and a switch there, by an upcall or by a guard drop that delivers a bit, would let the next task’s restore of its own registers overwrite them. A kernel proper must therefore save them in its pre-schedule handler, as Asterinas does; this book’s kernels do not, so those windows are open in the prototype, and no test shows them closed.</p>
+<h2 id="preemption-inside-a-scheduling-decision"><a class="header" href="#preemption-inside-a-scheduling-decision">Preemption inside a scheduling decision</a></h2>
+<p>An upcall must not preempt inside <code>reschedule</code>, between its decision and its switch. <code>reschedule</code> holds no preemption guard, since on a machine nothing preempts OSTD’s kernel code, so an upcall can land between the two. By then the run queue’s bookkeeping already names the chosen task current and has put the still-running task back among the waiting. A second decision could pick the running task. Before switching to a task, OSTD waits until the processor that last ran it has finished saving it, so a task that waits for itself waits forever and the processor hangs.</p>
+<p>So vOSTD flags that window and defers any preemption to its end. <code>open_resched_window</code>, the first thing <code>reschedule</code> does, runs whatever virtual interrupts are already pending, without switching, so that whatever they ask for is answered by the decision about to be made; then it clears need-preempt and sets a flag in the virtual CPU’s local storage. While the flag is set, <code>might_preempt</code> only records a note, because need-preempt alone would wait for the next upcall, the bit that asked for it having been consumed. Whoever closes the window (the completed switch, the decision to do nothing, or the retry that decides again) acts on the note at once, by preempting or, for the retry, by deciding again instead of sleeping. A preemption is deferred by the window and never by more.</p>
+<p>The window costs one reschedule each time a kick is taken inside it. When virtual CPU A puts a task on B’s run queue and kicks B while B is already deciding, B often picks the task before the kick is taken; the kick is then taken inside the window, by the guard drop that releases the run queue or by an upcall, and leaves a note. If B was idle, the note costs one reschedule that finds nothing to do; if B was switching away from a running task, it costs a switch back.</p>
+<h2 id="interrupts-off-and-guards"><a class="header" href="#interrupts-off-and-guards">Interrupts off, and guards</a></h2>
+<p>Two separate fields in the record stand for the two ways a kernel defers work. On a machine, masking interrupts holds off the handler, and a preemption guard holds off only the task switch; in vOSTD both hold off the upcall, because the upcall cannot know in advance whether it will switch. The fields stay separate because OSTD’s interface has two guards.</p>
+<ul>
+<li><code>irq_off</code> is the virtual interrupt flag, inverted. vOSTD sets it where OSTD’s interrupts-off guard, <code>irq::disable_local()</code>, would clear the processor’s flag, and clears it when the guard drops; the endovisor sets it when it redirects into the upcall, and the upcall clears it at the end. While it is set, nothing is delivered.</li>
+<li>The <strong>guard count</strong>, the low bits of <code>preempt_info</code>, is how many preemption guards are held, counting spin locks that disable preemption; a lock that disables interrupts sets <code>irq_off</code> instead. What a guard <em>means</em> is that no task switch happens on this virtual CPU while it is held; how that is <em>enforced</em> is that the watch timer never redirects a task that holds one, so the upcall, the one place a switch could happen underneath kernelet code, is never entered under a guard.</li>
+</ul>
+<p><code>irq_off</code> has two writers, but plain stores are enough. The endovisor writes a 1 only when it finds a 0, only from an interrupt on the carrier’s own processor, so the two writers never run at once, and the upcall it diverts into always clears that 1 again before the interrupted code resumes.</p>
+<p>The guard word is updated only by its own virtual CPU, with single read-modify-write instructions (<code>add</code>, <code>sub</code>, <code>and</code>, <code>or</code>), because the guard count shares its word with the need-preempt bit, which the upcall’s handlers set. If a guard’s increment compiled to a load, an add and a store, an upcall could land between the load and the store, because the count was still zero, and the store would erase the need-preempt bit the upcall had just set; a single <code>add</code> to memory cannot be split by an interrupt.</p>
+<h2 id="delivery-at-the-end-of-a-critical-section"><a class="header" href="#delivery-at-the-end-of-a-critical-section">Delivery at the end of a critical section</a></h2>
+<p>When a critical section ends, vOSTD delivers whatever was left pending in it, whenever it arrived. Two places check: the interrupts-off guard when it unmasks, and the drop of the last preemption guard, for a bit that arrived under the guard, in kernelet code or in a service. Only the upcall checks the stack’s headroom; these paths run the same handlers as a function call on whatever stack the task is on. The unmask:</p>
+<p><em>Simplified from <code>prototype/vostd/src/task/preempt/cpu_local.rs</code> and <code>prototype/vostd/src/vcpu.rs</code>: <code>irq_unmask</code>, <code>deliver_if_pending</code>, <code>handle_virq</code>.</em></p>
+<pre><code class="language-rust">pub(crate) fn irq_unmask() {
+    let leaving = get_guard_count() == 0;       // the end of a critical section?
+    /* ... the next chapter's mirror ... */
+    set_irq_off(false);
+    if leaving {
+        vcpu::deliver_if_pending();             // a few loads and a branch
+    }
+}
+
+pub(crate) fn deliver_if_pending() {
+    if has_pending() { handle_virq(); }
+}
+
+pub(crate) fn handle_virq() {                   // the same handlers, called as a function
+    if IN_VIRQ.load() { return; }               // already inside (one flag per virtual CPU): the guard's own drop below calls back here; the outer loop takes any bit raised before its last swap
+    IN_VIRQ.store(true);
+    {
+        let _guard = crate::irq::disable_local();
+        run_handlers(vrec());
+    }
+    IN_VIRQ.store(false);                       // cleared before the switch below, which may not come back here
+    crate::task::scheduler::might_preempt();
+}</code></pre>
+<h2 id="delivery-on-the-return-from-user-mode"><a class="header" href="#delivery-on-the-return-from-user-mode">Delivery on the return from user mode</a></h2>
+<p>A carrier in user mode takes its virtual interrupts on the way back, without a task switch. <code>execute</code>’s loop runs the handlers before it re-enters user mode, through <code>deliver_no_switch</code>: the same <code>handle_virq</code> as above without the final <code>might_preempt</code>, the call that switches tasks if need-preempt is set and no guard is held.</p>
+<p>vOSTD does not switch at that point, unlike OSTD, because the tenant thread’s floating-point and vector registers are still live on the processor, and this book’s kernels save them only after <code>execute</code> returns and not at a switch, so another task’s restore of its own would overwrite them.</p>
+<p>So under vOSTD a tenant thread that stays in user mode is never preempted. Its slice ends and need-preempt is set, but nothing acts on it until the thread enters the kernel and its kernel code reaches a call to <code>might_preempt</code>: an upcall, a guard drop or unmask that finds a bit pending, a spawn, or the kernel proper’s next yield or sleep. OSTD on a machine does preempt such a thread, by calling <code>might_preempt</code> before every entry to user mode, and Asterinas’s kernel proper relies on that; its <code>has_kernel_event</code> hook reports only signals. This is a difference from OSTD’s documented behavior, which the prototype has not closed.</p>
+<p>Neither the flag nor the bit can be lost in a race. A flag set while the hook is already running is not lost, as chapter 5 arranged. <code>user_run</code> publishes <code>KLET_USER</code> and then reads <code>pending</code>, while <code>klet_virq_raise</code> sets the bit and then reads the state; as with idling, one of the two always sees the other, so a bit raised just as the carrier leaves is never stranded.</p>
+<h2 id="the-kicks-interrupt"><a class="header" href="#the-kicks-interrupt">The kick’s interrupt</a></h2>
+<p>A kick to kernelet code on another processor makes that processor’s watch timer fire at once, through an inter-processor interrupt, instead of waiting up to a millisecond for its next tick. The endovisor sends it with <a href="https://elixir.bootlin.com/linux/v6.12/source/kernel/smp.c"><code>smp_call_function_single()</code></a>, which runs a function on a named processor, in interrupt context there, through an inter-processor interrupt; the last argument, 0, means the caller does not wait. The function it runs there cannot redirect anything itself, because that kind of interrupt does not publish the interrupted registers; what it can do is restart the watch timer with zero delay (<code>klet_watch_fire_now</code>), so that the timer interrupt, whose callback does see the registers, arrives as soon as the cross-processor call returns, and delivers the kick:</p>
+<p><em>Simplified from <code>prototype/linux/endovisor/sched.c</code>: <code>klet_kick_remote</code>, <code>klet_kick_ipi</code>.</em></p>
+<pre><code class="language-c">void klet_kick_remote(struct klet_carrier *c)
+{
+	if (c-&gt;state != KLET_RUNNING || c-&gt;depth != 0 || !klet_task_on_cpu(c-&gt;task))
+		return;                                 /* not in kernelet code on a processor: the bit will be found */
+	smp_call_function_single(task_cpu(c-&gt;task), klet_kick_ipi, c, 0);
+}
+
+static void klet_kick_ipi(void *arg)            /* runs in interrupt context on that processor */
+{
+	struct klet_carrier *c = arg;
+	if (current-&gt;carrier_hooks == &amp;c-&gt;hooks)          /* still the same carrier there? */
+		klet_watch_fire_now();                  /* then make the watch timer fire, and it will redirect */
+}
+</code></pre>
+<p>A requested firing is not a tick, unless the period it cut short has already run out: the callback raises no TICK for it, does not count toward the next chapter’s bound on critical sections, and puts the timer back on the expiry of the period it cut short, so a kick neither raises an extra tick nor delays the next one.</p>
+<p>A kick whose bit is already set does nothing at all, so a thousand kicks before the bit is taken cost one delivery.</p>
+<h2 id="when-a-bit-is-delivered"><a class="header" href="#when-a-bit-is-delivered">When a bit is delivered</a></h2>
+<p>A virtual interrupt reaches its handler by whichever of four paths comes first: the upcall, at a watch firing that finds the kernelet in kernelet code outside a critical section with stack to spare; the end of a critical section, at the unmask or the drop of the last guard; the return from user mode; or the start of the next scheduling decision. A bit left pending for any reason, because the carrier was in a service that held no guard, had too little stack, or was off its processor, is delivered by the first of those that comes, usually the next guard drop, or by a later watch firing that can redirect.</p>
+<p>The firing comes within one period if the carrier is on its processor when that period expires; there is no bound while Linux keeps the carrier off a processor, or takes it off before each period ends.</p>
+<pre class="mermaid">flowchart TB
+    t["watch timer fires&lt;br/&gt;(interrupt context)"] --&gt; raise["set TICK in the record&lt;br/&gt;(unless a kick's firing);&lt;br/&gt;flag the carrier if in user mode"]
+    raise --&gt; where{"what was interrupted?"}
+    where -- "user mode" --&gt; flag["resume hook, user_run returns 2,&lt;br/&gt;handlers run, no switch"]
+    where -- "kernelet code, not in a critical section,&lt;br/&gt;stack to spare" --&gt; redir["saved ip := virq_entry&lt;br/&gt;irq_off := 1"]
+    where -- "a critical section, too little stack,&lt;br/&gt;a service, Linux, or no registers" --&gt; pend["leave the bit pending"]
+    redir --&gt; stub["virq_entry: push all,&lt;br/&gt;klet_virq_body"]
+    stub --&gt; h["TICK: timer callbacks;&lt;br/&gt;KICK: set need-preempt"]
+    h --&gt; pre["irq_off := 0;&lt;br/&gt;might_preempt()"]
+    pre --&gt; ret["pop all, ret"]
+    pend --&gt; later["delivered at unmask, guard drop,&lt;br/&gt;the return from user mode, the next&lt;br/&gt;scheduling decision, or the next firing"]
+</pre>
+
+<div class="recap">
+<p><strong>Recap.</strong> Virtual interrupts are bits in the virtual CPU’s record: TICK from the watch timer, KICK from <code>vcpu_kick</code>. The watch timer is a pinned, hard, one-millisecond <code>hrtimer</code> per processor, armed by each carrier’s preemption notifier whenever Linux puts the carrier on that processor. When it finds the carrier in kernelet code outside a critical section, with room on the task’s stack, it points the interrupted frame at the image’s upcall stub, which saves everything on the task’s stack, runs the handlers, and may switch tasks before returning: kernel-mode preemption, held off by a guard and, inside a scheduling decision, by the window. A carrier in user mode is flagged and runs the handlers on its way back without switching; one in a critical section delivers the bit itself when the section ends; the next scheduling decision runs whatever is pending; a kick to another processor makes its timer fire at once; anything else waits for the next firing that can deliver it.</p>
+</div>
+
+
+                    </main>
+
+                    <nav class="nav-wrapper" aria-label="Page navigation">
+                        <!-- Mobile navigation buttons -->
+                            <a rel="prev" href="../accepted-design/tasks-and-virtual-cpus.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                                <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M41.4 233.4c-12.5 12.5-12.5 32.8 0 45.3l160 160c12.5 12.5 32.8 12.5 45.3 0s12.5-32.8 0-45.3L109.3 256 246.6 118.6c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0l-160 160z"/></svg></span>
+                            </a>
+
+                            <a rel="next prefetch" href="../accepted-design/sharing-a-processor-politely.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                                <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M278.6 233.4c12.5 12.5 12.5 32.8 0 45.3l-160 160c-12.5 12.5-32.8 12.5-45.3 0s-12.5-32.8 0-45.3L210.7 256 73.4 118.6c-12.5-12.5-12.5-32.8 0-45.3s32.8-12.5 45.3 0l160 160z"/></svg></span>
+                            </a>
+
+                        <div style="clear: both"></div>
+                    </nav>
+                </div>
+            </div>
+
+            <nav class="nav-wide-wrapper" aria-label="Page navigation">
+                    <a rel="prev" href="../accepted-design/tasks-and-virtual-cpus.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                        <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M41.4 233.4c-12.5 12.5-12.5 32.8 0 45.3l160 160c12.5 12.5 32.8 12.5 45.3 0s12.5-32.8 0-45.3L109.3 256 246.6 118.6c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0l-160 160z"/></svg></span>
+                    </a>
+
+                    <a rel="next prefetch" href="../accepted-design/sharing-a-processor-politely.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                        <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M278.6 233.4c12.5 12.5 12.5 32.8 0 45.3l-160 160c-12.5 12.5-32.8 12.5-45.3 0s-12.5-32.8 0-45.3L210.7 256 73.4 118.6c-12.5-12.5-12.5-32.8 0-45.3s32.8-12.5 45.3 0l160 160z"/></svg></span>
+                    </a>
+            </nav>
+
+        </div>
+
+        <template id=fa-eye><span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 576 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M288 32c-80.8 0-145.5 36.8-192.6 80.6C48.6 156 17.3 208 2.5 243.7c-3.3 7.9-3.3 16.7 0 24.6C17.3 304 48.6 356 95.4 399.4C142.5 443.2 207.2 480 288 480s145.5-36.8 192.6-80.6c46.8-43.5 78.1-95.4 93-131.1c3.3-7.9 3.3-16.7 0-24.6c-14.9-35.7-46.2-87.7-93-131.1C433.5 68.8 368.8 32 288 32zM432 256c0 79.5-64.5 144-144 144s-144-64.5-144-144s64.5-144 144-144s144 64.5 144 144zM288 192c0 35.3-28.7 64-64 64c-11.5 0-22.3-3-31.6-8.4c-.2 2.8-.4 5.5-.4 8.4c0 53 43 96 96 96s96-43 96-96s-43-96-96-96c-2.8 0-5.6 .1-8.4 .4c5.3 9.3 8.4 20.1 8.4 31.6z"/></svg></span></template>
+        <template id=fa-eye-slash><span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M38.8 5.1C28.4-3.1 13.3-1.2 5.1 9.2S-1.2 34.7 9.2 42.9l592 464c10.4 8.2 25.5 6.3 33.7-4.1s6.3-25.5-4.1-33.7L525.6 386.7c39.6-40.6 66.4-86.1 79.9-118.4c3.3-7.9 3.3-16.7 0-24.6c-14.9-35.7-46.2-87.7-93-131.1C465.5 68.8 400.8 32 320 32c-68.2 0-125 26.3-169.3 60.8L38.8 5.1zM223.1 149.5C248.6 126.2 282.7 112 320 112c79.5 0 144 64.5 144 144c0 24.9-6.3 48.3-17.4 68.7L408 294.5c5.2-11.8 8-24.8 8-38.5c0-53-43-96-96-96c-2.8 0-5.6 .1-8.4 .4c5.3 9.3 8.4 20.1 8.4 31.6c0 10.2-2.4 19.8-6.6 28.3l-90.3-70.8zm223.1 298L373 389.9c-16.4 6.5-34.3 10.1-53 10.1c-79.5 0-144-64.5-144-144c0-6.9 .5-13.6 1.4-20.2L83.1 161.5C60.3 191.2 44 220.8 34.5 243.7c-3.3 7.9-3.3 16.7 0 24.6c14.9 35.7 46.2 87.7 93 131.1C174.5 443.2 239.2 480 320 480c47.8 0 89.9-12.9 126.2-32.5z"/></svg></span></template>
+        <template id=fa-copy><span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M502.6 70.63l-61.25-61.25C435.4 3.371 427.2 0 418.7 0H255.1c-35.35 0-64 28.66-64 64l.0195 256C192 355.4 220.7 384 256 384h192c35.2 0 64-28.8 64-64V93.25C512 84.77 508.6 76.63 502.6 70.63zM464 320c0 8.836-7.164 16-16 16H255.1c-8.838 0-16-7.164-16-16L239.1 64.13c0-8.836 7.164-16 16-16h128L384 96c0 17.67 14.33 32 32 32h47.1V320zM272 448c0 8.836-7.164 16-16 16H63.1c-8.838 0-16-7.164-16-16L47.98 192.1c0-8.836 7.164-16 16-16H160V128H63.99c-35.35 0-64 28.65-64 64l.0098 256C.002 483.3 28.66 512 64 512h192c35.2 0 64-28.8 64-64v-32h-47.1L272 448z"/></svg></span></template>
+        <template id=fa-play><span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 384 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M73 39c-14.8-9.1-33.4-9.4-48.5-.9S0 62.6 0 80V432c0 17.4 9.4 33.4 24.5 41.9s33.7 8.1 48.5-.9L361 297c14.3-8.7 23-24.2 23-41s-8.7-32.2-23-41L73 39z"/></svg></span></template>
+        <template id=fa-clock-rotate-left><span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M75 75L41 41C25.9 25.9 0 36.6 0 57.9V168c0 13.3 10.7 24 24 24H134.1c21.4 0 32.1-25.9 17-41l-30.8-30.8C155 85.5 203 64 256 64c106 0 192 86 192 192s-86 192-192 192c-40.8 0-78.6-12.7-109.7-34.4c-14.5-10.1-34.4-6.6-44.6 7.9s-6.6 34.4 7.9 44.6C151.2 495 201.7 512 256 512c141.4 0 256-114.6 256-256S397.4 0 256 0C185.3 0 121.3 28.7 75 75zm181 53c-13.3 0-24 10.7-24 24V256c0 6.4 2.5 12.5 7 17l72 72c9.4 9.4 24.6 9.4 33.9 0s9.4-24.6 0-33.9l-65-65V152c0-13.3-10.7-24-24-24z"/></svg></span></template>
+
+
+
+        <script>
+            window.playground_copyable = true;
+        </script>
+
+
+        <script src="../elasticlunr-ef4e11c1.min.js"></script>
+        <script src="../mark-09e88c2c.min.js"></script>
+        <script src="../searcher-c2a407aa.js"></script>
+
+        <script src="../clipboard-1626706a.min.js"></script>
+        <script src="../highlight-abc7f01d.js"></script>
+        <script src="../book-a0b12cfe.js"></script>
+
+        <!-- Custom JS scripts -->
+        <script src="../assets/mermaid-eefea253.min.js"></script>
+        <script src="../assets/mermaid-init-9b03b796.js"></script>
+
+
+
+    </div>
+    </body>
+</html>

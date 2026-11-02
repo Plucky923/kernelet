@@ -1,0 +1,355 @@
+<!DOCTYPE HTML>
+<html lang="en" class="light sidebar-visible" dir="ltr">
+    <head>
+        <!-- Book generated using mdBook -->
+        <meta charset="UTF-8">
+        <title>Carrier hooks and patch overview - Building Kernelets on Linux</title>
+
+
+        <!-- Custom HTML head -->
+
+        <meta name="description" content="The accepted design and implementation of kernelets on Linux, with proposals for their evolution">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <meta name="theme-color" content="#ffffff">
+
+        <link rel="icon" href="../favicon-de23e50b.svg">
+        <link rel="shortcut icon" href="../favicon-8114d1fc.png">
+        <link rel="stylesheet" href="../css/variables-8adf115d.css">
+        <link rel="stylesheet" href="../css/general-2459343d.css">
+        <link rel="stylesheet" href="../css/chrome-ae938929.css">
+        <link rel="stylesheet" href="../css/print-9e4910d8.css" media="print">
+
+        <!-- Fonts -->
+        <link rel="stylesheet" href="../fonts/fonts-9644e21d.css">
+
+        <!-- Highlight.js Stylesheets -->
+        <link rel="stylesheet" id="mdbook-highlight-css" href="../highlight-493f70e1.css">
+        <link rel="stylesheet" id="mdbook-tomorrow-night-css" href="../tomorrow-night-4c0ae647.css">
+        <link rel="stylesheet" id="mdbook-ayu-highlight-css" href="../ayu-highlight-3fdfc3ac.css">
+
+        <!-- Custom theme stylesheets -->
+        <link rel="stylesheet" href="../assets/book-46594365.css">
+
+
+        <!-- Provide site root and default themes to javascript -->
+        <script>
+            const path_to_root = "../";
+            const default_light_theme = "light";
+            const default_dark_theme = "navy";
+            window.path_to_searchindex_js = "../searchindex-1dd0c655.js";
+        </script>
+        <!-- Start loading toc.js asap -->
+        <script src="../toc-e271ffef.js"></script>
+    </head>
+    <body>
+    <div id="mdbook-help-container">
+        <div id="mdbook-help-popup">
+            <h2 class="mdbook-help-title">Keyboard shortcuts</h2>
+            <div>
+                <p>Press <kbd>←</kbd> or <kbd>→</kbd> to navigate between chapters</p>
+                <p>Press <kbd>S</kbd> or <kbd>/</kbd> to search in the book</p>
+                <p>Press <kbd>?</kbd> to show this help</p>
+                <p>Press <kbd>Esc</kbd> to hide this help</p>
+            </div>
+        </div>
+    </div>
+    <div id="mdbook-body-container">
+        <!-- Work around some values being stored in localStorage wrapped in quotes -->
+        <script>
+            try {
+                let theme = localStorage.getItem('mdbook-theme');
+                let sidebar = localStorage.getItem('mdbook-sidebar');
+
+                if (theme.startsWith('"') && theme.endsWith('"')) {
+                    localStorage.setItem('mdbook-theme', theme.slice(1, theme.length - 1));
+                }
+
+                if (sidebar.startsWith('"') && sidebar.endsWith('"')) {
+                    localStorage.setItem('mdbook-sidebar', sidebar.slice(1, sidebar.length - 1));
+                }
+            } catch (e) { }
+        </script>
+
+        <!-- Set the theme before any content is loaded, prevents flash -->
+        <script>
+            const default_theme = window.matchMedia("(prefers-color-scheme: dark)").matches ? default_dark_theme : default_light_theme;
+            let theme;
+            try { theme = localStorage.getItem('mdbook-theme'); } catch(e) { }
+            if (theme === null || theme === undefined) { theme = default_theme; }
+            const html = document.documentElement;
+            html.classList.remove('light')
+            html.classList.add(theme);
+            html.classList.add("js");
+        </script>
+
+        <input type="checkbox" id="mdbook-sidebar-toggle-anchor" class="hidden">
+
+        <!-- Hide / unhide sidebar before it is displayed -->
+        <script>
+            let sidebar = null;
+            const sidebar_toggle = document.getElementById("mdbook-sidebar-toggle-anchor");
+            if (document.body.clientWidth >= 1080) {
+                try { sidebar = localStorage.getItem('mdbook-sidebar'); } catch(e) { }
+                sidebar = sidebar || 'visible';
+            } else {
+                sidebar = 'hidden';
+                sidebar_toggle.checked = false;
+            }
+            if (sidebar === 'visible') {
+                sidebar_toggle.checked = true;
+            } else {
+                html.classList.remove('sidebar-visible');
+            }
+        </script>
+
+        <nav id="mdbook-sidebar" class="sidebar" aria-label="Table of contents">
+            <!-- populated by js -->
+            <mdbook-sidebar-scrollbox class="sidebar-scrollbox"></mdbook-sidebar-scrollbox>
+            <noscript>
+                <iframe class="sidebar-iframe-outer" src="../toc.html"></iframe>
+            </noscript>
+            <div id="mdbook-sidebar-resize-handle" class="sidebar-resize-handle">
+                <div class="sidebar-resize-indicator"></div>
+            </div>
+        </nav>
+
+        <div id="mdbook-page-wrapper" class="page-wrapper">
+
+            <div class="page">
+                <div id="mdbook-menu-bar-hover-placeholder"></div>
+                <div id="mdbook-menu-bar" class="menu-bar sticky">
+                    <div class="left-buttons">
+                        <label id="mdbook-sidebar-toggle" class="icon-button" for="mdbook-sidebar-toggle-anchor" title="Toggle Table of Contents" aria-label="Toggle Table of Contents" aria-controls="mdbook-sidebar">
+                            <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M0 96C0 78.3 14.3 64 32 64H416c17.7 0 32 14.3 32 32s-14.3 32-32 32H32C14.3 128 0 113.7 0 96zM0 256c0-17.7 14.3-32 32-32H416c17.7 0 32 14.3 32 32s-14.3 32-32 32H32c-17.7 0-32-14.3-32-32zM448 416c0 17.7-14.3 32-32 32H32c-17.7 0-32-14.3-32-32s14.3-32 32-32H416c17.7 0 32 14.3 32 32z"/></svg></span>
+                        </label>
+                        <button id="mdbook-theme-toggle" class="icon-button" type="button" title="Change theme" aria-label="Change theme" aria-haspopup="true" aria-expanded="false" aria-controls="mdbook-theme-list">
+                            <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 576 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M371.3 367.1c27.3-3.9 51.9-19.4 67.2-42.9L600.2 74.1c12.6-19.5 9.4-45.3-7.6-61.2S549.7-4.4 531.1 9.6L294.4 187.2c-24 18-38.2 46.1-38.4 76.1L371.3 367.1zm-19.6 25.4l-116-104.4C175.9 290.3 128 339.6 128 400c0 3.9 .2 7.8 .6 11.6c1.8 17.5-10.2 36.4-27.8 36.4H96c-17.7 0-32 14.3-32 32s14.3 32 32 32H240c61.9 0 112-50.1 112-112c0-2.5-.1-5-.2-7.5z"/></svg></span>
+                        </button>
+                        <ul id="mdbook-theme-list" class="theme-popup" aria-label="Themes" role="menu">
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-default_theme">Auto</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-light">Light</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-rust">Rust</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-coal">Coal</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-navy">Navy</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-ayu">Ayu</button></li>
+                        </ul>
+                        <button id="mdbook-search-toggle" class="icon-button" type="button" title="Search (`/`)" aria-label="Toggle Searchbar" aria-expanded="false" aria-keyshortcuts="/ s" aria-controls="mdbook-searchbar">
+                            <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M416 208c0 45.9-14.9 88.3-40 122.7L502.6 457.4c12.5 12.5 12.5 32.8 0 45.3s-32.8 12.5-45.3 0L330.7 376c-34.4 25.2-76.8 40-122.7 40C93.1 416 0 322.9 0 208S93.1 0 208 0S416 93.1 416 208zM208 352c79.5 0 144-64.5 144-144s-64.5-144-144-144S64 128.5 64 208s64.5 144 144 144z"/></svg></span>
+                        </button>
+                    </div>
+
+                    <h1 class="menu-title">Building Kernelets on Linux</h1>
+
+                    <div class="right-buttons">
+                        <a href="../print.html" title="Print this book" aria-label="Print this book">
+                            <span class=fa-svg id="print-button"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M128 0C92.7 0 64 28.7 64 64v96h64V64H354.7L384 93.3V160h64V93.3c0-17-6.7-33.3-18.7-45.3L400 18.7C388 6.7 371.7 0 354.7 0H128zM384 352v32 64H128V384 368 352H384zm64 32h32c17.7 0 32-14.3 32-32V256c0-35.3-28.7-64-64-64H64c-35.3 0-64 28.7-64 64v96c0 17.7 14.3 32 32 32H64v64c0 35.3 28.7 64 64 64H384c35.3 0 64-28.7 64-64V384zm-16-88c-13.3 0-24-10.7-24-24s10.7-24 24-24s24 10.7 24 24s-10.7 24-24 24z"/></svg></span>
+                        </a>
+
+                    </div>
+                </div>
+
+                <div id="mdbook-search-wrapper" class="hidden">
+                    <form id="mdbook-searchbar-outer" class="searchbar-outer">
+                        <div class="search-wrapper">
+                            <input type="search" id="mdbook-searchbar" name="searchbar" placeholder="Search this book ..." aria-controls="mdbook-searchresults-outer" aria-describedby="searchresults-header">
+                            <div class="spinner-wrapper">
+                                <span class=fa-svg id="fa-spin"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M304 48c0-26.5-21.5-48-48-48s-48 21.5-48 48s21.5 48 48 48s48-21.5 48-48zm0 416c0-26.5-21.5-48-48-48s-48 21.5-48 48s21.5 48 48 48s48-21.5 48-48zM48 304c26.5 0 48-21.5 48-48s-21.5-48-48-48s-48 21.5-48 48s21.5 48 48 48zm464-48c0-26.5-21.5-48-48-48s-48 21.5-48 48s21.5 48 48 48s48-21.5 48-48zM142.9 437c18.7-18.7 18.7-49.1 0-67.9s-49.1-18.7-67.9 0s-18.7 49.1 0 67.9s49.1 18.7 67.9 0zm0-294.2c18.7-18.7 18.7-49.1 0-67.9S93.7 56.2 75 75s-18.7 49.1 0 67.9s49.1 18.7 67.9 0zM369.1 437c18.7 18.7 49.1 18.7 67.9 0s18.7-49.1 0-67.9s-49.1-18.7-67.9 0s-18.7 49.1 0 67.9z"/></svg></span>
+                            </div>
+                        </div>
+                    </form>
+                    <div id="mdbook-searchresults-outer" class="searchresults-outer hidden">
+                        <div id="mdbook-searchresults-header" class="searchresults-header"></div>
+                        <ul id="mdbook-searchresults">
+                        </ul>
+                    </div>
+                </div>
+
+                <!-- Apply ARIA attributes after the sidebar and the sidebar toggle button are added to the DOM -->
+                <script>
+                    document.getElementById('mdbook-sidebar-toggle').setAttribute('aria-expanded', sidebar === 'visible');
+                    document.getElementById('mdbook-sidebar').setAttribute('aria-hidden', sidebar !== 'visible');
+                    Array.from(document.querySelectorAll('#mdbook-sidebar a')).forEach(function(link) {
+                        link.setAttribute('tabIndex', sidebar === 'visible' ? 0 : -1);
+                    });
+                </script>
+
+                <div id="mdbook-content" class="content">
+                    <main>
+                        <h1 id="carrier-hooks-and-patch-overview"><a class="header" href="#carrier-hooks-and-patch-overview">Carrier hooks and patch overview</a></h1>
+<p>Left alone, Linux answers a tenant’s system calls itself. A kernelet’s user program runs in user mode on a real processor. When it executes <code>syscall</code>, the processor jumps into whatever the hardware’s system-call entry register points at, and on a Linux machine that is Linux’s entry code. Linux would then look the call number up in its own table and run <code>write</code>. Nothing in the hundred-line kernel would ever hear of it.</p>
+<p>So the design needs a way to <strong>hand a system call to a kernelet before Linux handles it</strong>. It also needs, for reasons this chapter builds up to, a way to <strong>run kernelet code just before one of its tasks enters user mode</strong>, whatever brought the task into the kernel. Linux has no such interface. This chapter adds one that does both: two hooks, which Linux calls only for the tasks that carry a kernelet.</p>
+<p>To Linux, a carrier is a task with one new field: a pointer to its <strong>carrier event hooks</strong>, a table of two functions. A <strong>carrier</strong> is a Linux task that carries one of a sandbox’s virtual CPUs: it runs the kernelet’s code and enters user mode for it (chapter 1’s table; chapter 2 showed how one is made). Linux calls the two functions at the two events through which every crossing between a carrier’s user mode and the kernel passes: a system call from the carrier’s user mode, and the carrier’s return to user mode with work pending. For an ordinary task the pointer is null, and nothing in the patch is reached.</p>
+<p>The table is the whole interface by which Linux’s core calls into the endovisor. The core knows the type of the two functions and the two places to call them, and nothing of what is behind them; the endovisor implements the functions, puts a table into the record it keeps for each carrier, and finds that record from the table’s address when a hook is called.</p>
+<h2 id="where-linux-can-be-hooked"><a class="header" href="#where-linux-can-be-hooked">Where Linux can be hooked</a></h2>
+<div class="background">
+<p><strong>Linux: tasks and the entry path.</strong> Linux’s unit of execution is the <strong>task</strong> (<a href="https://elixir.bootlin.com/linux/v6.12/source/include/linux/sched.h#L778"><code>struct task_struct</code></a>); a thread is a task, a single-threaded process is a task.</p>
+<p>While a task is in the kernel, its user registers sit in <code>pt_regs</code>. When a task enters the kernel from user mode, the entry code saves the user registers at the top of the task’s kernel stack in a structure called <a href="https://elixir.bootlin.com/linux/v6.12/source/arch/x86/include/asm/ptrace.h#L103"><code>pt_regs</code></a>, and restores them from there on the way back. To change what a task does when it returns to user mode, change its <code>pt_regs</code>.</p>
+<p>On x86-64 every system-call instruction, after a few lines of assembly and one architecture-specific C function, reaches architecture-independent C in <a href="https://elixir.bootlin.com/linux/v6.12/source/kernel/entry/common.c"><code>kernel/entry/common.c</code></a>, the <strong>generic entry layer</strong>. On the way in, if the task has any bit set in a per-task mask called its <em>syscall work</em>, the layer calls <a href="https://elixir.bootlin.com/linux/v6.12/source/kernel/entry/common.c#L28"><code>syscall_trace_enter()</code></a>, which runs Linux’s interception mechanisms in order: <em>Syscall User Dispatch</em>, <code>ptrace</code>, and <code>seccomp</code>, the filter by which a process restricts which system calls it and its descendants may make. Any of them may declare the call answered, in which case Linux skips its own handler. On the way out, if the task has pending work such as a signal, the layer runs <a href="https://elixir.bootlin.com/linux/v6.12/source/kernel/entry/common.c#L90"><code>exit_to_user_mode_loop()</code></a> until none is left, then restores <code>pt_regs</code>.</p>
+</div>
+
+<p>Linux thus already has three stages that can intercept a system call. All three are controlled from user space, and none lets kernel code <em>answer</em> a call. The syscall hook is a fourth stage that does, and the resume hook is its counterpart on the way out.</p>
+<h2 id="two-hooks-one-for-each-direction"><a class="header" href="#two-hooks-one-for-each-direction">Two hooks, one for each direction</a></h2>
+<p><strong>On the way in.</strong> The hook answers the question the chapter opened with: the tenant made a system call, so give it to the kernelet. It runs last among the interceptors, and if the kernelet answers the call, Linux’s table is skipped.</p>
+<pre class="mermaid">flowchart TB
+    u["user program&lt;br/&gt;executes syscall"] --&gt; e["entry assembly&lt;br/&gt;saves pt_regs"]
+    e --&gt; w{"any syscall&lt;br/&gt;work bit set?"}
+    w -- no --&gt; t["Linux's&lt;br/&gt;system-call table"]
+    w -- yes --&gt; s["syscall_trace_enter:&lt;br/&gt;dispatch, ptrace, seccomp"]
+    s --&gt; g{"the KERNELET&lt;br/&gt;bit set?"}
+    g -- no --&gt; t
+    g -- "yes, but&lt;br/&gt;hooks-&gt;on_syscall(regs)&lt;br/&gt;returned false" --&gt; t
+    g -- "yes, and&lt;br/&gt;it returned true" --&gt; x["Linux's system-call&lt;br/&gt;table is skipped"]
+</pre>
+
+<p><strong>On the way out.</strong> A system call is the only reason a tenant <em>asks</em> for its kernel, but it is not the only reason the kernel must run before the tenant does. Three more appear in later chapters:</p>
+<ul>
+<li><em>A carrier has just been created.</em> It is a fresh Linux task heading for user mode, and nothing of the kernelet has run on it yet. The kernelet must boot, build the tenant’s address space and choose the registers the task will enter user mode with, all before that first entry, and there has been no system call to hook.</li>
+<li><em>The tenant has faulted.</em> It executed an instruction it may not, or touched a page that is not mapped. Linux handles the exception and, as for every process, turns it into a signal to deliver on the way back to user mode. The kernelet must take that exception for itself before Linux delivers the signal.</li>
+<li><em>Someone else wants the kernelet.</em> A timer fired, or another virtual CPU has a task for this one, while the carrier is in user mode. It must be brought into the kernel and then into kernelet code before it continues.</li>
+</ul>
+<p>In every case the task is inside the kernel, on its way back to user mode, and someone has set a flag saying there is work to do before it gets there. Linux already has exactly that moment: the exit loop, which runs whenever a task with pending work is about to return to user mode. The way-out hook is placed at its top. The job it gives the kernelet is the same every time: <em>the tenant is about to run; find out why you were called, and run kernelet code first if there is any to run.</em></p>
+<pre class="mermaid">flowchart TB
+    p{"work pending?&lt;br/&gt;(a signal, a flag,&lt;br/&gt;a reschedule)"} -- no --&gt; back["restore pt_regs,&lt;br/&gt;return to user mode"]
+    p -- yes --&gt; loop[exit_to_user_mode_loop]
+    loop --&gt; r{"a carrier?&lt;br/&gt;(current-&gt;carrier_hooks)"}
+    r -- yes --&gt; h["the task's hooks:&lt;br/&gt;on_resume(regs)"]
+    h --&gt; sig[signals, reschedule]
+    r -- no --&gt; sig
+    sig --&gt; p
+</pre>
+
+<h2 id="the-patch-hunk-by-hunk"><a class="header" href="#the-patch-hunk-by-hunk">The patch, hunk by hunk</a></h2>
+<p><strong>A table of hooks and a pointer per task.</strong> A new header defines the table, two function pointers, and <code>struct task_struct</code> gains a pointer to one. A task whose pointer is null is unaffected by anything else in the patch.</p>
+<p><em>Simplified from <code>prototype/linux/patches/0001-carrier-hooks.patch</code>: <code>carrier_event_hooks</code>.</em></p>
+<pre><code class="language-c">/* include/linux/kernelet.h (new) */
+struct carrier_event_hooks {
+	/* Called from syscall_trace_enter(), after seccomp, for a system call
+	 * issued by a carrier's user mode; regs hold the number and the
+	 * arguments. Returns true if the kernelet serviced the call: regs then
+	 * hold what the task returns to user mode with, return value included,
+	 * and Linux's own dispatch is skipped. Returns false to let Linux
+	 * dispatch the call as for any other task. */
+	bool (*on_syscall)(struct pt_regs *regs);
+
+	/* Called from exit_to_user_mode_loop(), after the TIF_NOTIFY_RESUME
+	 * work and before signals are delivered, whenever a carrier is about
+	 * to return to user mode with exit work pending: for a reason of the
+	 * kernelet's own (a carrier's first entry, a tenant's fault, a virtual
+	 * interrupt) or for one of Linux's (a reschedule, a signal). No reason
+	 * is passed, and several may be pending at once: whoever requested the
+	 * call recorded why in the endovisor's record for the task, and the
+	 * hook reads it there. The loop may call it more than once on one
+	 * return.
+	 *
+	 * Runs in process context with no lock held; it may sleep, and may run
+	 * kernelet code for as long as it likes. It may rewrite regs, which are
+	 * what the task returns to user mode with, and must leave them alone
+	 * when it has nothing to do. */
+	void (*on_resume)(struct pt_regs *regs);
+};
+
+/* include/linux/sched.h, inside struct task_struct */
+	struct carrier_event_hooks	*carrier_hooks;	/* NULL for every ordinary task */
+</code></pre>
+<p><strong>One bit of syscall work.</strong> The patch adds a syscall-work bit, <code>SYSCALL_WORK_KERNELET</code>, so that Linux calls <code>syscall_trace_enter()</code> for a carrier. Linux calls that function only for tasks with a bit set in their syscall-work mask, and the new bit is included in the set that triggers the call on entry. A task that is not a carrier pays nothing: the fast path does not even test the pointer.</p>
+<p><strong>The syscall hook.</strong> Inside <code>syscall_trace_enter()</code>, directly after seccomp:</p>
+<p><em>Simplified from <code>prototype/linux/patches/0001-carrier-hooks.patch</code>: <code>SYSCALL_WORK_KERNELET</code>.</em></p>
+<pre><code class="language-c">/* kernel/entry/common.c, syscall_trace_enter() */
+	if (work &amp; SYSCALL_WORK_KERNELET) {
+		if (current-&gt;carrier_hooks-&gt;on_syscall(regs))
+			return -1L;
+	}
+</code></pre>
+<p>Returning <code>-1</code> from this function is Linux’s existing convention for “an earlier stage has answered this call; do not dispatch it”, and <a href="https://elixir.bootlin.com/linux/v6.12/source/arch/x86/entry/common.c#L76"><code>do_syscall_64()</code></a> then skips the table.</p>
+<p><strong>Seccomp comes first.</strong> Because the hook is placed <em>after</em> seccomp, the filter a sandbox was started with runs on every one of the tenant’s system calls <em>before</em> the kernelet sees them. That is a tool for the kernelet runtime, the host program that creates sandboxes (chapter 2), with a sharp edge. A filter that allows a call lets the kernelet serve it. One that returns an error answers the call in Linux, and the kernelet never hears of it. One that kills ends a carrier, and with it, by the endovisor’s rule that a lost carrier kills its sandbox, the whole sandbox. A filter for a sandbox therefore bounds what the tenant may ask of its <em>kernelet</em>, and must be written for that, not copied from a host process.</p>
+<p>The prototype’s holder installs a filter only in one boot of <code>make probe</code>, which checks that a killing filter ends the sandbox.</p>
+<p><strong>The resume hook.</strong> The patch’s second call is on the way out. A task reaches <code>exit_to_user_mode_loop()</code> only when it has exit work pending, and the hook sits at the top of that loop, after interrupts are enabled and before Linux delivers signals. The loop, and the flag that most often sends a task into it, are Linux’s own:</p>
+<div class="background">
+<p><strong>Linux: the exit work flags and <code>TIF_NOTIFY_RESUME</code>.</strong> A task carries a word of <em>thread flags</em>, and a few of them mean “do something before this task next returns to user mode”: <code>TIF_SIGPENDING</code> (a signal to deliver), <code>TIF_NEED_RESCHED</code> (the scheduler wants the processor back), and <a href="https://elixir.bootlin.com/linux/v6.12/source/arch/x86/include/asm/thread_info.h#L87"><code>TIF_NOTIFY_RESUME</code></a>, the general-purpose one, which stands for any other deferred work. The entry layer tests the whole set at once (<a href="https://elixir.bootlin.com/linux/v6.12/source/include/linux/entry-common.h#L65"><code>EXIT_TO_USER_MODE_WORK</code></a>) and enters <code>exit_to_user_mode_loop()</code> only if one of them is set.</p>
+<p><code>TIF_NOTIFY_RESUME</code> stands for deferred work, run by <code>resume_user_mode_work()</code>, which clears the flag first. It is set by <a href="https://elixir.bootlin.com/linux/v6.12/source/include/linux/resume_user_mode.h#L21"><code>set_notify_resume()</code></a>, and by <a href="https://elixir.bootlin.com/linux/v6.12/source/kernel/task_work.c#L54"><code>task_work_add()</code></a>, which queues a function for a task to run on its own way out to user mode. The flag’s work, <a href="https://elixir.bootlin.com/linux/v6.12/source/include/linux/resume_user_mode.h#L41"><code>resume_user_mode_work()</code></a>, clears the flag, runs the queued task work, reclaims memory for a control group over its high limit, throttles block I/O if the task owes some, and tells a restartable sequence that it was interrupted. That it clears the flag <em>first</em> is what the excerpt below depends on.</p>
+</div>
+
+<p>The hook, with Linux’s own work for that flag placed before it:</p>
+<p><em>Simplified from <code>prototype/linux/patches/0001-carrier-hooks.patch</code>: <code>resume_user_mode_work</code>.</em></p>
+<pre><code class="language-c">/* kernel/entry/common.c, exit_to_user_mode_loop() */
+		if (unlikely(current-&gt;carrier_hooks)) {
+			if (ti_work &amp; _TIF_NOTIFY_RESUME) {          /* Linux's own notify-resume work first, since it clears the flag: */
+				resume_user_mode_work(regs);             /* a flag set while the hook runs then survives to the loop's */
+				ti_work &amp;= ~_TIF_NOTIFY_RESUME;          /* next look at the flags, and the hook runs again */
+			}
+			current-&gt;carrier_hooks-&gt;on_resume(regs);
+		}
+</code></pre>
+<p>Linux’s own notify-resume work goes first because its first act is to clear the flag that requested it. Run after the hook, it would clear a request the endovisor made from another processor while the hook was looking elsewhere, and the carrier would enter user mode with that request pending.</p>
+<p>The hook runs before signal delivery so that the kernelet can take a tenant’s exceptions away from Linux, when the round trip into user mode is built.</p>
+<p><strong>The hooks are inherited.</strong> Nothing in the patch copies the pointer into child tasks, and nothing needs to: Linux creates a task by copying the parent’s whole <code>task_struct</code> (<a href="https://elixir.bootlin.com/linux/v6.12/source/kernel/fork.c#L1101"><code>dup_task_struct()</code></a>), the new field included, and the syscall-work bits are inherited the same way. A child of a carrier therefore has the hooks before it executes its first instruction, and there is no moment at which it could make a system call that Linux would answer. A carrier never forks through Linux, since the kernelet answers its system calls, so a child that shared its parent’s record never arises. This is the difference between a field Linux does not know about, which it copies, and a setting Linux knows about, such as Syscall User Dispatch, which it deliberately resets at <code>fork</code> and <code>exec</code>.</p>
+<p><strong>Two helper functions.</strong> <code>kernel/fork.c</code> gains two functions that the endovisor cannot write itself because everything they touch is private to the core kernel: <code>kernelet_mm_alloc()</code>, which creates an empty address space with a chosen owner, and <code>kernelet_switch_mm()</code>, which makes the calling task run in a different address space. Both belong to tenant memory, built on Linux’s page tables later in the book; they are mentioned here only so that the patch’s contents are complete.</p>
+<p><strong>Six exports.</strong> Functions the endovisor needs that Linux does not already export to modules, each one <code>EXPORT_SYMBOL_GPL</code> line. <code>flush_tlb_mm_range</code> is for <code>vm_flush</code>, the flush of a tenant’s address space. Four are for the image loader of chapter 4: <code>set_memory_rox</code>, which makes shared code mappings read-only and executable; <code>set_memory_ro</code>, which makes shared data mappings read-only; <code>set_memory_rw</code>, which restores backing-page writability before the pages are freed; and <code>modules_disabled</code>, the setting by which an operator forbids module loading, which registering an image checks as <code>init_module</code> does. <code>kernel_clone</code> is exported too; nothing in the endovisor calls it.</p>
+<p><strong>A configuration option.</strong> <code>CONFIG_KERNELET</code> guards the hooks, the field, the helpers and two of the exports, and selects <code>CONFIG_PREEMPT_NOTIFIERS</code>, which the endovisor uses. The prototype’s kernel configuration turns it on. A kernel built without it differs from a stock kernel only in exporting the four symbols of the image loader, whose export lines are unconditional; every other line the patch adds to a function is inside <code>#ifdef CONFIG_KERNELET</code>, and what remains outside are the include lines, a forward declaration, the new header (the hooks’ type and two prototypes), the bit’s name and a macro that expands to zero.</p>
+<p><strong>A precondition.</strong> The kernel must be built without the legacy <em>vsyscall</em> page (<code>CONFIG_X86_VSYSCALL_EMULATION</code> unset). A program that jumps to that page’s fixed address gets three system calls answered by Linux’s own page-fault handler, without ever reaching the entry path, so the syscall hook would never see them. The module refuses to load on a kernel built with it.</p>
+<h2 id="what-the-patch-does-not-do"><a class="header" href="#what-the-patch-does-not-do">What the patch does not do</a></h2>
+<p>It adds no new system call, no boot parameter, and no change to Linux’s scheduler or memory manager. For a task whose <code>carrier_hooks</code> pointer is null, which is every task on a machine without a loaded endovisor, the two hooks are never reached. Its whole effect is to let <em>some</em> kernel code, named by a pointer in the task, see a task’s system calls before Linux does and run once more before the task returns to user mode. Who installs that pointer, and on which tasks, is the next chapter.</p>
+<div class="recap">
+<p><strong>Recap.</strong> The carrier event hooks are two functions that Linux’s generic entry layer calls for a carrier, selected by a pointer in <code>task_struct</code> and a syscall-work bit: <code>on_syscall</code> runs after seccomp and can answer the call so that Linux’s table is skipped; <code>on_resume</code> runs on the way back to user mode, before signals are delivered, and gives the kernelet the last word before the tenant runs, for everything that is not a system call: a carrier’s first entry, a tenant’s fault, a timer or another virtual CPU wanting it. A child inherits the pointer because Linux copies the task structure. The rest of the patch is two helpers and six exports for other chapters.</p>
+</div>
+
+
+                    </main>
+
+                    <nav class="nav-wrapper" aria-label="Page navigation">
+                        <!-- Mobile navigation buttons -->
+                            <a rel="prev" href="../accepted-design/the-kernelet-abi.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                                <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M41.4 233.4c-12.5 12.5-12.5 32.8 0 45.3l160 160c12.5 12.5 32.8 12.5 45.3 0s12.5-32.8 0-45.3L109.3 256 246.6 118.6c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0l-160 160z"/></svg></span>
+                            </a>
+
+                            <a rel="next prefetch" href="../accepted-design/carriers.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                                <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M278.6 233.4c12.5 12.5 12.5 32.8 0 45.3l-160 160c-12.5 12.5-32.8 12.5-45.3 0s-12.5-32.8 0-45.3L210.7 256 73.4 118.6c-12.5-12.5-12.5-32.8 0-45.3s32.8-12.5 45.3 0l160 160z"/></svg></span>
+                            </a>
+
+                        <div style="clear: both"></div>
+                    </nav>
+                </div>
+            </div>
+
+            <nav class="nav-wide-wrapper" aria-label="Page navigation">
+                    <a rel="prev" href="../accepted-design/the-kernelet-abi.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                        <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M41.4 233.4c-12.5 12.5-12.5 32.8 0 45.3l160 160c12.5 12.5 32.8 12.5 45.3 0s12.5-32.8 0-45.3L109.3 256 246.6 118.6c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0l-160 160z"/></svg></span>
+                    </a>
+
+                    <a rel="next prefetch" href="../accepted-design/carriers.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                        <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M278.6 233.4c12.5 12.5 12.5 32.8 0 45.3l-160 160c-12.5 12.5-32.8 12.5-45.3 0s-12.5-32.8 0-45.3L210.7 256 73.4 118.6c-12.5-12.5-12.5-32.8 0-45.3s32.8-12.5 45.3 0l160 160z"/></svg></span>
+                    </a>
+            </nav>
+
+        </div>
+
+        <template id=fa-eye><span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 576 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M288 32c-80.8 0-145.5 36.8-192.6 80.6C48.6 156 17.3 208 2.5 243.7c-3.3 7.9-3.3 16.7 0 24.6C17.3 304 48.6 356 95.4 399.4C142.5 443.2 207.2 480 288 480s145.5-36.8 192.6-80.6c46.8-43.5 78.1-95.4 93-131.1c3.3-7.9 3.3-16.7 0-24.6c-14.9-35.7-46.2-87.7-93-131.1C433.5 68.8 368.8 32 288 32zM432 256c0 79.5-64.5 144-144 144s-144-64.5-144-144s64.5-144 144-144s144 64.5 144 144zM288 192c0 35.3-28.7 64-64 64c-11.5 0-22.3-3-31.6-8.4c-.2 2.8-.4 5.5-.4 8.4c0 53 43 96 96 96s96-43 96-96s-43-96-96-96c-2.8 0-5.6 .1-8.4 .4c5.3 9.3 8.4 20.1 8.4 31.6z"/></svg></span></template>
+        <template id=fa-eye-slash><span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M38.8 5.1C28.4-3.1 13.3-1.2 5.1 9.2S-1.2 34.7 9.2 42.9l592 464c10.4 8.2 25.5 6.3 33.7-4.1s6.3-25.5-4.1-33.7L525.6 386.7c39.6-40.6 66.4-86.1 79.9-118.4c3.3-7.9 3.3-16.7 0-24.6c-14.9-35.7-46.2-87.7-93-131.1C465.5 68.8 400.8 32 320 32c-68.2 0-125 26.3-169.3 60.8L38.8 5.1zM223.1 149.5C248.6 126.2 282.7 112 320 112c79.5 0 144 64.5 144 144c0 24.9-6.3 48.3-17.4 68.7L408 294.5c5.2-11.8 8-24.8 8-38.5c0-53-43-96-96-96c-2.8 0-5.6 .1-8.4 .4c5.3 9.3 8.4 20.1 8.4 31.6c0 10.2-2.4 19.8-6.6 28.3l-90.3-70.8zm223.1 298L373 389.9c-16.4 6.5-34.3 10.1-53 10.1c-79.5 0-144-64.5-144-144c0-6.9 .5-13.6 1.4-20.2L83.1 161.5C60.3 191.2 44 220.8 34.5 243.7c-3.3 7.9-3.3 16.7 0 24.6c14.9 35.7 46.2 87.7 93 131.1C174.5 443.2 239.2 480 320 480c47.8 0 89.9-12.9 126.2-32.5z"/></svg></span></template>
+        <template id=fa-copy><span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M502.6 70.63l-61.25-61.25C435.4 3.371 427.2 0 418.7 0H255.1c-35.35 0-64 28.66-64 64l.0195 256C192 355.4 220.7 384 256 384h192c35.2 0 64-28.8 64-64V93.25C512 84.77 508.6 76.63 502.6 70.63zM464 320c0 8.836-7.164 16-16 16H255.1c-8.838 0-16-7.164-16-16L239.1 64.13c0-8.836 7.164-16 16-16h128L384 96c0 17.67 14.33 32 32 32h47.1V320zM272 448c0 8.836-7.164 16-16 16H63.1c-8.838 0-16-7.164-16-16L47.98 192.1c0-8.836 7.164-16 16-16H160V128H63.99c-35.35 0-64 28.65-64 64l.0098 256C.002 483.3 28.66 512 64 512h192c35.2 0 64-28.8 64-64v-32h-47.1L272 448z"/></svg></span></template>
+        <template id=fa-play><span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 384 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M73 39c-14.8-9.1-33.4-9.4-48.5-.9S0 62.6 0 80V432c0 17.4 9.4 33.4 24.5 41.9s33.7 8.1 48.5-.9L361 297c14.3-8.7 23-24.2 23-41s-8.7-32.2-23-41L73 39z"/></svg></span></template>
+        <template id=fa-clock-rotate-left><span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M75 75L41 41C25.9 25.9 0 36.6 0 57.9V168c0 13.3 10.7 24 24 24H134.1c21.4 0 32.1-25.9 17-41l-30.8-30.8C155 85.5 203 64 256 64c106 0 192 86 192 192s-86 192-192 192c-40.8 0-78.6-12.7-109.7-34.4c-14.5-10.1-34.4-6.6-44.6 7.9s-6.6 34.4 7.9 44.6C151.2 495 201.7 512 256 512c141.4 0 256-114.6 256-256S397.4 0 256 0C185.3 0 121.3 28.7 75 75zm181 53c-13.3 0-24 10.7-24 24V256c0 6.4 2.5 12.5 7 17l72 72c9.4 9.4 24.6 9.4 33.9 0s9.4-24.6 0-33.9l-65-65V152c0-13.3-10.7-24-24-24z"/></svg></span></template>
+
+
+
+        <script>
+            window.playground_copyable = true;
+        </script>
+
+
+        <script src="../elasticlunr-ef4e11c1.min.js"></script>
+        <script src="../mark-09e88c2c.min.js"></script>
+        <script src="../searcher-c2a407aa.js"></script>
+
+        <script src="../clipboard-1626706a.min.js"></script>
+        <script src="../highlight-abc7f01d.js"></script>
+        <script src="../book-a0b12cfe.js"></script>
+
+        <!-- Custom JS scripts -->
+        <script src="../assets/mermaid-eefea253.min.js"></script>
+        <script src="../assets/mermaid-init-9b03b796.js"></script>
+
+
+
+    </div>
+    </body>
+</html>

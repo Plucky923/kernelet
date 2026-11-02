@@ -1,0 +1,478 @@
+<!DOCTYPE HTML>
+<html lang="en" class="light sidebar-visible" dir="ltr">
+    <head>
+        <!-- Book generated using mdBook -->
+        <meta charset="UTF-8">
+        <title>Tenant memory on Linux&#x27;s page tables - Building Kernelets on Linux</title>
+
+
+        <!-- Custom HTML head -->
+
+        <meta name="description" content="The accepted design and implementation of kernelets on Linux, with proposals for their evolution">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <meta name="theme-color" content="#ffffff">
+
+        <link rel="icon" href="../favicon-de23e50b.svg">
+        <link rel="shortcut icon" href="../favicon-8114d1fc.png">
+        <link rel="stylesheet" href="../css/variables-8adf115d.css">
+        <link rel="stylesheet" href="../css/general-2459343d.css">
+        <link rel="stylesheet" href="../css/chrome-ae938929.css">
+        <link rel="stylesheet" href="../css/print-9e4910d8.css" media="print">
+
+        <!-- Fonts -->
+        <link rel="stylesheet" href="../fonts/fonts-9644e21d.css">
+
+        <!-- Highlight.js Stylesheets -->
+        <link rel="stylesheet" id="mdbook-highlight-css" href="../highlight-493f70e1.css">
+        <link rel="stylesheet" id="mdbook-tomorrow-night-css" href="../tomorrow-night-4c0ae647.css">
+        <link rel="stylesheet" id="mdbook-ayu-highlight-css" href="../ayu-highlight-3fdfc3ac.css">
+
+        <!-- Custom theme stylesheets -->
+        <link rel="stylesheet" href="../assets/book-46594365.css">
+
+
+        <!-- Provide site root and default themes to javascript -->
+        <script>
+            const path_to_root = "../";
+            const default_light_theme = "light";
+            const default_dark_theme = "navy";
+            window.path_to_searchindex_js = "../searchindex-1dd0c655.js";
+        </script>
+        <!-- Start loading toc.js asap -->
+        <script src="../toc-e271ffef.js"></script>
+    </head>
+    <body>
+    <div id="mdbook-help-container">
+        <div id="mdbook-help-popup">
+            <h2 class="mdbook-help-title">Keyboard shortcuts</h2>
+            <div>
+                <p>Press <kbd>←</kbd> or <kbd>→</kbd> to navigate between chapters</p>
+                <p>Press <kbd>S</kbd> or <kbd>/</kbd> to search in the book</p>
+                <p>Press <kbd>?</kbd> to show this help</p>
+                <p>Press <kbd>Esc</kbd> to hide this help</p>
+            </div>
+        </div>
+    </div>
+    <div id="mdbook-body-container">
+        <!-- Work around some values being stored in localStorage wrapped in quotes -->
+        <script>
+            try {
+                let theme = localStorage.getItem('mdbook-theme');
+                let sidebar = localStorage.getItem('mdbook-sidebar');
+
+                if (theme.startsWith('"') && theme.endsWith('"')) {
+                    localStorage.setItem('mdbook-theme', theme.slice(1, theme.length - 1));
+                }
+
+                if (sidebar.startsWith('"') && sidebar.endsWith('"')) {
+                    localStorage.setItem('mdbook-sidebar', sidebar.slice(1, sidebar.length - 1));
+                }
+            } catch (e) { }
+        </script>
+
+        <!-- Set the theme before any content is loaded, prevents flash -->
+        <script>
+            const default_theme = window.matchMedia("(prefers-color-scheme: dark)").matches ? default_dark_theme : default_light_theme;
+            let theme;
+            try { theme = localStorage.getItem('mdbook-theme'); } catch(e) { }
+            if (theme === null || theme === undefined) { theme = default_theme; }
+            const html = document.documentElement;
+            html.classList.remove('light')
+            html.classList.add(theme);
+            html.classList.add("js");
+        </script>
+
+        <input type="checkbox" id="mdbook-sidebar-toggle-anchor" class="hidden">
+
+        <!-- Hide / unhide sidebar before it is displayed -->
+        <script>
+            let sidebar = null;
+            const sidebar_toggle = document.getElementById("mdbook-sidebar-toggle-anchor");
+            if (document.body.clientWidth >= 1080) {
+                try { sidebar = localStorage.getItem('mdbook-sidebar'); } catch(e) { }
+                sidebar = sidebar || 'visible';
+            } else {
+                sidebar = 'hidden';
+                sidebar_toggle.checked = false;
+            }
+            if (sidebar === 'visible') {
+                sidebar_toggle.checked = true;
+            } else {
+                html.classList.remove('sidebar-visible');
+            }
+        </script>
+
+        <nav id="mdbook-sidebar" class="sidebar" aria-label="Table of contents">
+            <!-- populated by js -->
+            <mdbook-sidebar-scrollbox class="sidebar-scrollbox"></mdbook-sidebar-scrollbox>
+            <noscript>
+                <iframe class="sidebar-iframe-outer" src="../toc.html"></iframe>
+            </noscript>
+            <div id="mdbook-sidebar-resize-handle" class="sidebar-resize-handle">
+                <div class="sidebar-resize-indicator"></div>
+            </div>
+        </nav>
+
+        <div id="mdbook-page-wrapper" class="page-wrapper">
+
+            <div class="page">
+                <div id="mdbook-menu-bar-hover-placeholder"></div>
+                <div id="mdbook-menu-bar" class="menu-bar sticky">
+                    <div class="left-buttons">
+                        <label id="mdbook-sidebar-toggle" class="icon-button" for="mdbook-sidebar-toggle-anchor" title="Toggle Table of Contents" aria-label="Toggle Table of Contents" aria-controls="mdbook-sidebar">
+                            <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M0 96C0 78.3 14.3 64 32 64H416c17.7 0 32 14.3 32 32s-14.3 32-32 32H32C14.3 128 0 113.7 0 96zM0 256c0-17.7 14.3-32 32-32H416c17.7 0 32 14.3 32 32s-14.3 32-32 32H32c-17.7 0-32-14.3-32-32zM448 416c0 17.7-14.3 32-32 32H32c-17.7 0-32-14.3-32-32s14.3-32 32-32H416c17.7 0 32 14.3 32 32z"/></svg></span>
+                        </label>
+                        <button id="mdbook-theme-toggle" class="icon-button" type="button" title="Change theme" aria-label="Change theme" aria-haspopup="true" aria-expanded="false" aria-controls="mdbook-theme-list">
+                            <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 576 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M371.3 367.1c27.3-3.9 51.9-19.4 67.2-42.9L600.2 74.1c12.6-19.5 9.4-45.3-7.6-61.2S549.7-4.4 531.1 9.6L294.4 187.2c-24 18-38.2 46.1-38.4 76.1L371.3 367.1zm-19.6 25.4l-116-104.4C175.9 290.3 128 339.6 128 400c0 3.9 .2 7.8 .6 11.6c1.8 17.5-10.2 36.4-27.8 36.4H96c-17.7 0-32 14.3-32 32s14.3 32 32 32H240c61.9 0 112-50.1 112-112c0-2.5-.1-5-.2-7.5z"/></svg></span>
+                        </button>
+                        <ul id="mdbook-theme-list" class="theme-popup" aria-label="Themes" role="menu">
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-default_theme">Auto</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-light">Light</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-rust">Rust</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-coal">Coal</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-navy">Navy</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-ayu">Ayu</button></li>
+                        </ul>
+                        <button id="mdbook-search-toggle" class="icon-button" type="button" title="Search (`/`)" aria-label="Toggle Searchbar" aria-expanded="false" aria-keyshortcuts="/ s" aria-controls="mdbook-searchbar">
+                            <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M416 208c0 45.9-14.9 88.3-40 122.7L502.6 457.4c12.5 12.5 12.5 32.8 0 45.3s-32.8 12.5-45.3 0L330.7 376c-34.4 25.2-76.8 40-122.7 40C93.1 416 0 322.9 0 208S93.1 0 208 0S416 93.1 416 208zM208 352c79.5 0 144-64.5 144-144s-64.5-144-144-144S64 128.5 64 208s64.5 144 144 144z"/></svg></span>
+                        </button>
+                    </div>
+
+                    <h1 class="menu-title">Building Kernelets on Linux</h1>
+
+                    <div class="right-buttons">
+                        <a href="../print.html" title="Print this book" aria-label="Print this book">
+                            <span class=fa-svg id="print-button"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M128 0C92.7 0 64 28.7 64 64v96h64V64H354.7L384 93.3V160h64V93.3c0-17-6.7-33.3-18.7-45.3L400 18.7C388 6.7 371.7 0 354.7 0H128zM384 352v32 64H128V384 368 352H384zm64 32h32c17.7 0 32-14.3 32-32V256c0-35.3-28.7-64-64-64H64c-35.3 0-64 28.7-64 64v96c0 17.7 14.3 32 32 32H64v64c0 35.3 28.7 64 64 64H384c35.3 0 64-28.7 64-64V384zm-16-88c-13.3 0-24-10.7-24-24s10.7-24 24-24s24 10.7 24 24s-10.7 24-24 24z"/></svg></span>
+                        </a>
+
+                    </div>
+                </div>
+
+                <div id="mdbook-search-wrapper" class="hidden">
+                    <form id="mdbook-searchbar-outer" class="searchbar-outer">
+                        <div class="search-wrapper">
+                            <input type="search" id="mdbook-searchbar" name="searchbar" placeholder="Search this book ..." aria-controls="mdbook-searchresults-outer" aria-describedby="searchresults-header">
+                            <div class="spinner-wrapper">
+                                <span class=fa-svg id="fa-spin"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M304 48c0-26.5-21.5-48-48-48s-48 21.5-48 48s21.5 48 48 48s48-21.5 48-48zm0 416c0-26.5-21.5-48-48-48s-48 21.5-48 48s21.5 48 48 48s48-21.5 48-48zM48 304c26.5 0 48-21.5 48-48s-21.5-48-48-48s-48 21.5-48 48s21.5 48 48 48zm464-48c0-26.5-21.5-48-48-48s-48 21.5-48 48s21.5 48 48 48s48-21.5 48-48zM142.9 437c18.7-18.7 18.7-49.1 0-67.9s-49.1-18.7-67.9 0s-18.7 49.1 0 67.9s49.1 18.7 67.9 0zm0-294.2c18.7-18.7 18.7-49.1 0-67.9S93.7 56.2 75 75s-18.7 49.1 0 67.9s49.1 18.7 67.9 0zM369.1 437c18.7 18.7 49.1 18.7 67.9 0s18.7-49.1 0-67.9s-49.1-18.7-67.9 0s-18.7 49.1 0 67.9z"/></svg></span>
+                            </div>
+                        </div>
+                    </form>
+                    <div id="mdbook-searchresults-outer" class="searchresults-outer hidden">
+                        <div id="mdbook-searchresults-header" class="searchresults-header"></div>
+                        <ul id="mdbook-searchresults">
+                        </ul>
+                    </div>
+                </div>
+
+                <!-- Apply ARIA attributes after the sidebar and the sidebar toggle button are added to the DOM -->
+                <script>
+                    document.getElementById('mdbook-sidebar-toggle').setAttribute('aria-expanded', sidebar === 'visible');
+                    document.getElementById('mdbook-sidebar').setAttribute('aria-hidden', sidebar !== 'visible');
+                    Array.from(document.querySelectorAll('#mdbook-sidebar a')).forEach(function(link) {
+                        link.setAttribute('tabIndex', sidebar === 'visible' ? 0 : -1);
+                    });
+                </script>
+
+                <div id="mdbook-content" class="content">
+                    <main>
+                        <h1 id="tenant-memory-on-linuxs-page-tables"><a class="header" href="#tenant-memory-on-linuxs-page-tables">Tenant memory on Linux’s page tables</a></h1>
+<p>This chapter and the next are what the book has been building toward. The hundred-line kernel’s <code>VmSpace::new()</code>, <code>cursor.map(frame, prop)</code> and <code>vm_space.activate()</code> are the kernel proper’s whole view of a tenant’s memory, and they are the same calls a kernel makes on a machine. What they <em>do</em> inside Linux is the central mechanism of the design.</p>
+<h2 id="the-problem"><a class="header" href="#the-problem">The problem</a></h2>
+<p>On a machine, a <code>VmSpace</code> is a page table. The kernel proper writes its entries, through OSTD’s cursor, and the processor walks it when the tenant’s program runs. OSTD’s job is to write the entries in hardware format and load the table’s root into the page-table register at <code>activate</code>.</p>
+<p>Inside Linux, none of that is available. A carrier runs on the page table of its <em>Linux</em> address space; the processor walks that table and no other; and only Linux writes it, under its own locks, with its own bookkeeping of what every entry means. vOSTD cannot write a Linux page-table entry, and it cannot make the processor walk a table of its own.</p>
+<p>So the design turns the relationship around. <strong>A <code>VmSpace</code> is a Linux address space.</strong> Its page table is the tenant process’s Linux page table, the one the processor walks; there is no other. vOSTD never writes an entry of it. Every change the kernel proper’s cursor makes becomes a <strong>memory service</strong>, in which the endovisor checks what it is asked for against the kernelet’s grant and then makes the change with Linux’s own functions, under Linux’s own locks. vOSTD <em>reads</em> the table, through the direct map, as a processor would; that is the next chapter.</p>
+<pre class="mermaid">flowchart TB
+    subgraph K["the kernelet"]
+        kp["kernel proper:&lt;br/&gt;cursor.map / unmap / protect_next, flusher"] --&gt; v["vOSTD: VmSpace&lt;br/&gt;never writes an entry"]
+    end
+    v -- "service calls:&lt;br/&gt;vm_map · vm_unmap · vm_protect · vm_flush" --&gt; e["endovisor, inside the service:&lt;br/&gt;check the frame against the grant,&lt;br/&gt;then call Linux"]
+    e -- "vmf_insert_pfn_prot · zap_vma_ptes ·&lt;br/&gt;apply_to_page_range · flush_tlb_mm_range" --&gt; pt["the tenant process's Linux page table&lt;br/&gt;(the only one)"]
+    u["tenant program, user mode"] -- "the processor walks it" --&gt; pt
+    v -. "reads it through the direct map (next chapter)" .-&gt; pt
+</pre>
+
+<p>That is a stronger position than the one a kernel has on a machine, where a bug in the framework could map any frame into a tenant. Here, no translation reaches the hardware without trusted host code having checked the frame.</p>
+<div class="background">
+<p><strong>Linux: address spaces, areas, and page faults.</strong> A process’s user memory is described by an address space, <a href="https://elixir.bootlin.com/linux/v6.12/source/include/linux/mm_types.h#L790"><code>struct mm_struct</code></a>, which holds the page table’s root (<code>mm-&gt;pgd</code>) and a set of <strong>virtual memory areas</strong> (VMAs): contiguous ranges with uniform permissions, each optionally backed by a file.</p>
+<p>Linux fills page tables lazily: touching an address with no entry raises a page fault, Linux finds the VMA, and asks <em>it</em> for the page, by calling the <code>fault</code> function of the VMA’s operations table (<a href="https://elixir.bootlin.com/linux/v6.12/source/include/linux/mm.h#L598"><code>struct vm_operations_struct</code></a>). A driver that implements <code>mmap</code> on its device file supplies those operations, and so decides what appears at each address of its area.</p>
+<p>A VMA can be marked as holding <strong>raw frame numbers</strong> (<code>VM_PFNMAP</code>). Linux then maps exactly the frames it is told to, with <a href="https://elixir.bootlin.com/linux/v6.12/source/mm/memory.c#L2403"><code>vmf_insert_pfn_prot()</code></a>, and takes no further interest in them: no reference counting, no swapping, no migration. The driver removes entries again with <a href="https://elixir.bootlin.com/linux/v6.12/source/mm/memory.c#L1952"><code>zap_vma_ptes()</code></a>. This is how device drivers give a process a window onto their memory, and it is the right contract here, because the frames’ lifetime belongs to the kernelet.</p>
+<p>Every change to an address space is made under its lock, <code>mmap_lock</code>. An address space is freed, page tables included, in <code>exit_mmap()</code> when its last user lets go; a <em>user reference</em>, taken with <code>mmget()</code> and dropped with <code>mmput()</code>, is what keeps that from happening.</p>
+</div>
+
+<h2 id="creating-a-space"><a class="header" href="#creating-a-space">Creating a space</a></h2>
+<p><code>VmSpace::new()</code> is the service <code>vm_create</code>. The endovisor makes three things: an empty Linux address space, a file to own the area, and the area itself, one VMA over the whole user range.</p>
+<p><em>Simplified from <code>prototype/linux/endovisor/space.c</code>: <code>klet_do_vm_create</code>, <code>klet_space_make_area</code>, <code>klet_space_mmap</code>.</em></p>
+<pre><code class="language-c">s64 klet_do_vm_create(struct klet_carrier *c)
+{
+	sp = a free slot in inst-&gt;spaces[];                       /* at most 64 spaces per kernelet */
+	sp-&gt;mm = kernelet_mm_alloc(inst-&gt;owner);                  /* an empty address space; owner: the holder's main thread */
+	sp-&gt;file = anon_inode_create_getfile("[kernelet-space]", &amp;klet_space_fops, sp, O_RDWR, NULL);
+	klet_space_make_area(sp);
+	WRITE_ONCE(sp-&gt;rec-&gt;root_paddr, __pa(sp-&gt;mm-&gt;pgd));       /* so that vOSTD can read the table */
+	sp-&gt;live = true;
+	return sp-&gt;id;                                             /* 1-based; 0 means "no space" */
+}
+
+static int klet_space_make_area(struct klet_space *sp)
+{
+	/* vm_mmap() maps into the *calling* task's address space, so adopt the new one for a moment */
+	mmget(sp-&gt;mm);
+	prev = kernelet_switch_mm(sp-&gt;mm);
+	ret = vm_mmap(sp-&gt;file, KLET_AREA_START, KLET_AREA_END - KLET_AREA_START,    /* [0x10000, 2^47 - 4 KiB) */
+		      PROT_READ | PROT_WRITE | PROT_EXEC, MAP_SHARED | MAP_FIXED, KLET_AREA_START);
+	back = kernelet_switch_mm(prev);                           /* and switch back */
+	mmput(back);
+	sp-&gt;start = KLET_AREA_START;
+	sp-&gt;end = KLET_AREA_END;
+	return 0;
+}
+
+static int klet_space_mmap(struct file *file, struct vm_area_struct *vma)   /* the file's mmap: sets up the area */
+{
+	vm_flags_set(vma, VM_PFNMAP | VM_IO | VM_DONTEXPAND | VM_DONTDUMP | VM_DONTCOPY);
+	vma-&gt;vm_ops = &amp;klet_space_vm_ops;                          /* fault and pfn_mkwrite, below */
+	return 0;
+}
+</code></pre>
+<p>Four choices in this code each close a hole.</p>
+<p><strong>The owner.</strong> Each space’s owner is the holder’s main thread, never the carrier that created it. Linux records in each address space an <em>owner</em> task, through which the memory controller finds the control group to charge faults and reclaim to. The function Linux uses to make an address space would store the <em>creating</em> task there, without a reference, and that task is a carrier that may die while the space lives on; every later fault would then read a freed task. So the patch’s <code>kernelet_mm_alloc()</code> takes the owner as an argument, and the endovisor passes the main thread of the holder, the process that created the sandbox, which the endovisor pins with a task reference from the sandbox’s creation to its exit, after it is cleared from every space.</p>
+<p><strong>The file’s inode.</strong> Each space gets an inode of its own. The plain anonymous-inode helper hands every caller one shared inode, and Linux keeps, per inode, the list of areas that map it, so every space’s area would sit in one list, and an operation on one space’s file could reach the others’.</p>
+<p><strong>The area’s flags.</strong> Two of the area’s flags are there for the host’s sake. <code>VM_SHARED</code>, which the <code>MAP_SHARED</code> in the <code>vm_mmap</code> call sets, is required for the host’s sake: inserting a raw frame number into a private, copy-on-write area is a <code>BUG_ON</code> in Linux, an assertion whose failure (an <em>oops</em>) kills the calling task with the address-space lock held, and halts the machine if the host is configured to panic on an oops, rather than returning an error. <code>VM_DONTCOPY</code> keeps a <code>fork</code> of a carrier while it is in a tenant’s space, which never happens but could, from copying entries that belong to the kernelet.</p>
+<p><strong>The area’s extent.</strong> The area covers exactly the range the kernel proper can map, so that a <code>vm_map</code> outside it can be refused, and <code>zap_vma_ptes()</code>, which silently does nothing for a range not wholly inside its area, is always inside.</p>
+<h2 id="the-address-space-switch"><a class="header" href="#the-address-space-switch">The address-space switch</a></h2>
+<p>A carrier must run in the address space of the process whose thread it carries, and <code>kernelet_switch_mm()</code>, the first of the patch’s two helpers, is how it changes space. A carrier is born with an empty address space of its own; to run a tenant thread it must run in <em>that process’s</em> space. Two of the lines above call the helper, and both hooks call it, through <code>klet_space_adopt</code> below, before they apply the registers on a trip to user mode in which the virtual CPU has activated a different process than the carrier is in (chapter 9).</p>
+<div class="background">
+<p><strong>Linux: changing a task’s address space.</strong> Linux switches a task’s address space in two places, neither usable by a user task, and a module cannot write a third. Linux has the operation twice: for a kernel thread that borrows a user address space (<a href="https://elixir.bootlin.com/linux/v6.12/source/kernel/kthread.c#L1439"><code>kthread_use_mm()</code></a>), and for <code>execve</code> (<a href="https://elixir.bootlin.com/linux/v6.12/source/fs/exec.c#L958"><code>exec_mmap()</code></a>), which replaces a process’s address space with a fresh one. Neither will do for a user task that wants to swap between address spaces it holds references to: the first warns if its caller is not a kernel thread and takes the references a kernel thread needs, which a user task must not, and the second is private to <code>exec</code> and drops the task’s reference to the old space. And a module cannot write its own, because everything the switch touches is private to the core kernel.</p>
+</div>
+
+<p>The helper does what the two have in common: under the task’s lock and with interrupts off, set the task’s <code>mm</code> and <code>active_mm</code> to the new space, load the new page table with the architecture’s <code>switch_mm_irqs_off()</code>, and keep Linux’s per-space bookkeeping in step. It consumes the caller’s reference on the new space and hands back the old one, for the caller to drop in a context that may sleep.</p>
+<p><em>Simplified from <code>prototype/linux/patches/0001-carrier-hooks.patch</code>: <code>kernelet_switch_mm</code>, <code>kernelet_mm_alloc</code>.</em></p>
+<pre><code class="language-c">struct mm_struct *kernelet_switch_mm(struct mm_struct *mm)
+{
+	struct task_struct *tsk = current;
+	struct mm_struct *old_mm;
+
+	if (tsk-&gt;mm == mm)
+		return mm;
+	sched_mm_cid_before_execve(tsk);      /* release the old space's concurrency id ... */
+	task_lock(tsk);
+	local_irq_disable();
+	old_mm = tsk-&gt;active_mm;
+	tsk-&gt;active_mm = mm;
+	tsk-&gt;mm = mm;
+	membarrier_update_current_mm(mm);
+	switch_mm_irqs_off(old_mm, mm, tsk);  /* load the page table */
+	local_irq_enable();
+	task_unlock(tsk);
+	lru_gen_use_mm(mm);
+	sched_mm_cid_after_execve(tsk);       /* ... and take one in the new */
+	return old_mm;
+}
+
+struct mm_struct *kernelet_mm_alloc(struct task_struct *owner)
+{
+	struct mm_struct *mm = mm_alloc();
+	WRITE_ONCE(mm-&gt;owner, owner);
+	lru_gen_add_mm(mm);                   /* once, here; never per switch */
+	return mm;
+}
+</code></pre>
+<p>The two <code>lru_gen_*</code> calls are for Linux’s multi-generational page reclaim, which keeps a list of the address spaces it may scan: a new space is put on it once, and a switch marks the space as in use.</p>
+<p>The two <code>sched_mm_cid_*</code> brackets are not optional. Linux gives each address space a small pool of <em>concurrency ids</em>, one per processor currently running one of its tasks, which programs may use to index per-processor data; a task that changes address space must return its id to the old space and take one from the new. Without the brackets a carrier would leak one concurrency id per switch, invisibly, until the pool ran dry and the scheduler spun forever under a run-queue lock. That is the kind of bookkeeping that makes the helper belong in Linux rather than in a module.</p>
+<p><em>Simplified from <code>prototype/linux/endovisor/space.c</code>: <code>klet_space_adopt</code>.</em></p>
+<pre><code class="language-c">int klet_space_adopt(struct klet_carrier *c, u64 id)       /* called by both hooks before user mode */
+{
+	sp = klet_space_get(c-&gt;inst, id);                      /* the space must be this kernelet's */
+	if (current-&gt;mm != sp-&gt;mm) {
+		mmget(sp-&gt;mm);                                    /* a reference for the helper to consume */
+		old = kernelet_switch_mm(sp-&gt;mm);
+		mmput(old);                                       /* the one it handed back */
+		if (c-&gt;blank_mm) { mmput(c-&gt;blank_mm); c-&gt;blank_mm = NULL; }   /* the empty one is never needed again */
+	}
+	klet_space_put(sp);
+	return 0;
+}
+</code></pre>
+<p>Every carrier holds one reference on the space it is in, which the endovisor drops when the carrier leaves it and Linux when the carrier exits; the endovisor holds one more on every live space, from <code>vm_create</code> to <code>vm_destroy</code>. That second reference is what pins the page tables for the next chapter’s lockless reads.</p>
+<h2 id="the-four-edits"><a class="header" href="#the-four-edits">The four edits</a></h2>
+<p>Everything the kernel proper’s cursor does to a space is one of four services. Each of the first three takes the address space’s lock, finds the area afresh (the discipline Linux’s own code follows, rather than trusting a stored pointer), checks its arguments, and calls one Linux function.</p>
+<p><strong><code>vm_map(space, va, paddr, prot)</code>.</strong> The protection crosses as three bits, readable, writable, executable; the endovisor builds Linux’s page protection from its own constants and never from bits the kernelet supplies, because one such bit, <em>global</em>, would make a translation visible to every process on the machine.</p>
+<p><em>Simplified from <code>prototype/linux/endovisor/space.c</code>: <code>klet_prot_to_pgprot</code>, <code>klet_space_insert</code>, <code>klet_do_vm_map</code>.</em></p>
+<pre><code class="language-c">static int klet_prot_to_pgprot(u32 prot, pgprot_t *out)
+{
+	unsigned long vm_flags = VM_SHARED | VM_READ;
+	if (!(prot &amp; KLET_PROT_READ)) return -KLET_INVALID;     /* a page without read permission has no entry: next chapter */
+	if (prot &amp; KLET_PROT_WRITE) vm_flags |= VM_WRITE;
+	if (prot &amp; KLET_PROT_EXEC)  vm_flags |= VM_EXEC;
+	*out = vm_get_page_prot(vm_flags);                         /* Linux's own idea of a user page with these rights */
+	return 0;
+}
+
+static s64 klet_space_insert(struct klet_space *sp, struct vm_area_struct *vma, u64 va, u64 paddr, pgprot_t pgprot)
+{
+	if (!klet_in_grant(sp-&gt;inst, paddr, PAGE_SIZE))            /* THE check: the frame must be the kernelet's */
+		return -KLET_NOT_OWNED;
+	if (va &lt; sp-&gt;start || va &gt;= sp-&gt;end)
+		return -KLET_INVALID;
+	ret = vmf_insert_pfn_prot(vma, va, paddr &gt;&gt; PAGE_SHIFT, pgprot);
+	if (ret &amp; VM_FAULT_OOM) return -KLET_LIMIT;                /* Linux could not allocate a page-table page */
+	/* insert_pfn() leaves an existing entry alone and still reports success, so look: */
+	if (!slot_holds(sp-&gt;mm, va, paddr)) return -KLET_INVALID;  /* a vOSTD bug: two maps of one page */
+	return 0;
+}
+
+s64 klet_do_vm_map(struct klet_carrier *c, u64 id, u64 va, u64 paddr, u32 prot)
+{
+	klet_prot_to_pgprot(prot, &amp;pgprot);
+	sp = klet_space_get(c-&gt;inst, id);
+	vma = klet_space_lock_area(sp);                            /* mmap_read_lock, then vma_lookup */
+	err = klet_space_insert(sp, vma, va, paddr, pgprot);
+	mmap_read_unlock(sp-&gt;mm);
+	klet_space_put(sp);
+	return err;
+}
+</code></pre>
+<p><code>vmf_insert_pfn_prot()</code> may sleep, when a page-table page must be allocated; the next chapter says why that is allowed although the kernel proper calls <code>map</code> under a preemption guard.</p>
+<p><strong><code>vm_unmap(space, va, len)</code></strong> clips the range to the area and calls <code>zap_vma_ptes()</code>, which clears every present entry and <strong>flushes the TLB</strong> before it returns, through Linux’s own gather-and-finish. It reports no count; the number of pages that were mapped is vOSTD’s own, from a walk it makes before the call.</p>
+<p><strong><code>vm_protect(space, va, prot)</code></strong> rewrites one present entry in place. Linux’s helpers for taking a page-table lock are not exported to modules, so the endovisor uses <a href="https://elixir.bootlin.com/linux/v6.12/source/mm/memory.c#L2983"><code>apply_to_page_range()</code></a>, which is exported and takes that lock itself, here over the one entry, and in its callback replaces the entry with one atomic compare-and-exchange:</p>
+<p><em>Simplified from <code>prototype/linux/endovisor/space.c</code>: <code>klet_pte_protect</code>.</em></p>
+<pre><code class="language-c">static int klet_pte_protect(pte_t *pte, unsigned long addr, void *data)
+{
+	pte_t old = ptep_get(pte), new;
+	if (!pte_present(old))
+		return -EINVAL;
+	do {
+		new = pte_modify(old, ctx-&gt;prot);      /* keeps the frame number, the special bit, and the accessed and dirty bits */
+	} while (!try_cmpxchg64((u64 *)&amp;pte-&gt;pte, (u64 *)&amp;old.pte, pte_val(new)));
+	return 0;
+}
+</code></pre>
+<p><code>pte_modify()</code> matters: an entry rebuilt from the frame number would lose the <em>special</em> bit that marks a raw-frame-number entry, and the next zap would then treat a grant frame as a Linux page and drop a reference it never took.</p>
+<p>The rewrite is one store, so a lockless reader on another virtual CPU never sees the entry absent. It does not flush; the kernel proper issues its flushes separately, as on a machine.</p>
+<p><strong><code>vm_flush(space, va, len)</code></strong> is <a href="https://elixir.bootlin.com/linux/v6.12/source/arch/x86/mm/tlb.c#L995"><code>flush_tlb_mm_range()</code></a> over the range, or over the whole space, on every processor where the address space is loaded, which <code>switch_mm_irqs_off()</code> keeps track of. It is not exported in a stock kernel, which is why the patch exports it. It never sleeps, and so may be called while the kernel proper still holds a cursor.</p>
+<p>Two more services complete the set.</p>
+<p><strong><code>vm_activate(space)</code></strong> only records the space in the virtual CPU’s record, where the hooks of chapter 8 find it, and never sleeps, because a full kernel proper, such as Asterinas’s, calls <code>activate</code> from the handler it runs right after a task switch, with interrupts off, and vOSTD must allow for that.</p>
+<p><strong><code>vm_destroy(space)</code></strong> clears the whole area, waits for calls in flight, and drops the endovisor’s reference on the address space.</p>
+<h2 id="faults"><a class="header" href="#faults">Faults</a></h2>
+<p>A tenant’s fault on the area reaches an endovisor handler whose whole job is to report it to the kernel proper. The tenant touches an address with no entry, or writes a page whose entry is read-only. Linux calls the area’s <code>fault</code> for the first and <code>pfn_mkwrite</code> for the second, on the carrier, in kernel mode, with the address-space lock held; a write to a present read-only entry reaches the handler only because the area supplies <code>pfn_mkwrite</code>, and without it Linux would make the entry writable on its own authority. The handler has nothing to look up: Linux’s table is the only table, and a fault on this area means the kernel proper has not mapped the page.</p>
+<p><em>Simplified from <code>prototype/linux/endovisor/space.c</code>: <code>klet_space_report</code>.</em></p>
+<pre><code class="language-c">static vm_fault_t klet_space_report(struct vm_fault *vmf, bool mkwrite)
+{
+	struct klet_carrier *c = klet_current_carrier();
+	bool user = !!(vmf-&gt;flags &amp; FAULT_FLAG_USER);
+
+	if (!user)                                        /* Linux's own access to a tenant address (a get_user) */
+		return VM_FAULT_SIGBUS;                       /*   fails cleanly, as an -EFAULT in that code */
+
+	c-&gt;exc_trap = X86_TRAP_PF;                        /* for the kernel proper: a page fault ... */
+	c-&gt;exc_addr = vmf-&gt;address;                       /*   at this address ... */
+	c-&gt;exc_error = (mkwrite ? 1 : 0) | (write ? 2 : 0) | 4 | (exec ? 16 : 0);   /*   with the processor's error-code bits: 1 present, 2 write, 4 user, 16 fetch */
+	c-&gt;exc_pending = true;
+	set_thread_flag(TIF_NOTIFY_RESUME);               /* run the resume hook on the way back */
+	return VM_FAULT_NOPAGE;                           /* "handled": Linux returns to user mode without installing anything */
+}
+</code></pre>
+<p>The handler cannot run the kernel proper where it stands, inside Linux’s fault path with Linux’s lock held. So it records the fault, flags the carrier, and tells Linux the fault is handled. Linux heads back to user mode to retry the instruction, passes through the exit loop, and the resume hook of chapter 8 enters the kernelet with <code>user_run</code> returning an exception. The kernel proper’s own fault handler runs as a normal task, free to sleep, maps the page with its ordinary cursor, which is a <code>vm_map</code>, and calls <code>execute</code> again. The retried instruction finds the entry where the processor looks and does not fault a second time.</p>
+<pre class="mermaid">sequenceDiagram
+    participant U as tenant
+    participant L as Linux
+    participant E as endovisor
+    participant K as kernel proper
+    U-&gt;&gt;L: page fault
+    L-&gt;&gt;E: vm_ops-&gt;fault
+    E-&gt;&gt;E: record it, flag the carrier
+    E--&gt;&gt;L: VM_FAULT_NOPAGE
+    L-&gt;&gt;E: the resume hook
+    E-&gt;&gt;K: user_run returns 1
+    K-&gt;&gt;K: allocate a frame
+    K-&gt;&gt;E: vm_map
+    K-&gt;&gt;E: user_run again
+    E-&gt;&gt;L: ctx -&gt; pt_regs
+    L-&gt;&gt;U: retry, no fault
+</pre>
+
+<p>One case never reaches the handler. An instruction fetch from a <em>present</em> entry marked no-execute raises <code>SIGSEGV</code> inside Linux directly (short of protection keys, which the design never sets, a present x86-64 entry cannot forbid a read), and the resume hook turns that signal into an exception as it does for any other (chapter 8).</p>
+<p>A fault from Linux’s own kernel-mode access to tenant memory is failed, never reported, because no return to user mode would deliver it. Linux itself sometimes reads a task’s user memory from kernel mode, for instance on a 32-bit system-call entry. A handler that reported such a fault and waited for the return to user mode would wait forever, since the access is not in user mode; failing it cleanly lets Linux’s own error handling turn it into <code>-EFAULT</code>, which that code is written to expect.</p>
+<h2 id="what-the-kernel-propers-calls-become"><a class="header" href="#what-the-kernel-propers-calls-become">What the kernel proper’s calls become</a></h2>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>the kernel proper calls</th><th>vOSTD does</th><th>the endovisor does, in Linux</th></tr>
+</thead>
+<tbody>
+<tr><td><code>VmSpace::new()</code></td><td><code>vm_create</code></td><td>an address space, a file, the area; publishes the table’s root</td></tr>
+<tr><td><code>cursor.map(frame, prop)</code></td><td><code>vm_map</code>; the frame’s reference passes to the entry</td><td>grant check, <code>vmf_insert_pfn_prot()</code></td></tr>
+<tr><td><code>cursor.unmap(len)</code></td><td>reads the entries first (next chapter); <code>vm_unmap</code></td><td><code>zap_vma_ptes()</code>, which flushes</td></tr>
+<tr><td><code>cursor.protect_next(len, op)</code></td><td><code>vm_protect</code> for the one page, if the bits changed</td><td><code>apply_to_page_range()</code> with <code>pte_modify()</code>; no flush</td></tr>
+<tr><td><code>flusher.dispatch_tlb_flush()</code></td><td><code>vm_flush</code> per range</td><td><code>flush_tlb_mm_range()</code></td></tr>
+<tr><td><code>vm_space.activate()</code></td><td><code>vm_activate</code></td><td>records it; the carrier adopts the space at the next <code>user_run</code></td></tr>
+<tr><td>a tenant page fault</td><td>nothing until <code>user_run</code> returns</td><td><code>fault</code> or <code>pfn_mkwrite</code> records and returns</td></tr>
+<tr><td>the space is dropped</td><td><code>vm_destroy</code>, later (next chapter)</td><td>zap everything, drop the reference</td></tr>
+</tbody>
+</table>
+</div>
+<p><code>make probe</code> shows the fault path: the probe kernel maps only its program’s text, the program stores to an unmapped address, and the log shows one Linux fault, the kernel proper’s handler mapping a fresh frame, and the program reading its data back. <code>make mem-func</code>, <code>mem-r2</code>, <code>mem-conc</code> and <code>mem-pressure</code> run the tests of the next chapter over the four edits.</p>
+<div class="recap">
+<p><strong>Recap.</strong> A <code>VmSpace</code> is a Linux address space: an <code>mm</code> the endovisor creates with the patch’s <code>kernelet_mm_alloc()</code>, owned by the holder’s main thread, holding one raw-frame-number area over the whole user range, backed by a file with an inode of its own. The kernel proper’s cursor edits become <code>vm_map</code>, <code>vm_unmap</code>, <code>vm_protect</code> and <code>vm_flush</code>, in which the endovisor checks every frame against the grant and calls Linux’s own page-table functions under Linux’s own lock. A carrier adopts a process’s address space with the patch’s <code>kernelet_switch_mm()</code> on its way to user mode. A tenant’s fault is recorded by the area’s handler and delivered to the kernel proper through the resume hook, whose <code>vm_map</code> puts the entry where the retried instruction will find it.</p>
+</div>
+
+
+                    </main>
+
+                    <nav class="nav-wrapper" aria-label="Page navigation">
+                        <!-- Mobile navigation buttons -->
+                            <a rel="prev" href="../accepted-design/stopping-a-kernelet.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                                <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M41.4 233.4c-12.5 12.5-12.5 32.8 0 45.3l160 160c12.5 12.5 32.8 12.5 45.3 0s12.5-32.8 0-45.3L109.3 256 246.6 118.6c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0l-160 160z"/></svg></span>
+                            </a>
+
+                            <a rel="next prefetch" href="../accepted-design/what-vostd-adds-on-top.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                                <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M278.6 233.4c12.5 12.5 12.5 32.8 0 45.3l-160 160c-12.5 12.5-32.8 12.5-45.3 0s-12.5-32.8 0-45.3L210.7 256 73.4 118.6c-12.5-12.5-12.5-32.8 0-45.3s32.8-12.5 45.3 0l160 160z"/></svg></span>
+                            </a>
+
+                        <div style="clear: both"></div>
+                    </nav>
+                </div>
+            </div>
+
+            <nav class="nav-wide-wrapper" aria-label="Page navigation">
+                    <a rel="prev" href="../accepted-design/stopping-a-kernelet.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                        <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M41.4 233.4c-12.5 12.5-12.5 32.8 0 45.3l160 160c12.5 12.5 32.8 12.5 45.3 0s12.5-32.8 0-45.3L109.3 256 246.6 118.6c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0l-160 160z"/></svg></span>
+                    </a>
+
+                    <a rel="next prefetch" href="../accepted-design/what-vostd-adds-on-top.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                        <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M278.6 233.4c12.5 12.5 12.5 32.8 0 45.3l-160 160c-12.5 12.5-32.8 12.5-45.3 0s-12.5-32.8 0-45.3L210.7 256 73.4 118.6c-12.5-12.5-12.5-32.8 0-45.3s32.8-12.5 45.3 0l160 160z"/></svg></span>
+                    </a>
+            </nav>
+
+        </div>
+
+        <template id=fa-eye><span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 576 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M288 32c-80.8 0-145.5 36.8-192.6 80.6C48.6 156 17.3 208 2.5 243.7c-3.3 7.9-3.3 16.7 0 24.6C17.3 304 48.6 356 95.4 399.4C142.5 443.2 207.2 480 288 480s145.5-36.8 192.6-80.6c46.8-43.5 78.1-95.4 93-131.1c3.3-7.9 3.3-16.7 0-24.6c-14.9-35.7-46.2-87.7-93-131.1C433.5 68.8 368.8 32 288 32zM432 256c0 79.5-64.5 144-144 144s-144-64.5-144-144s64.5-144 144-144s144 64.5 144 144zM288 192c0 35.3-28.7 64-64 64c-11.5 0-22.3-3-31.6-8.4c-.2 2.8-.4 5.5-.4 8.4c0 53 43 96 96 96s96-43 96-96s-43-96-96-96c-2.8 0-5.6 .1-8.4 .4c5.3 9.3 8.4 20.1 8.4 31.6z"/></svg></span></template>
+        <template id=fa-eye-slash><span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M38.8 5.1C28.4-3.1 13.3-1.2 5.1 9.2S-1.2 34.7 9.2 42.9l592 464c10.4 8.2 25.5 6.3 33.7-4.1s6.3-25.5-4.1-33.7L525.6 386.7c39.6-40.6 66.4-86.1 79.9-118.4c3.3-7.9 3.3-16.7 0-24.6c-14.9-35.7-46.2-87.7-93-131.1C465.5 68.8 400.8 32 320 32c-68.2 0-125 26.3-169.3 60.8L38.8 5.1zM223.1 149.5C248.6 126.2 282.7 112 320 112c79.5 0 144 64.5 144 144c0 24.9-6.3 48.3-17.4 68.7L408 294.5c5.2-11.8 8-24.8 8-38.5c0-53-43-96-96-96c-2.8 0-5.6 .1-8.4 .4c5.3 9.3 8.4 20.1 8.4 31.6c0 10.2-2.4 19.8-6.6 28.3l-90.3-70.8zm223.1 298L373 389.9c-16.4 6.5-34.3 10.1-53 10.1c-79.5 0-144-64.5-144-144c0-6.9 .5-13.6 1.4-20.2L83.1 161.5C60.3 191.2 44 220.8 34.5 243.7c-3.3 7.9-3.3 16.7 0 24.6c14.9 35.7 46.2 87.7 93 131.1C174.5 443.2 239.2 480 320 480c47.8 0 89.9-12.9 126.2-32.5z"/></svg></span></template>
+        <template id=fa-copy><span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M502.6 70.63l-61.25-61.25C435.4 3.371 427.2 0 418.7 0H255.1c-35.35 0-64 28.66-64 64l.0195 256C192 355.4 220.7 384 256 384h192c35.2 0 64-28.8 64-64V93.25C512 84.77 508.6 76.63 502.6 70.63zM464 320c0 8.836-7.164 16-16 16H255.1c-8.838 0-16-7.164-16-16L239.1 64.13c0-8.836 7.164-16 16-16h128L384 96c0 17.67 14.33 32 32 32h47.1V320zM272 448c0 8.836-7.164 16-16 16H63.1c-8.838 0-16-7.164-16-16L47.98 192.1c0-8.836 7.164-16 16-16H160V128H63.99c-35.35 0-64 28.65-64 64l.0098 256C.002 483.3 28.66 512 64 512h192c35.2 0 64-28.8 64-64v-32h-47.1L272 448z"/></svg></span></template>
+        <template id=fa-play><span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 384 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M73 39c-14.8-9.1-33.4-9.4-48.5-.9S0 62.6 0 80V432c0 17.4 9.4 33.4 24.5 41.9s33.7 8.1 48.5-.9L361 297c14.3-8.7 23-24.2 23-41s-8.7-32.2-23-41L73 39z"/></svg></span></template>
+        <template id=fa-clock-rotate-left><span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M75 75L41 41C25.9 25.9 0 36.6 0 57.9V168c0 13.3 10.7 24 24 24H134.1c21.4 0 32.1-25.9 17-41l-30.8-30.8C155 85.5 203 64 256 64c106 0 192 86 192 192s-86 192-192 192c-40.8 0-78.6-12.7-109.7-34.4c-14.5-10.1-34.4-6.6-44.6 7.9s-6.6 34.4 7.9 44.6C151.2 495 201.7 512 256 512c141.4 0 256-114.6 256-256S397.4 0 256 0C185.3 0 121.3 28.7 75 75zm181 53c-13.3 0-24 10.7-24 24V256c0 6.4 2.5 12.5 7 17l72 72c9.4 9.4 24.6 9.4 33.9 0s9.4-24.6 0-33.9l-65-65V152c0-13.3-10.7-24-24-24z"/></svg></span></template>
+
+
+
+        <script>
+            window.playground_copyable = true;
+        </script>
+
+
+        <script src="../elasticlunr-ef4e11c1.min.js"></script>
+        <script src="../mark-09e88c2c.min.js"></script>
+        <script src="../searcher-c2a407aa.js"></script>
+
+        <script src="../clipboard-1626706a.min.js"></script>
+        <script src="../highlight-abc7f01d.js"></script>
+        <script src="../book-a0b12cfe.js"></script>
+
+        <!-- Custom JS scripts -->
+        <script src="../assets/mermaid-eefea253.min.js"></script>
+        <script src="../assets/mermaid-init-9b03b796.js"></script>
+
+
+
+    </div>
+    </body>
+</html>

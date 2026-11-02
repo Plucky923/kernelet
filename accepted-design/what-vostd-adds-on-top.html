@@ -1,0 +1,482 @@
+<!DOCTYPE HTML>
+<html lang="en" class="light sidebar-visible" dir="ltr">
+    <head>
+        <!-- Book generated using mdBook -->
+        <meta charset="UTF-8">
+        <title>What vOSTD adds on top - Building Kernelets on Linux</title>
+
+
+        <!-- Custom HTML head -->
+
+        <meta name="description" content="The accepted design and implementation of kernelets on Linux, with proposals for their evolution">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <meta name="theme-color" content="#ffffff">
+
+        <link rel="icon" href="../favicon-de23e50b.svg">
+        <link rel="shortcut icon" href="../favicon-8114d1fc.png">
+        <link rel="stylesheet" href="../css/variables-8adf115d.css">
+        <link rel="stylesheet" href="../css/general-2459343d.css">
+        <link rel="stylesheet" href="../css/chrome-ae938929.css">
+        <link rel="stylesheet" href="../css/print-9e4910d8.css" media="print">
+
+        <!-- Fonts -->
+        <link rel="stylesheet" href="../fonts/fonts-9644e21d.css">
+
+        <!-- Highlight.js Stylesheets -->
+        <link rel="stylesheet" id="mdbook-highlight-css" href="../highlight-493f70e1.css">
+        <link rel="stylesheet" id="mdbook-tomorrow-night-css" href="../tomorrow-night-4c0ae647.css">
+        <link rel="stylesheet" id="mdbook-ayu-highlight-css" href="../ayu-highlight-3fdfc3ac.css">
+
+        <!-- Custom theme stylesheets -->
+        <link rel="stylesheet" href="../assets/book-46594365.css">
+
+
+        <!-- Provide site root and default themes to javascript -->
+        <script>
+            const path_to_root = "../";
+            const default_light_theme = "light";
+            const default_dark_theme = "navy";
+            window.path_to_searchindex_js = "../searchindex-1dd0c655.js";
+        </script>
+        <!-- Start loading toc.js asap -->
+        <script src="../toc-e271ffef.js"></script>
+    </head>
+    <body>
+    <div id="mdbook-help-container">
+        <div id="mdbook-help-popup">
+            <h2 class="mdbook-help-title">Keyboard shortcuts</h2>
+            <div>
+                <p>Press <kbd>←</kbd> or <kbd>→</kbd> to navigate between chapters</p>
+                <p>Press <kbd>S</kbd> or <kbd>/</kbd> to search in the book</p>
+                <p>Press <kbd>?</kbd> to show this help</p>
+                <p>Press <kbd>Esc</kbd> to hide this help</p>
+            </div>
+        </div>
+    </div>
+    <div id="mdbook-body-container">
+        <!-- Work around some values being stored in localStorage wrapped in quotes -->
+        <script>
+            try {
+                let theme = localStorage.getItem('mdbook-theme');
+                let sidebar = localStorage.getItem('mdbook-sidebar');
+
+                if (theme.startsWith('"') && theme.endsWith('"')) {
+                    localStorage.setItem('mdbook-theme', theme.slice(1, theme.length - 1));
+                }
+
+                if (sidebar.startsWith('"') && sidebar.endsWith('"')) {
+                    localStorage.setItem('mdbook-sidebar', sidebar.slice(1, sidebar.length - 1));
+                }
+            } catch (e) { }
+        </script>
+
+        <!-- Set the theme before any content is loaded, prevents flash -->
+        <script>
+            const default_theme = window.matchMedia("(prefers-color-scheme: dark)").matches ? default_dark_theme : default_light_theme;
+            let theme;
+            try { theme = localStorage.getItem('mdbook-theme'); } catch(e) { }
+            if (theme === null || theme === undefined) { theme = default_theme; }
+            const html = document.documentElement;
+            html.classList.remove('light')
+            html.classList.add(theme);
+            html.classList.add("js");
+        </script>
+
+        <input type="checkbox" id="mdbook-sidebar-toggle-anchor" class="hidden">
+
+        <!-- Hide / unhide sidebar before it is displayed -->
+        <script>
+            let sidebar = null;
+            const sidebar_toggle = document.getElementById("mdbook-sidebar-toggle-anchor");
+            if (document.body.clientWidth >= 1080) {
+                try { sidebar = localStorage.getItem('mdbook-sidebar'); } catch(e) { }
+                sidebar = sidebar || 'visible';
+            } else {
+                sidebar = 'hidden';
+                sidebar_toggle.checked = false;
+            }
+            if (sidebar === 'visible') {
+                sidebar_toggle.checked = true;
+            } else {
+                html.classList.remove('sidebar-visible');
+            }
+        </script>
+
+        <nav id="mdbook-sidebar" class="sidebar" aria-label="Table of contents">
+            <!-- populated by js -->
+            <mdbook-sidebar-scrollbox class="sidebar-scrollbox"></mdbook-sidebar-scrollbox>
+            <noscript>
+                <iframe class="sidebar-iframe-outer" src="../toc.html"></iframe>
+            </noscript>
+            <div id="mdbook-sidebar-resize-handle" class="sidebar-resize-handle">
+                <div class="sidebar-resize-indicator"></div>
+            </div>
+        </nav>
+
+        <div id="mdbook-page-wrapper" class="page-wrapper">
+
+            <div class="page">
+                <div id="mdbook-menu-bar-hover-placeholder"></div>
+                <div id="mdbook-menu-bar" class="menu-bar sticky">
+                    <div class="left-buttons">
+                        <label id="mdbook-sidebar-toggle" class="icon-button" for="mdbook-sidebar-toggle-anchor" title="Toggle Table of Contents" aria-label="Toggle Table of Contents" aria-controls="mdbook-sidebar">
+                            <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M0 96C0 78.3 14.3 64 32 64H416c17.7 0 32 14.3 32 32s-14.3 32-32 32H32C14.3 128 0 113.7 0 96zM0 256c0-17.7 14.3-32 32-32H416c17.7 0 32 14.3 32 32s-14.3 32-32 32H32c-17.7 0-32-14.3-32-32zM448 416c0 17.7-14.3 32-32 32H32c-17.7 0-32-14.3-32-32s14.3-32 32-32H416c17.7 0 32 14.3 32 32z"/></svg></span>
+                        </label>
+                        <button id="mdbook-theme-toggle" class="icon-button" type="button" title="Change theme" aria-label="Change theme" aria-haspopup="true" aria-expanded="false" aria-controls="mdbook-theme-list">
+                            <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 576 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M371.3 367.1c27.3-3.9 51.9-19.4 67.2-42.9L600.2 74.1c12.6-19.5 9.4-45.3-7.6-61.2S549.7-4.4 531.1 9.6L294.4 187.2c-24 18-38.2 46.1-38.4 76.1L371.3 367.1zm-19.6 25.4l-116-104.4C175.9 290.3 128 339.6 128 400c0 3.9 .2 7.8 .6 11.6c1.8 17.5-10.2 36.4-27.8 36.4H96c-17.7 0-32 14.3-32 32s14.3 32 32 32H240c61.9 0 112-50.1 112-112c0-2.5-.1-5-.2-7.5z"/></svg></span>
+                        </button>
+                        <ul id="mdbook-theme-list" class="theme-popup" aria-label="Themes" role="menu">
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-default_theme">Auto</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-light">Light</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-rust">Rust</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-coal">Coal</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-navy">Navy</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-ayu">Ayu</button></li>
+                        </ul>
+                        <button id="mdbook-search-toggle" class="icon-button" type="button" title="Search (`/`)" aria-label="Toggle Searchbar" aria-expanded="false" aria-keyshortcuts="/ s" aria-controls="mdbook-searchbar">
+                            <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M416 208c0 45.9-14.9 88.3-40 122.7L502.6 457.4c12.5 12.5 12.5 32.8 0 45.3s-32.8 12.5-45.3 0L330.7 376c-34.4 25.2-76.8 40-122.7 40C93.1 416 0 322.9 0 208S93.1 0 208 0S416 93.1 416 208zM208 352c79.5 0 144-64.5 144-144s-64.5-144-144-144S64 128.5 64 208s64.5 144 144 144z"/></svg></span>
+                        </button>
+                    </div>
+
+                    <h1 class="menu-title">Building Kernelets on Linux</h1>
+
+                    <div class="right-buttons">
+                        <a href="../print.html" title="Print this book" aria-label="Print this book">
+                            <span class=fa-svg id="print-button"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M128 0C92.7 0 64 28.7 64 64v96h64V64H354.7L384 93.3V160h64V93.3c0-17-6.7-33.3-18.7-45.3L400 18.7C388 6.7 371.7 0 354.7 0H128zM384 352v32 64H128V384 368 352H384zm64 32h32c17.7 0 32-14.3 32-32V256c0-35.3-28.7-64-64-64H64c-35.3 0-64 28.7-64 64v96c0 17.7 14.3 32 32 32H64v64c0 35.3 28.7 64 64 64H384c35.3 0 64-28.7 64-64V384zm-16-88c-13.3 0-24-10.7-24-24s10.7-24 24-24s24 10.7 24 24s-10.7 24-24 24z"/></svg></span>
+                        </a>
+
+                    </div>
+                </div>
+
+                <div id="mdbook-search-wrapper" class="hidden">
+                    <form id="mdbook-searchbar-outer" class="searchbar-outer">
+                        <div class="search-wrapper">
+                            <input type="search" id="mdbook-searchbar" name="searchbar" placeholder="Search this book ..." aria-controls="mdbook-searchresults-outer" aria-describedby="searchresults-header">
+                            <div class="spinner-wrapper">
+                                <span class=fa-svg id="fa-spin"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M304 48c0-26.5-21.5-48-48-48s-48 21.5-48 48s21.5 48 48 48s48-21.5 48-48zm0 416c0-26.5-21.5-48-48-48s-48 21.5-48 48s21.5 48 48 48s48-21.5 48-48zM48 304c26.5 0 48-21.5 48-48s-21.5-48-48-48s-48 21.5-48 48s21.5 48 48 48zm464-48c0-26.5-21.5-48-48-48s-48 21.5-48 48s21.5 48 48 48s48-21.5 48-48zM142.9 437c18.7-18.7 18.7-49.1 0-67.9s-49.1-18.7-67.9 0s-18.7 49.1 0 67.9s49.1 18.7 67.9 0zm0-294.2c18.7-18.7 18.7-49.1 0-67.9S93.7 56.2 75 75s-18.7 49.1 0 67.9s49.1 18.7 67.9 0zM369.1 437c18.7 18.7 49.1 18.7 67.9 0s18.7-49.1 0-67.9s-49.1-18.7-67.9 0s-18.7 49.1 0 67.9z"/></svg></span>
+                            </div>
+                        </div>
+                    </form>
+                    <div id="mdbook-searchresults-outer" class="searchresults-outer hidden">
+                        <div id="mdbook-searchresults-header" class="searchresults-header"></div>
+                        <ul id="mdbook-searchresults">
+                        </ul>
+                    </div>
+                </div>
+
+                <!-- Apply ARIA attributes after the sidebar and the sidebar toggle button are added to the DOM -->
+                <script>
+                    document.getElementById('mdbook-sidebar-toggle').setAttribute('aria-expanded', sidebar === 'visible');
+                    document.getElementById('mdbook-sidebar').setAttribute('aria-hidden', sidebar !== 'visible');
+                    Array.from(document.querySelectorAll('#mdbook-sidebar a')).forEach(function(link) {
+                        link.setAttribute('tabIndex', sidebar === 'visible' ? 0 : -1);
+                    });
+                </script>
+
+                <div id="mdbook-content" class="content">
+                    <main>
+                        <h1 id="what-vostd-adds-on-top"><a class="header" href="#what-vostd-adds-on-top">What vOSTD adds on top</a></h1>
+<p>This chapter is about what vOSTD must do for the kernel proper that Linux does not, now that the last chapter has put the tenant’s page table in Linux’s hands: read the table, copy to and from the tenant’s memory, keep track of which frame each entry holds, wait for copies in progress before a frame is freed, lock a range for the kernel proper’s cursor, hold the one kind of page Linux cannot represent, dispose of an address space at a moment when sleeping is not allowed, and say when a service may sleep under a guard. Each of these is a few dozen lines. The walk, the copy, the frame count, the grace period and the withheld set are what keep the design sound; the rest keep the kernel proper correct or the host responsive.</p>
+<h2 id="reading-the-table"><a class="header" href="#reading-the-table">Reading the table</a></h2>
+<p>vOSTD answers a cursor’s questions by reading Linux’s page table itself, through the direct map, from the root whose physical address the space’s record holds. The kernel proper asks a cursor what is at an address (<code>query</code>), where the next mapped page is (<code>find_next</code>), and how many pages an <code>unmap</code> removed; on a machine OSTD reads its own page table for these. It is the walk a processor does, in software, four dependent loads:</p>
+<p><em>Simplified from <code>prototype/vostd/src/mm/page_table.rs</code>: <code>read_entry</code>, <code>child</code>, <code>leaf_of</code>, <code>walk</code>.</em></p>
+<pre><code class="language-rust">fn read_entry(node: Paddr, idx: usize) -&gt; u64 {
+    unsafe { read_volatile((paddr_to_vaddr(node) as *const u64).add(idx)) }   // one 64-bit load
+}
+
+fn child(e: u64) -&gt; Option&lt;Paddr&gt; {                       // the next table down, if the entry points at one
+    if e &amp; PRESENT == 0 || e &amp; HUGE != 0 { None } else { Some((e &amp; ADDR_MASK) as Paddr) }
+}
+
+fn leaf_of(e: u64) -&gt; Option&lt;Leaf&gt; {                      // a present, user-accessible page
+    if e &amp; PRESENT == 0 || e &amp; USER == 0 { return None; }
+    let mut flags = PageFlags::R;
+    if e &amp; WRITE != 0      { flags |= PageFlags::W; }
+    if e &amp; NO_EXECUTE == 0 { flags |= PageFlags::X; }
+    Some(Leaf { paddr: (e &amp; ADDR_MASK) as Paddr, flags })
+}
+
+pub(crate) fn walk(root: Paddr, va: Vaddr) -&gt; Option&lt;Leaf&gt; {
+    let mut node = root;
+    for level in (2..=4).rev() {                          // four levels; vOSTD refuses a five-level host at start
+        node = child(read_entry(node, index(va, level)))?;
+    }
+    leaf_of(read_entry(node, index(va, 1)))
+}</code></pre>
+<p>The walk takes no lock, and two facts about Linux make that safe. First, a page the walk reads is never freed under it. Second, Linux writes an entry with a single 64-bit store and clears it with an atomic exchange, so a load never sees half an entry.</p>
+<p>Linux frees an area’s page-table pages in four cases, and none applies here. (1) When an area is unmapped or moved, which only a system call to Linux does; the tenant’s system calls go to the kernel proper, not to Linux. (2) At exec, which never runs in this address space. (3) When khugepaged, Linux’s background thread that replaces a last-level table of 4 KiB entries with one 2 MiB <em>huge</em> entry, collapses a range, which it refuses for raw-frame-number areas. (4) In <code>exit_mmap()</code>, which the endovisor’s reference on the address space (the last chapter’s second reference) holds off. <code>zap_vma_ptes()</code> clears entries but leaves the tables.</p>
+<p>The walk need not handle huge entries. The area holds only 4 KiB entries, since <code>vm_map</code> inserts one page at a time, so <code>child</code> treats a huge entry as absent.</p>
+<div class="background">
+<p><strong>Linux: page-table isolation.</strong> To blunt Meltdown, Linux gives each address space a second top-level page for user mode. Whenever it writes a user entry into <code>mm-&gt;pgd</code>, it writes the same entry into the second page, so both point at the same lower-level tables; below the top level there is one table, the one the last chapter described. In the kernel-mode copy only, Linux sets no-execute on those top-level user entries, so that a return to user mode on the wrong table faults. <code>mm-&gt;pgd</code> is the kernel-mode copy, and it is the root the endovisor publishes for vOSTD.</p>
+</div>
+
+<p>Permissions are taken from the leaf only, never combined down the levels. Linux makes every upper-level user entry readable, writable and user-accessible, so only the leaf restricts anything, with one exception: the no-execute bit on the kernel-mode table’s top-level user entries, which vOSTD reads. Combined down the levels, that bit would make every tenant page non-executable. The prototype’s Linux is built without the mitigation, so this case is argued, not tested.</p>
+<h2 id="copying-to-and-from-the-tenant"><a class="header" href="#copying-to-and-from-the-tenant">Copying to and from the tenant</a></h2>
+<div class="background">
+<p><strong>Linux: copying from user memory.</strong> Linux’s <code>copy_from_user</code> rests on two mechanisms. The processor feature SMAP, supervisor-mode access prevention, faults any kernel-mode access to a user page unless the kernel has opened a window for it with <code>stac</code>, which it closes again with <code>clac</code>. And the copying instruction is listed in the <em>exception table</em>, the list of instructions allowed to fault and where to resume, so that a fault inside it resumes at a fixup that returns an error; Linux keeps a table for its own code and for each module’s.</p>
+</div>
+
+<p>Inside Linux, vOSTD may not dereference a tenant address as OSTD does on a machine. On a machine OSTD dereferences the address and lets the fault handler catch a bad one; for example, the hundred-line kernel’s <code>write</code> handler reads the program’s buffer through <code>vm_space.reader(addr, len)</code>. vOSTD could open an SMAP window and could list an assembly copy in an exception table, but two deeper obstacles remain. First, the address space the processor is in is not necessarily the one being copied, because a carrier adopts its virtual CPU’s space only on the way to user mode. Second, a kernel-mode fault in the area never reaches the kernel proper: the endovisor’s fault handler fails it (the last chapter’s <code>-EFAULT</code>), and Linux then resumes at the instruction’s exception-table fixup or, for an instruction with none, oopses the host, so the copy would fail where on a machine the kernel proper’s handler would have mapped the page.</p>
+<p>Instead, a copy walks the page table from the tenant address to the frame, and copies through the frame’s direct-map alias, an ordinary kernel address.</p>
+<p>On a bad address, vOSTD returns the page-fault error at once, where OSTD would first call the kernel proper’s own page-fault handler and retry. An unmapped or read-only address is a <em>result</em> of the walk, not a fault.</p>
+<p>Returning the error is enough for kernels that map eagerly, not for one that maps on demand. Asterinas’s full kernel proper maps on demand, so before it can run as a kernelet vOSTD must call its handler outside the read section described below and walk again. This prototype does not do that.</p>
+<p><em>Simplified from <code>prototype/vostd/src/mm/io.rs</code>: <code>Region</code>, <code>resolve</code>, <code>copy_regions</code>, <code>copy_opaque</code>.</em></p>
+<pre><code class="language-rust">enum Region {
+    Kernel { cursor: usize, end: usize },                  // a kernel buffer
+    User { root: Paddr, cursor: Vaddr, end: Vaddr },       // tenant memory, to be walked through `root`
+}
+
+impl Region {
+    fn resolve(&amp;self, write: bool) -&gt; Option&lt;(*mut u8, usize)&gt; {   // the head of the region, as a kernel pointer
+        match *self {
+            Region::Kernel { cursor, end } =&gt; Some((cursor as *mut u8, end - cursor)),
+            Region::User { root, cursor, end } =&gt; {
+                let leaf = page_table::walk(root, cursor &amp; !(PAGE_SIZE - 1))?;    // None: a page fault
+                if write &amp;&amp; !leaf.flags.contains(PageFlags::W) { return None; }
+                let offset = cursor % PAGE_SIZE;
+                let len = (PAGE_SIZE - offset).min(end - cursor);               // up to the end of this page
+                Some(((paddr_to_vaddr(leaf.paddr) + offset) as *mut u8, len))
+            }
+        }
+    }
+}
+
+fn copy_regions(dst: &amp;mut Region, src: &amp;mut Region) -&gt; (usize, bool) {
+    while copied &lt; total {
+        let done = rcu::read(|| {                                      // run inside a read section (below)
+            let (dptr, dlen) = dst.resolve(true)?;
+            let (sptr, slen) = src.resolve(false)?;
+            let n = dlen.min(slen).min(total - copied);
+            unsafe { copy_opaque(dptr, sptr, n) };
+            Some(n)
+        });
+        let Some(n) = done else { return (copied, false) };            // a fault: how far we got
+        dst.advance(n); src.advance(n); copied += n;
+    }
+    (copied, true)
+}
+
+unsafe fn copy_opaque(dst: *mut u8, src: *const u8, n: usize) {
+    asm!("rep movsb", inout("rcx") n =&gt; _, inout("rdi") dst =&gt; _, inout("rsi") src =&gt; _);
+}</code></pre>
+<p>The copy is one <code>rep movsb</code> in assembly rather than a Rust copy, so that the compiler cannot assume tenant memory holds still. Tenant memory may change under the copy, since another virtual CPU’s thread may be writing it; a plain copy of memory that changes is a data race in Rust’s terms, and the optimizer is then free to assume the source did not change. It could, for instance, compile “copy a length out, check it, use it” into a check of the copy and a <em>re-read of the source</em> for the use, and a tenant that changed the length in between would have passed the check with a value it never had. An assembly copy is opaque to the compiler, so the code after the copy can read only the destination, never the source again.</p>
+<h2 id="who-holds-the-frame"><a class="header" href="#who-holds-the-frame">Who holds the frame</a></h2>
+<p>Inside Linux, vOSTD counts each Linux entry as holding the reference that OSTD’s page table holds on a machine; Linux knows nothing of the count. A full kernel proper such as Asterinas’s relies on it: its copy-on-write path reuses a frame in place when the count is one.</p>
+<p>The reference changes hands with the entry. <code>map</code> turns the handle into a raw address after the service succeeds, so the reference passes to the entry only once the entry exists. <code>unmap</code> reads the entries back before the service clears them. It turns each address into a handle again and drops it after the wait described below.</p>
+<p><em>Simplified from <code>prototype/vostd/src/mm/vm_space.rs</code> and <code>prototype/vostd/src/mm/frame.rs</code>: <code>CursorMut::map</code>, <code>CursorMut::unmap</code>, <code>Frame::into_raw</code>, <code>Frame::from_raw</code>.</em></p>
+<pre><code class="language-rust">pub fn map(&amp;mut self, frame: UFrame, prop: PageProperty) {
+    let va = self.core.va;
+    /* ... a page without read permission goes to the withheld set, below ... */
+    space.backend().map(va, frame.paddr(), prot_bits(&amp;prop));   // the vm_map service; panics the kernelet on failure
+    let _ = frame.into_raw();                                    // the entry owns the reference now
+    self.core.va += PAGE_SIZE;
+}
+
+pub fn unmap(&amp;mut self, len: usize) -&gt; usize {
+    let mut frames: Vec&lt;Paddr&gt; = Vec::new();
+    page_table::for_each_present(space.root(), start, end, &amp;mut |_, leaf| frames.push(leaf.paddr));  // read first
+    if !frames.is_empty() {
+        space.backend().unmap(start, len);                       // the vm_unmap service: clears and flushes
+    }
+    /* ... plus the withheld set's pages in the range ... */
+    rcu::synchronize();                                          // every copy in progress is done
+    let n = frames.len();
+    for p in frames { drop(UFrame::from_raw(p)); }               // now the frames may go back
+    self.flusher.dispatch_tlb_flush();                           // issue flushes the kernel proper queued earlier on this cursor; this range was flushed by the zap
+    n
+}
+
+pub(crate) fn into_raw(self) -&gt; Paddr { let p = self.paddr; core::mem::forget(self); p }
+
+pub(crate) fn from_raw(paddr: Paddr) -&gt; Self {
+    assert!(allocator::refcount(paddr).unwrap() &gt; 0);          // the frame is the grant's and in use
+    Self::from_raw_unchecked(paddr)
+}</code></pre>
+<p>This is sound only if Linux never clears an entry of the area on its own initiative, and for this area it does not. The entries are marked special, so Linux finds no page of its own behind them. Every scanner that walks address spaces skips the area by its flags: the multi-generational LRU walk, khugepaged, same-page merging, NUMA balancing, the out-of-memory reaper. Reclaim finds pages to evict through its LRU lists and the entries that map a page through its reverse mapping; the grant’s frames are ordinary RAM on no LRU list, and no reverse mapping leads from a frame to this area, so swap-out never sees them. Compaction, which moves pages to make free memory contiguous, does pass over them and skips them as neither on an LRU list nor movable.</p>
+<p>Memory pressure leaves the area’s entries alone: <code>make mem-pressure</code> tries to drive the Linux under test into swap with a host process while a tenant has 512 pages mapped, and afterwards every entry is present with the same frame and the same contents. The log reports how much was swapped; the check does not require it.</p>
+<h2 id="freeing-a-frame-a-copy-may-be-reading"><a class="header" href="#freeing-a-frame-a-copy-may-be-reading">Freeing a frame a copy may be reading</a></h2>
+<p><code>unmap</code> waits for every copy in progress before it frees a frame. A copy takes no cursor, since that would serialize every copy against every cursor, so it may still be reading the frame whose entry the <code>unmap</code> just cleared. The wait is a minimal RCU (<em>read-copy-update</em>: readers take no lock, and a writer waits until every reader in progress has finished before it frees anything): the <code>rcu::read</code> around each page of a copy, and the <code>rcu::synchronize()</code> in <code>unmap</code> before the frames are freed, which waits a <em>grace period</em>, until every reader in progress has finished.</p>
+<p><code>synchronize</code> waits for every virtual CPU that was inside a read section when it was called. Each virtual CPU has a sequence word, odd while it is inside one. <code>synchronize</code> skips its own virtual CPU: its caller is not in a read section, and since a read section holds a preemption guard, no other task on this virtual CPU can have been switched out partway through one.</p>
+<p>The wait is short, one page’s walk and copy, unless Linux has descheduled the reader’s carrier; then the waiter spins, telling the host through <code>vcpu_on_spin</code>, until that carrier runs again.</p>
+<p>The grace period holds in the test: <code>make mem-conc</code> runs copies without pause on one virtual CPU against map-and-unmap cycles on the other and finds no torn page, that is, no copy still reading a frame when the test rewrote it after its <code>unmap</code> returned (the rewrite stands in for reuse). A second phase frees the frames for real while copies write into the space, reallocates them, and finds none overwritten; in this run no grace period of that phase found a copy to wait for.</p>
+<h2 id="the-range-lock"><a class="header" href="#the-range-lock">The range lock</a></h2>
+<p>vOSTD keeps a range lock of its own per space, because no Linux lock can stand in for a cursor’s locks. On a machine, a cursor holds the page table’s node locks for its whole life, and a full kernel proper such as Asterinas’s relies on that in two places: its page-fault handler queries, allocates and maps under one cursor, so two threads faulting on one page never both map it; and its page cache commits a page and maps it atomically under one cursor while its eviction and truncation unmap through another. A Linux lock cannot stay held while the carrier is back in kernelet code, where a tenant-controlled kernel could hold it forever against Linux’s own users of the address space.</p>
+<p>The lock is sixteen 64-bit words in the space’s shared record. Each 2 MiB region, the span of one last-level table, is guarded by word (region number mod 16), so sixteen words stand for every region: a striped lock. Each word holds a count of readers in its low bits (<code>READERS</code> is their mask) and three flags: <code>WRITER</code>, set by an exclusive holder; <code>WRITER_WAITING</code>, which holds new readers off while a writer waits; and <code>WAITERS</code>, which says that someone is asleep in <code>vm_wait</code> on this word.</p>
+<p>A cursor takes every word its range touches, exclusively for a <code>cursor_mut</code> and shared for a <code>cursor</code>. It takes them in ascending order, a total order, so two cursors cannot deadlock. It releases them when it is dropped. Uncontended, taking a word is one compare-and-swap on the shared record and no crossing.</p>
+<p><em>Simplified from <code>prototype/vostd/src/mm/vm_space.rs</code>: <code>lock_word</code>, <code>unlock_word</code>.</em></p>
+<pre><code class="language-rust">fn lock_word(&amp;self, idx: usize, exclusive: bool) {
+    let w = &amp;self.backend().words()[idx];
+    loop {
+        let cur = w.load(Ordering::Acquire);
+        let free = if exclusive { cur &amp; (WRITER | READERS) == 0 } else { cur &amp; (WRITER | WRITER_WAITING) == 0 };
+        if free {
+            let new = if exclusive { (cur | WRITER) &amp; !WRITER_WAITING } else { cur + 1 };
+            if w.compare_exchange(cur, new, Ordering::Acquire, Ordering::Relaxed).is_ok() { return; }
+            continue;
+        }
+        // Contended: say so in the word, then sleep in the host until it changes. Nothing spins.
+        let want = cur | WAITERS | if exclusive { WRITER_WAITING } else { 0 };
+        if want != cur &amp;&amp; w.compare_exchange(cur, want, Ordering::Relaxed, Ordering::Relaxed).is_err() { continue; }
+        self.backend().wait(idx, want);                       // the vm_wait service
+    }
+}
+
+fn unlock_word(&amp;self, idx: usize, exclusive: bool) {
+    let (old, last) = if exclusive { (w.fetch_and(!(WRITER | WAITERS), Ordering::Release), true) }
+                      else { /* decrement the readers, clearing WAITERS with the last; last: was this the last reader? */ };
+    if old &amp; WAITERS != 0 &amp;&amp; last { self.backend().wake(idx); }   // the vm_wake service
+}</code></pre>
+<p>A contended cursor sleeps rather than spins, because the lock’s holder may itself be asleep in Linux inside a <code>vm_map</code>. The waiter’s whole virtual CPU sleeps with it, which costs no more than spinning on a machine’s page-table lock would.</p>
+<p>The slow path is a futex, Linux’s “sleep only if this word still holds this value” primitive. It is rebuilt for carriers because Linux’s futex keys on a user address in the caller’s address space and this word lives in kernel memory. A waiter sets the <code>WAITERS</code> bit and calls <code>vm_wait(space, word, expected)</code>; the endovisor takes the space’s wait-queue lock, reads the word, returns at once if it no longer equals <code>expected</code>, and otherwise puts the carrier to sleep, killably. A releasing cursor clears the bit with one atomic read-modify-write and, if it was set and no reader remains, calls <code>vm_wake</code>, which wakes every waiter under the same lock.</p>
+<p>No wake-up can be lost, by the argument chapter 9 made for <code>vcpu_idle</code>: one side marks, then checks; the other changes, then checks the mark; so one of the two always sees the other. Here the mark is the <code>WAITERS</code> bit, the check is the read under the lock, and the change is the single read-modify-write on release.</p>
+<p>A cursor that waits behind a sleeping lock holder sleeps too, and takes the lock after the release without a single kernelet task switch: <code>make mem-conc</code> has one virtual CPU hold a cursor while its <code>vm_map</code> sleeps (a test hook makes it), and the other virtual CPU’s cursor on the same region sleeps in <code>vm_wait</code> and takes the lock after the release.</p>
+<h2 id="a-page-without-read-permission"><a class="header" href="#a-page-without-read-permission">A page without read permission</a></h2>
+<p>A page without read permission has <strong>no Linux entry</strong>; vOSTD keeps it in a per-space <strong>withheld set</strong> instead. Such pages are of two kinds: <code>PROT_NONE</code> pages, with every permission cleared, and write-only pages, which x86 cannot express because a present entry is always readable. To the kernel proper both are mapped; on a machine OSTD encodes them as valid but not-present entries.</p>
+<p>Linux has no usable encoding for them in this area. On a Linux built with NUMA balancing, Linux periodically makes entries no-access, so that the next touch faults and tells it which processor uses the page. Its fault handler therefore treats every no-access entry in an accessible area as such a marker, even in an area the balancer never scans, and rewrites it with the area’s page protection: read and execute here, because the area’s <code>pfn_mkwrite</code> makes Linux hold write back, plus write if the entry is dirty. A page encoded that way would become readable on its first touch. Without NUMA balancing, as in the prototype’s Linux, the entry is no better: Linux takes it for present and a read fault on it for spurious, so the access faults forever without reaching the area’s fault handler.</p>
+<p>The set stands in for the table wherever a page has no entry. It is an ordered map from address to frame and property, in the kernelet’s heap (Linux’s <code>kmalloc</code>, charged to the sandbox). It holds the frame’s reference exactly as an entry would. It is under the range lock, which orders cursors on one region, and a spin lock of its own, because cursors on different regions share one map; the lock is taken per statement, never across a service. <code>query</code>, <code>find_next</code>, <code>protect_next</code> and <code>unmap</code> consult the set beside the table:</p>
+<p><em>Simplified from <code>prototype/vostd/src/mm/vm_space.rs</code>: <code>Slot</code>, <code>slot</code>, <code>protect_next</code>.</em></p>
+<pre><code class="language-rust">enum Slot { Table(page_table::Leaf), Withheld(Paddr, PageProperty) }
+
+fn slot(&amp;self, va: Vaddr) -&gt; Option&lt;Slot&gt; {
+    if let Some(leaf) = page_table::walk(self.space.root(), va) { return Some(Slot::Table(leaf)); }
+    self.space.withheld.lock().get(&amp;va).map(|&amp;(p, prop)| Slot::Withheld(p, prop))
+}
+
+pub fn protect_next(&amp;mut self, len: usize, mut op: impl FnMut(&amp;mut PageFlags, &amp;mut CachePolicy)) -&gt; Option&lt;Range&lt;Vaddr&gt;&gt; {
+    let va = self.core.next_mapped(self.core.va, end)?;        // the table merged with the set
+    let (paddr, old) = /* from the slot */;
+    let mut new = old; op(&amp;mut new.flags, &amp;mut new.cache);
+    match (in_table, new.flags.contains(PageFlags::R)) {
+        (true, true)   =&gt; if rwx(new.flags) != rwx(old.flags) { backend.protect(va, prot_bits(&amp;new)) },  // vm_protect
+        (true, false)  =&gt; { backend.unmap(va, PAGE_SIZE); withheld.lock().insert(va, (paddr, new)); }     // into the set
+        (false, true)  =&gt; { withheld.lock().remove(&amp;va); backend.map(va, paddr, prot_bits(&amp;new)); }       // out of the set
+        (false, false) =&gt; { withheld.lock().insert(va, (paddr, new)); }
+    }
+    Some(va..va + PAGE_SIZE)
+}</code></pre>
+<p>A tenant access to a withheld page faults as an absent page does, and the kernel proper’s own permission check turns that into a <code>SIGSEGV</code> for the program, as on a machine. <code>make mem-func</code> moves 512 pages into the set with <code>protect_next</code> clearing all three permissions, as a kernel proper’s <code>mprotect(PROT_NONE)</code> would, checks that a read of one is refused, moves them back, and reads them all intact with no fault.</p>
+<h2 id="a-space-that-is-dropped-at-the-wrong-moment"><a class="header" href="#a-space-that-is-dropped-at-the-wrong-moment">A space that is dropped at the wrong moment</a></h2>
+<p>The last reference to a <code>VmSpace</code> can be dropped with virtual interrupts off, where <code>Drop</code> may do nothing that may sleep, yet <code>vm_destroy</code> sleeps. The drop can come from <code>activate</code>, which keeps one reference per virtual CPU to the space active there and drops the previous one’s when a new space is activated. A full kernel proper, such as Asterinas’s, activates with virtual interrupts off, from the handler it runs right after a task switch, so that drop can be the last; the test kernels of this book activate from <code>main</code>, but vOSTD is not written for them alone.</p>
+<p>A helper task to do the work later is not available. A task spawned before the kernel proper calls <code>inject_scheduler</code> would make OSTD install its default scheduler, and the injection would then fail. A task spawned afterwards is never run by a kernel proper like Asterinas’s, whose scheduler enqueues only its own threads; a kernel proper that did accept it would still schedule it by its own policy, at no moment vOSTD can choose, so a busy higher-priority task could hold the frames and the Linux address space indefinitely.</p>
+<p><code>Drop</code> pushes the space onto a per-kernelet <strong>retire list</strong>, lock-free and without allocating, since an allocation is <code>mem_alloc</code>, which may sleep (the list node was allocated at <code>new</code>).</p>
+<p>The list is drained at the next point where sleeping is allowed: every sleeping memory service’s wrapper (<code>vm_create</code>, <code>vm_map</code>, <code>vm_unmap</code>, <code>vm_protect</code>, <code>vm_wait</code>, <code>vm_destroy</code>) and <code>vcpu_idle</code>, whenever the caller holds no guard and no spin lock, has virtual interrupts on and is not in an upcall. A guard is excluded although a memory service may sleep under one (rule 1, below), because the drain may take long and the caller did not ask for it.</p>
+<p>The drain is not prompt, but it is bounded. A sandbox that never idles keeps its retired spaces, but <code>vm_create</code> is a drain point, so a new space never waits behind retired ones, and the backlog is at most the 64 spaces a kernelet may hold, all charged to the sandbox’s own grant and to page tables Linux already counts.</p>
+<p>The drain unmaps the whole space, which flushes and releases every frame, the withheld set’s included, and then calls <code>vm_destroy</code>.</p>
+<p><em>Simplified from <code>prototype/vostd/src/mm/vm_space.rs</code>: <code>Drop</code>, <code>retire::drain_if_safe</code>, <code>retire::destroy</code>.</em></p>
+<pre><code class="language-rust">impl Drop for VmSpace {
+    fn drop(&amp;mut self) {                                   // may run with interrupts off: push, nothing else
+        node.backend = self.backend.take();
+        node.withheld = core::mem::take(&amp;mut *self.withheld.lock());
+        retire::push(node);
+    }
+}
+
+pub(crate) fn drain_if_safe() {                            // called from sleeping stubs and vcpu_idle
+    if HEAD.load(Ordering::Relaxed).is_null() || !safe() { return; }   // safe: no guard, no spin lock, interrupts on, not in an upcall
+    let mut p = HEAD.swap(core::ptr::null_mut(), Ordering::Acquire);
+    while !p.is_null() { let node = unsafe { Box::from_raw(p) }; p = node.next; destroy(*node); }
+}
+
+fn destroy(mut node: Node) {
+    let backend = node.backend.take().unwrap();
+    page_table::for_each_present(backend.root(), 0, MAX_USERSPACE_VADDR, &amp;mut |_, leaf| frames.push(leaf.paddr));
+    backend.unmap(0, MAX_USERSPACE_VADDR);
+    frames.extend(node.withheld.values().map(|&amp;(p, _)| p));
+    rcu::synchronize();
+    for p in frames { drop(UFrame::from_raw(p)); }
+    backend.destroy();                                     // vm_destroy
+}</code></pre>
+<h2 id="the-rule-about-sleeping"><a class="header" href="#the-rule-about-sleeping">The rule about sleeping</a></h2>
+<p>Inside Linux, a memory service may sleep even when the kernel proper calls it under a preemption guard, which OSTD forbids on a machine. The kernel proper calls <code>map</code> holding a preemption guard, because every cursor takes one. Every memory service except <code>vm_flush</code>, <code>vm_activate</code> and <code>vm_wake</code> may sleep in Linux: <code>vm_map</code>, <code>vm_unmap</code> and <code>vm_protect</code> wait for the address-space lock; <code>vm_map</code> may wait for a page-table page; <code>vm_unmap</code>’s zap may be preempted between page-table pages; and <code>vm_wait</code> sleeps by design. The design states the rule in four parts:</p>
+<ol>
+<li>A service may sleep whenever its work needs it. Its prologue lifts the mirror of chapter 11, so Linux sees nothing wrong, and its epilogue restores it.</li>
+<li>A service that may sleep must not be called while the caller holds a kernelet <strong>spin lock</strong> or has virtual interrupts off; under a plain preemption guard it may. The reason for the spin lock is lock-holder preemption: a spin lock held across a Linux sleep makes every other virtual CPU that wants it spin for the sleep’s length. The reason for the interrupts is a promise: with interrupts off the kernel proper is promised that no handler runs before it unmasks, so a kick sent during the sleep would be delayed past the carrier’s return until the unmask, where rule 3’s delay ends with the return.</li>
+<li>A sleep delays this virtual CPU’s pending virtual interrupts until the carrier returns, exactly as a Linux preemption does; the design accepts that.</li>
+<li>The mirror remains a latency optimization and is load-bearing for correctness nowhere.</li>
+</ol>
+<p>Rule 1 is sound because a kernelet’s critical section promises only that no kernelet task switch happens on this virtual CPU until the guard drops, as Problem 2 of chapter 11 argued. A sleep in Linux is the same event as a Linux preemption, which the kernelet already survives at any instruction. On a machine a guard has a second job: OSTD frees page-table pages only after every processor has switched tasks, so a guard keeps them alive. Here no table is freed, and vOSTD’s grace period watches each virtual CPU’s sequence word rather than task switches, so a guard held across a Linux sleep changes nothing.</p>
+<p>Rule 2 is the one place where vOSTD asks more of the kernel proper than OSTD does: a kernel proper that maps under a spin lock or with virtual interrupts off runs on a machine and is stopped here.</p>
+<p>vOSTD asserts the rule before every sleeping memory service, with a count of spin locks held that is separate from the guard count, and stops the kernelet rather than counting violations, so a kernel proper under the tenant’s control cannot break the rule through the memory services; only the sandbox’s own virtual CPUs would spin, within its own share. Whether Asterinas’s full kernel proper keeps the rule everywhere has not been checked.</p>
+<p>The heap services break rule 2, a known gap that costs latency, not soundness. They may sleep inside <code>kmalloc</code>, carry no assertion, and are called under spin locks, the withheld set’s insert among them. By rule 4 that costs latency only: a virtual CPU that wants the lock spins, and hands its turn on through <code>vcpu_on_spin</code>, for as long as <code>kmalloc</code> sleeps.</p>
+<p><em>Simplified from <code>prototype/vostd/src/mm/backend.rs</code> and <code>prototype/vostd/src/sync/spin.rs</code>: <code>sleeping</code>, <code>Backend::map</code>, <code>assert_may_sleep</code>.</em></p>
+<pre><code class="language-rust">fn sleeping(name: &amp;str) {                                  // every sleeping memory service's stub begins here
+    r2::assert_may_sleep(name);                            // rule 2
+    retire::drain_if_safe();                               // and a drain point for the retire list
+}
+
+pub(crate) fn map(&amp;self, va: Vaddr, paddr: Paddr, prot: u32) {
+    sleeping("vm_map");
+    let r = unsafe { (svc().vm_map)(self.id, va as u64, paddr as u64, prot) };
+    if r &lt; 0 { map_failed(va, paddr, r); }                 // as on a machine: a page-table node it cannot get is a panic
+}
+
+pub(crate) fn assert_may_sleep(service: &amp;str) {
+    if held() != 0 || irq_is_off() {
+        panic!("R2 violated: the sleeping service {} was called holding {} kernelet spin lock(s)", service, held());   // R2 is the code's name for rule 2
+    }
+}</code></pre>
+<p>Two tests exercise the rule. <code>make mem-func</code> runs on a Linux built with <code>CONFIG_DEBUG_ATOMIC_SLEEP</code>, which complains whenever Linux code might sleep with Linux’s preemption count raised. Inside a preemption guard it maps a page into a fresh 2 MiB region, which makes Linux allocate a page-table page, and Linux reports nothing. <code>make mem-r2</code> does the same under a spin lock, and vOSTD stops the kernelet before the call crosses.</p>
+<div class="recap">
+<p><strong>Recap.</strong> vOSTD reads Linux’s page table through the direct map with a four-level walk that needs no lock, because the endovisor’s reference keeps the table alive and Linux writes entries with single stores. Copies walk to the frame and go through its direct-map alias with an opaque <code>rep movsb</code>, inside an RCU read section, and <code>unmap</code> waits a grace period before it frees a frame. vOSTD counts the Linux entry as holding the frame’s reference. A cursor takes a striped range lock whose waiters sleep in Linux through <code>vm_wait</code> and <code>vm_wake</code>. Pages without read permission live in a withheld set, not in the table. A dropped space goes on a retire list and is destroyed at the next point where sleeping is allowed. A memory service may sleep under a preemption guard, never under a spin lock or with virtual interrupts off; the heap services break that rule, a known gap that costs latency.</p>
+</div>
+
+
+                    </main>
+
+                    <nav class="nav-wrapper" aria-label="Page navigation">
+                        <!-- Mobile navigation buttons -->
+                            <a rel="prev" href="../accepted-design/tenant-memory-on-linux-page-tables.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                                <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M41.4 233.4c-12.5 12.5-12.5 32.8 0 45.3l160 160c12.5 12.5 32.8 12.5 45.3 0s12.5-32.8 0-45.3L109.3 256 246.6 118.6c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0l-160 160z"/></svg></span>
+                            </a>
+
+                            <a rel="next prefetch" href="../accepted-design/what-it-costs.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                                <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M278.6 233.4c12.5 12.5 12.5 32.8 0 45.3l-160 160c-12.5 12.5-32.8 12.5-45.3 0s-12.5-32.8 0-45.3L210.7 256 73.4 118.6c-12.5-12.5-12.5-32.8 0-45.3s32.8-12.5 45.3 0l160 160z"/></svg></span>
+                            </a>
+
+                        <div style="clear: both"></div>
+                    </nav>
+                </div>
+            </div>
+
+            <nav class="nav-wide-wrapper" aria-label="Page navigation">
+                    <a rel="prev" href="../accepted-design/tenant-memory-on-linux-page-tables.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                        <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M41.4 233.4c-12.5 12.5-12.5 32.8 0 45.3l160 160c12.5 12.5 32.8 12.5 45.3 0s12.5-32.8 0-45.3L109.3 256 246.6 118.6c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0l-160 160z"/></svg></span>
+                    </a>
+
+                    <a rel="next prefetch" href="../accepted-design/what-it-costs.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                        <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M278.6 233.4c12.5 12.5 12.5 32.8 0 45.3l-160 160c-12.5 12.5-32.8 12.5-45.3 0s-12.5-32.8 0-45.3L210.7 256 73.4 118.6c-12.5-12.5-12.5-32.8 0-45.3s32.8-12.5 45.3 0l160 160z"/></svg></span>
+                    </a>
+            </nav>
+
+        </div>
+
+        <template id=fa-eye><span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 576 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M288 32c-80.8 0-145.5 36.8-192.6 80.6C48.6 156 17.3 208 2.5 243.7c-3.3 7.9-3.3 16.7 0 24.6C17.3 304 48.6 356 95.4 399.4C142.5 443.2 207.2 480 288 480s145.5-36.8 192.6-80.6c46.8-43.5 78.1-95.4 93-131.1c3.3-7.9 3.3-16.7 0-24.6c-14.9-35.7-46.2-87.7-93-131.1C433.5 68.8 368.8 32 288 32zM432 256c0 79.5-64.5 144-144 144s-144-64.5-144-144s64.5-144 144-144s144 64.5 144 144zM288 192c0 35.3-28.7 64-64 64c-11.5 0-22.3-3-31.6-8.4c-.2 2.8-.4 5.5-.4 8.4c0 53 43 96 96 96s96-43 96-96s-43-96-96-96c-2.8 0-5.6 .1-8.4 .4c5.3 9.3 8.4 20.1 8.4 31.6z"/></svg></span></template>
+        <template id=fa-eye-slash><span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M38.8 5.1C28.4-3.1 13.3-1.2 5.1 9.2S-1.2 34.7 9.2 42.9l592 464c10.4 8.2 25.5 6.3 33.7-4.1s6.3-25.5-4.1-33.7L525.6 386.7c39.6-40.6 66.4-86.1 79.9-118.4c3.3-7.9 3.3-16.7 0-24.6c-14.9-35.7-46.2-87.7-93-131.1C465.5 68.8 400.8 32 320 32c-68.2 0-125 26.3-169.3 60.8L38.8 5.1zM223.1 149.5C248.6 126.2 282.7 112 320 112c79.5 0 144 64.5 144 144c0 24.9-6.3 48.3-17.4 68.7L408 294.5c5.2-11.8 8-24.8 8-38.5c0-53-43-96-96-96c-2.8 0-5.6 .1-8.4 .4c5.3 9.3 8.4 20.1 8.4 31.6c0 10.2-2.4 19.8-6.6 28.3l-90.3-70.8zm223.1 298L373 389.9c-16.4 6.5-34.3 10.1-53 10.1c-79.5 0-144-64.5-144-144c0-6.9 .5-13.6 1.4-20.2L83.1 161.5C60.3 191.2 44 220.8 34.5 243.7c-3.3 7.9-3.3 16.7 0 24.6c14.9 35.7 46.2 87.7 93 131.1C174.5 443.2 239.2 480 320 480c47.8 0 89.9-12.9 126.2-32.5z"/></svg></span></template>
+        <template id=fa-copy><span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M502.6 70.63l-61.25-61.25C435.4 3.371 427.2 0 418.7 0H255.1c-35.35 0-64 28.66-64 64l.0195 256C192 355.4 220.7 384 256 384h192c35.2 0 64-28.8 64-64V93.25C512 84.77 508.6 76.63 502.6 70.63zM464 320c0 8.836-7.164 16-16 16H255.1c-8.838 0-16-7.164-16-16L239.1 64.13c0-8.836 7.164-16 16-16h128L384 96c0 17.67 14.33 32 32 32h47.1V320zM272 448c0 8.836-7.164 16-16 16H63.1c-8.838 0-16-7.164-16-16L47.98 192.1c0-8.836 7.164-16 16-16H160V128H63.99c-35.35 0-64 28.65-64 64l.0098 256C.002 483.3 28.66 512 64 512h192c35.2 0 64-28.8 64-64v-32h-47.1L272 448z"/></svg></span></template>
+        <template id=fa-play><span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 384 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M73 39c-14.8-9.1-33.4-9.4-48.5-.9S0 62.6 0 80V432c0 17.4 9.4 33.4 24.5 41.9s33.7 8.1 48.5-.9L361 297c14.3-8.7 23-24.2 23-41s-8.7-32.2-23-41L73 39z"/></svg></span></template>
+        <template id=fa-clock-rotate-left><span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M75 75L41 41C25.9 25.9 0 36.6 0 57.9V168c0 13.3 10.7 24 24 24H134.1c21.4 0 32.1-25.9 17-41l-30.8-30.8C155 85.5 203 64 256 64c106 0 192 86 192 192s-86 192-192 192c-40.8 0-78.6-12.7-109.7-34.4c-14.5-10.1-34.4-6.6-44.6 7.9s-6.6 34.4 7.9 44.6C151.2 495 201.7 512 256 512c141.4 0 256-114.6 256-256S397.4 0 256 0C185.3 0 121.3 28.7 75 75zm181 53c-13.3 0-24 10.7-24 24V256c0 6.4 2.5 12.5 7 17l72 72c9.4 9.4 24.6 9.4 33.9 0s9.4-24.6 0-33.9l-65-65V152c0-13.3-10.7-24-24-24z"/></svg></span></template>
+
+
+
+        <script>
+            window.playground_copyable = true;
+        </script>
+
+
+        <script src="../elasticlunr-ef4e11c1.min.js"></script>
+        <script src="../mark-09e88c2c.min.js"></script>
+        <script src="../searcher-c2a407aa.js"></script>
+
+        <script src="../clipboard-1626706a.min.js"></script>
+        <script src="../highlight-abc7f01d.js"></script>
+        <script src="../book-a0b12cfe.js"></script>
+
+        <!-- Custom JS scripts -->
+        <script src="../assets/mermaid-eefea253.min.js"></script>
+        <script src="../assets/mermaid-init-9b03b796.js"></script>
+
+
+
+    </div>
+    </body>
+</html>

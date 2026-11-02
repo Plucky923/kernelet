@@ -1,0 +1,396 @@
+<!DOCTYPE HTML>
+<html lang="en" class="light sidebar-visible" dir="ltr">
+    <head>
+        <!-- Book generated using mdBook -->
+        <meta charset="UTF-8">
+        <title>Stopping a kernelet - Building Kernelets on Linux</title>
+
+
+        <!-- Custom HTML head -->
+
+        <meta name="description" content="The accepted design and implementation of kernelets on Linux, with proposals for their evolution">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <meta name="theme-color" content="#ffffff">
+
+        <link rel="icon" href="../favicon-de23e50b.svg">
+        <link rel="shortcut icon" href="../favicon-8114d1fc.png">
+        <link rel="stylesheet" href="../css/variables-8adf115d.css">
+        <link rel="stylesheet" href="../css/general-2459343d.css">
+        <link rel="stylesheet" href="../css/chrome-ae938929.css">
+        <link rel="stylesheet" href="../css/print-9e4910d8.css" media="print">
+
+        <!-- Fonts -->
+        <link rel="stylesheet" href="../fonts/fonts-9644e21d.css">
+
+        <!-- Highlight.js Stylesheets -->
+        <link rel="stylesheet" id="mdbook-highlight-css" href="../highlight-493f70e1.css">
+        <link rel="stylesheet" id="mdbook-tomorrow-night-css" href="../tomorrow-night-4c0ae647.css">
+        <link rel="stylesheet" id="mdbook-ayu-highlight-css" href="../ayu-highlight-3fdfc3ac.css">
+
+        <!-- Custom theme stylesheets -->
+        <link rel="stylesheet" href="../assets/book-46594365.css">
+
+
+        <!-- Provide site root and default themes to javascript -->
+        <script>
+            const path_to_root = "../";
+            const default_light_theme = "light";
+            const default_dark_theme = "navy";
+            window.path_to_searchindex_js = "../searchindex-1dd0c655.js";
+        </script>
+        <!-- Start loading toc.js asap -->
+        <script src="../toc-e271ffef.js"></script>
+    </head>
+    <body>
+    <div id="mdbook-help-container">
+        <div id="mdbook-help-popup">
+            <h2 class="mdbook-help-title">Keyboard shortcuts</h2>
+            <div>
+                <p>Press <kbd>←</kbd> or <kbd>→</kbd> to navigate between chapters</p>
+                <p>Press <kbd>S</kbd> or <kbd>/</kbd> to search in the book</p>
+                <p>Press <kbd>?</kbd> to show this help</p>
+                <p>Press <kbd>Esc</kbd> to hide this help</p>
+            </div>
+        </div>
+    </div>
+    <div id="mdbook-body-container">
+        <!-- Work around some values being stored in localStorage wrapped in quotes -->
+        <script>
+            try {
+                let theme = localStorage.getItem('mdbook-theme');
+                let sidebar = localStorage.getItem('mdbook-sidebar');
+
+                if (theme.startsWith('"') && theme.endsWith('"')) {
+                    localStorage.setItem('mdbook-theme', theme.slice(1, theme.length - 1));
+                }
+
+                if (sidebar.startsWith('"') && sidebar.endsWith('"')) {
+                    localStorage.setItem('mdbook-sidebar', sidebar.slice(1, sidebar.length - 1));
+                }
+            } catch (e) { }
+        </script>
+
+        <!-- Set the theme before any content is loaded, prevents flash -->
+        <script>
+            const default_theme = window.matchMedia("(prefers-color-scheme: dark)").matches ? default_dark_theme : default_light_theme;
+            let theme;
+            try { theme = localStorage.getItem('mdbook-theme'); } catch(e) { }
+            if (theme === null || theme === undefined) { theme = default_theme; }
+            const html = document.documentElement;
+            html.classList.remove('light')
+            html.classList.add(theme);
+            html.classList.add("js");
+        </script>
+
+        <input type="checkbox" id="mdbook-sidebar-toggle-anchor" class="hidden">
+
+        <!-- Hide / unhide sidebar before it is displayed -->
+        <script>
+            let sidebar = null;
+            const sidebar_toggle = document.getElementById("mdbook-sidebar-toggle-anchor");
+            if (document.body.clientWidth >= 1080) {
+                try { sidebar = localStorage.getItem('mdbook-sidebar'); } catch(e) { }
+                sidebar = sidebar || 'visible';
+            } else {
+                sidebar = 'hidden';
+                sidebar_toggle.checked = false;
+            }
+            if (sidebar === 'visible') {
+                sidebar_toggle.checked = true;
+            } else {
+                html.classList.remove('sidebar-visible');
+            }
+        </script>
+
+        <nav id="mdbook-sidebar" class="sidebar" aria-label="Table of contents">
+            <!-- populated by js -->
+            <mdbook-sidebar-scrollbox class="sidebar-scrollbox"></mdbook-sidebar-scrollbox>
+            <noscript>
+                <iframe class="sidebar-iframe-outer" src="../toc.html"></iframe>
+            </noscript>
+            <div id="mdbook-sidebar-resize-handle" class="sidebar-resize-handle">
+                <div class="sidebar-resize-indicator"></div>
+            </div>
+        </nav>
+
+        <div id="mdbook-page-wrapper" class="page-wrapper">
+
+            <div class="page">
+                <div id="mdbook-menu-bar-hover-placeholder"></div>
+                <div id="mdbook-menu-bar" class="menu-bar sticky">
+                    <div class="left-buttons">
+                        <label id="mdbook-sidebar-toggle" class="icon-button" for="mdbook-sidebar-toggle-anchor" title="Toggle Table of Contents" aria-label="Toggle Table of Contents" aria-controls="mdbook-sidebar">
+                            <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M0 96C0 78.3 14.3 64 32 64H416c17.7 0 32 14.3 32 32s-14.3 32-32 32H32C14.3 128 0 113.7 0 96zM0 256c0-17.7 14.3-32 32-32H416c17.7 0 32 14.3 32 32s-14.3 32-32 32H32c-17.7 0-32-14.3-32-32zM448 416c0 17.7-14.3 32-32 32H32c-17.7 0-32-14.3-32-32s14.3-32 32-32H416c17.7 0 32 14.3 32 32z"/></svg></span>
+                        </label>
+                        <button id="mdbook-theme-toggle" class="icon-button" type="button" title="Change theme" aria-label="Change theme" aria-haspopup="true" aria-expanded="false" aria-controls="mdbook-theme-list">
+                            <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 576 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M371.3 367.1c27.3-3.9 51.9-19.4 67.2-42.9L600.2 74.1c12.6-19.5 9.4-45.3-7.6-61.2S549.7-4.4 531.1 9.6L294.4 187.2c-24 18-38.2 46.1-38.4 76.1L371.3 367.1zm-19.6 25.4l-116-104.4C175.9 290.3 128 339.6 128 400c0 3.9 .2 7.8 .6 11.6c1.8 17.5-10.2 36.4-27.8 36.4H96c-17.7 0-32 14.3-32 32s14.3 32 32 32H240c61.9 0 112-50.1 112-112c0-2.5-.1-5-.2-7.5z"/></svg></span>
+                        </button>
+                        <ul id="mdbook-theme-list" class="theme-popup" aria-label="Themes" role="menu">
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-default_theme">Auto</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-light">Light</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-rust">Rust</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-coal">Coal</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-navy">Navy</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-ayu">Ayu</button></li>
+                        </ul>
+                        <button id="mdbook-search-toggle" class="icon-button" type="button" title="Search (`/`)" aria-label="Toggle Searchbar" aria-expanded="false" aria-keyshortcuts="/ s" aria-controls="mdbook-searchbar">
+                            <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M416 208c0 45.9-14.9 88.3-40 122.7L502.6 457.4c12.5 12.5 12.5 32.8 0 45.3s-32.8 12.5-45.3 0L330.7 376c-34.4 25.2-76.8 40-122.7 40C93.1 416 0 322.9 0 208S93.1 0 208 0S416 93.1 416 208zM208 352c79.5 0 144-64.5 144-144s-64.5-144-144-144S64 128.5 64 208s64.5 144 144 144z"/></svg></span>
+                        </button>
+                    </div>
+
+                    <h1 class="menu-title">Building Kernelets on Linux</h1>
+
+                    <div class="right-buttons">
+                        <a href="../print.html" title="Print this book" aria-label="Print this book">
+                            <span class=fa-svg id="print-button"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M128 0C92.7 0 64 28.7 64 64v96h64V64H354.7L384 93.3V160h64V93.3c0-17-6.7-33.3-18.7-45.3L400 18.7C388 6.7 371.7 0 354.7 0H128zM384 352v32 64H128V384 368 352H384zm64 32h32c17.7 0 32-14.3 32-32V256c0-35.3-28.7-64-64-64H64c-35.3 0-64 28.7-64 64v96c0 17.7 14.3 32 32 32H64v64c0 35.3 28.7 64 64 64H384c35.3 0 64-28.7 64-64V384zm-16-88c-13.3 0-24-10.7-24-24s10.7-24 24-24s24 10.7 24 24s-10.7 24-24 24z"/></svg></span>
+                        </a>
+
+                    </div>
+                </div>
+
+                <div id="mdbook-search-wrapper" class="hidden">
+                    <form id="mdbook-searchbar-outer" class="searchbar-outer">
+                        <div class="search-wrapper">
+                            <input type="search" id="mdbook-searchbar" name="searchbar" placeholder="Search this book ..." aria-controls="mdbook-searchresults-outer" aria-describedby="searchresults-header">
+                            <div class="spinner-wrapper">
+                                <span class=fa-svg id="fa-spin"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M304 48c0-26.5-21.5-48-48-48s-48 21.5-48 48s21.5 48 48 48s48-21.5 48-48zm0 416c0-26.5-21.5-48-48-48s-48 21.5-48 48s21.5 48 48 48s48-21.5 48-48zM48 304c26.5 0 48-21.5 48-48s-21.5-48-48-48s-48 21.5-48 48s21.5 48 48 48zm464-48c0-26.5-21.5-48-48-48s-48 21.5-48 48s21.5 48 48 48s48-21.5 48-48zM142.9 437c18.7-18.7 18.7-49.1 0-67.9s-49.1-18.7-67.9 0s-18.7 49.1 0 67.9s49.1 18.7 67.9 0zm0-294.2c18.7-18.7 18.7-49.1 0-67.9S93.7 56.2 75 75s-18.7 49.1 0 67.9s49.1 18.7 67.9 0zM369.1 437c18.7 18.7 49.1 18.7 67.9 0s18.7-49.1 0-67.9s-49.1-18.7-67.9 0s-18.7 49.1 0 67.9z"/></svg></span>
+                            </div>
+                        </div>
+                    </form>
+                    <div id="mdbook-searchresults-outer" class="searchresults-outer hidden">
+                        <div id="mdbook-searchresults-header" class="searchresults-header"></div>
+                        <ul id="mdbook-searchresults">
+                        </ul>
+                    </div>
+                </div>
+
+                <!-- Apply ARIA attributes after the sidebar and the sidebar toggle button are added to the DOM -->
+                <script>
+                    document.getElementById('mdbook-sidebar-toggle').setAttribute('aria-expanded', sidebar === 'visible');
+                    document.getElementById('mdbook-sidebar').setAttribute('aria-hidden', sidebar !== 'visible');
+                    Array.from(document.querySelectorAll('#mdbook-sidebar a')).forEach(function(link) {
+                        link.setAttribute('tabIndex', sidebar === 'visible' ? 0 : -1);
+                    });
+                </script>
+
+                <div id="mdbook-content" class="content">
+                    <main>
+                        <h1 id="stopping-a-kernelet"><a class="header" href="#stopping-a-kernelet">Stopping a kernelet</a></h1>
+<p>However a kernelet ends, every carrier stops, everything the kernelet held goes back, and Linux is left exactly as it was. A kernelet ends in one of three ways: its kernel asks to, by powering off; its kernel fails, with a panic nothing catches; or the host decides, because the operator killed it. The hard case is a carrier that is running kernelet code and will not come out.</p>
+<h2 id="the-shape-of-a-death"><a class="header" href="#the-shape-of-a-death">The shape of a death</a></h2>
+<ol>
+<li>The kernelet is <strong>marked</strong> stopped or dying, which is a single store.</li>
+<li>Every carrier is <strong>stopped</strong>, at a point where it holds nothing of Linux’s.</li>
+<li>When no carrier is left, the sandbox has <strong>exited</strong>: what the kernelet held goes back and the holder can read the exit record from the sandbox descriptor.</li>
+</ol>
+<p>A kernelet’s state is abandoned, not tidied: nothing is unwound and no destructor runs, because tidying would mean running the tenant’s kernel on the host’s behalf at the moment it is least trusted. Once a carrier has left the image for good, no code from it runs on that carrier again, and the endovisor never runs kernelet code on the host’s behalf. What the endovisor gave the kernelet it takes back as a whole, without looking inside: the address spaces, every heap block the kernelet still held, which the endovisor tracks in a table of its own, and the pool of kernelet stacks.</p>
+<h2 id="stopping-from-inside"><a class="header" href="#stopping-from-inside">Stopping from inside</a></h2>
+<p>Both the kernel proper’s <code>poweroff</code> and a panic in the kernelet end in the service <code>stop</code>, which marks the instance dying and kills every carrier, its caller included. On the endovisor’s side it records the exit code for the holder to read from the sandbox descriptor, marks the instance as dying, sends <code>SIGKILL</code> to every carrier, the caller included, and arms the eviction sweep of the end of this chapter; then the calling carrier leaves its kernelet stack for the last time.</p>
+<p><em>Simplified from <code>prototype/linux/endovisor/carrier.c</code>: <code>klet_stop_instance</code>, <code>klet_svc_stop</code>, <code>klet_carrier_die</code>.</em></p>
+<pre><code class="language-c">void klet_stop_instance(struct klet_inst *inst, u64 code)
+{
+	inst-&gt;stopped = true;
+	pr_info("kernelet: stopped, exit code %llu\n", code);
+	klet_end(inst, KLET_END_EXITED, code, 0);    /* every end of a sandbox goes through klet_end: the next section shows it */
+}
+
+static void klet_svc_stop(u64 code)              /* the service, called by the kernelet */
+{
+	klet_svc_enter(KLET_SVC_STOP, code, 0, 0);   /* klet_stop_instance, on the Linux stack */
+	for (;;)
+		klet_leave(c, KLET_DEAD);                /* abandon this kernelet stack for good */
+}
+
+static void klet_carrier_die(struct klet_carrier *c)
+{
+	klet_detach(c);                              /* current-&gt;carrier_hooks = NULL; free the stack and the records */
+	if (!fatal_signal_pending(current))
+		force_sig(SIGKILL);                      /* a user task can only end by Linux's own exit path */
+}
+</code></pre>
+<p>A carrier that leaves for good dies as any process does, by a fatal signal Linux acts on. <code>klet_leave</code> with the state <code>DEAD</code> switches to the Linux stack and lands, as always, inside whichever hook entered the kernelet. That hook sees the state and calls <code>klet_carrier_die</code>, which clears the task’s hooks pointer and lets Linux kill it. Linux offers a module no direct way to end a task that is not a kernel thread, so a carrier ends as any process does, by a fatal signal acted on in the exit loop; clearing it first keeps the hooks from running on a task that no longer carries anything.</p>
+<p>Where each carrier is at the moment of the mark decides what stops it:</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>the carrier is</th><th>what stops it</th></tr>
+</thead>
+<tbody>
+<tr><td>in user mode</td><td>Linux’s signal handling: the carrier enters the exit loop, the resume hook sees the mark and dies</td></tr>
+<tr><td>asleep in a service (<code>vcpu_idle</code>, or <code>vm_wait</code>, where a memory service waits for a lock)</td><td>the sleep is <em>killable</em>, so <code>SIGKILL</code> wakes it; on the way back, the service body finds the signal pending and <strong>dooms</strong> the carrier, and the stub leaves for good instead of returning into kernelet code</td></tr>
+<tr><td>running a service</td><td>the same: the service completes, and the stub leaves for good</td></tr>
+<tr><td><strong>running kernelet code</strong></td><td>nothing in Linux’s exit path can reach it: <strong>eviction</strong>, below</td></tr>
+</tbody>
+</table>
+</div>
+<h2 id="stopping-from-outside"><a class="header" href="#stopping-from-outside">Stopping from outside</a></h2>
+<p>A carrier killed from outside is noticed through its lifeline, which Linux closes when the carrier’s process exits. The operator kills a carrier, or the out-of-memory killer does, or the holder does it (<code>make probe</code>, at the end of this chapter): <code>kill(pid, SIGKILL)</code> on a carrier’s process id. The carrier dies in Linux’s exit path if the signal finds it in user mode, and Linux closes its descriptors, among them its lifeline; where Linux’s exit path cannot reach it, the endovisor looks for the signal itself, as the end of this section shows. The lifeline’s release is the endovisor’s notice:</p>
+<p><em>Simplified from <code>prototype/linux/endovisor/carrier.c</code>: <code>klet_carrier_lifeline_closed</code>.</em></p>
+<pre><code class="language-c">void klet_carrier_lifeline_closed(struct klet_carrier *c)
+{
+	/* release what a carrier killed in user mode never detached: its stack, its empty address space */
+	list_del_init(&amp;c-&gt;link);
+	live = !inst-&gt;dying;                         /* the sandbox was running when this carrier died */
+	last = atomic_dec_and_test(&amp;inst-&gt;nr_carriers);
+	if (!live)
+		klet_check_exited_locked(inst, &amp;claim);  /* the last carrier of a dying sandbox: its exit is this caller's to run */
+	if (live)
+		klet_end(inst, KLET_END_KILLED, 0, KLET_KILLED_CARRIER_LOST);   /* a carrier's death is the sandbox's death */
+	else if (claim)
+		klet_sandbox_exited(inst);               // Release the address spaces, heap blocks and stack pool; wake exit-record readers.
+	if (c-&gt;task == current) {                    /* undo its attachment, which only its own task may do */
+		current-&gt;carrier_hooks = NULL;
+		klet_sched_detach(c);
+	}
+	if (!c-&gt;pnotifier_on &amp;&amp; c-&gt;task-&gt;carrier_hooks != &amp;c-&gt;hooks)
+		klet_carrier_put(c);                     /* the carrier's own reference; the lifeline file holds the other */
+	else
+		pr_warn("kernelet: carrier record released away from its task; kept\n");
+}
+</code></pre>
+<p><em>Simplified from <code>prototype/linux/endovisor/sandbox.c</code>: <code>klet_end</code>.</em></p>
+<pre><code class="language-c">void klet_end(struct klet_inst *inst, u32 how, s32 code, u32 reason)
+{
+	if (!inst-&gt;exit.how) {                       // The first end records the final exit reason.
+		inst-&gt;exit.how = how;
+		inst-&gt;exit.code = code;
+		inst-&gt;exit.reason = reason;
+	}
+	first_mark = !inst-&gt;dying;                   /* a test-and-set under the lock */
+	inst-&gt;dying = true;
+	klet_check_exited_locked(inst, &amp;claim);      /* no carrier left? then the sandbox has exited already */
+	if (first_mark) {
+		klet_kill_carriers(inst);                /* SIGKILL to every carrier, and every sleep of theirs ended */
+		klet_evict_arm(inst);                    /* for whoever is inside kernelet code */
+	}
+	if (claim)
+		klet_sandbox_exited(inst);
+}
+</code></pre>
+<p>Any carrier’s death while the sandbox is running ends it: a sandbox that had lost a virtual CPU would otherwise run on, with the others spinning on whatever locks the lost one held.</p>
+<p>Every end of a sandbox goes through <code>klet_end</code>, which records why, marks it dying, kills every carrier and arms the eviction sweep. The sweep is armed even for the kernelet’s own stop, for a reason the next section makes clear: a virtual CPU that the stop left spinning in kernel mode never passes through a hook again to die, and only eviction gets it out.</p>
+<p>The last carrier’s death is the sandbox’s exit. It releases what the kernelet held, makes the sandbox descriptor readable, and wakes the holder waiting for its exit record.</p>
+<p>A carrier killed in user mode before any mark never detaches, so its lifeline’s release is where its records are freed and the sandbox is told to die. Such a carrier passes through the resume hook once more, since the signal counts as pending work, but the hook, finding no mark and (usually) no virtual interrupt pending, steps aside; Linux kills the task, and <code>klet_detach</code> never runs for it. (With a tick pending, the hook enters the kernelet, a service dooms the carrier, and it dies by the route of the next paragraph instead.) The lifeline’s release frees what the detach would have: this is why the death notice, not the detach, is the place where a carrier’s records are finally released, and, since the sandbox was running, where the rest of the sandbox is told to die.</p>
+<p>A carrier’s record is freed only when nothing can still reach it through its task. The record holds two references, the carrier’s own, dropped here, and the lifeline file’s, dropped when the file is released, and goes when both are gone. The carrier’s own is dropped only if its task no longer points at the record: a lifeline released by some other task, through a copy of the descriptor, would leave the dying task’s hooks pointer and preemption notifier aimed at freed memory, so such a record is kept instead, with a warning; the endovisor counts records made and freed at unload, and every test checks that none is left.</p>
+<p>Killed anywhere else, the carrier is out of Linux’s reach, since Linux acts on <code>SIGKILL</code> only on the way to user mode, and the endovisor has to notice the signal itself. Every service body, on its way back to the kernelet stack, tests for a pending fatal signal. If it finds one, it marks the sandbox dying, which kills the others, and marks the carrier <strong>doomed</strong>, and the stub then leaves the kernelet for good, through <code>klet_leave</code>, instead of returning into it. That covers a carrier asleep in <code>vcpu_idle</code> or <code>vm_wait</code>, whose sleeps are killable and so end at once, and one in the middle of any other service. A carrier running kernelet code and calling no service is caught by the watch timer of chapter 10: its callback, finding a fatal signal pending on a carrier, points the interrupted instruction at the eviction sweep’s exit stub (below), exactly as the sweep does, and the carrier’s death then ends the sandbox through its lifeline. With the watch timer turned off, such a carrier stays out of reach until it next calls a service.</p>
+<h2 id="eviction"><a class="header" href="#eviction">Eviction</a></h2>
+<div class="background">
+<p><strong>Linux: signals and kernel mode.</strong> Linux acts on a signal, even <code>SIGKILL</code>, only when the task is about to return to user mode. A task that stays in kernel mode is never killed by a signal, however long it stays. Linux’s own kernel code is written to come out: it sleeps in killable waits and passes voluntary preemption points. Code that Linux did not write does neither.</p>
+</div>
+
+<p>A carrier looping in kernelet code can be stopped only by force. Say it loops in a <code>loop {}</code> reached through a logic bug a tenant found: it never returns to user mode, Linux by itself would never kill it, and the sandbox could never be destroyed. The endovisor has the means from chapter 10: a timer interrupt on the carrier’s processor, and the right to change the interrupted instruction pointer.</p>
+<p>The <strong>eviction sweep</strong> is one <code>hrtimer</code> per processor, pinned and hard like the watch timer, armed on every processor when a kernelet is marked dying, and re-armed every millisecond until no dying sandbox has a carrier left. Its callback checks four things about what it interrupted: that the task is a carrier of a dying kernelet, that the interrupted context is kernel mode, that the interrupted instruction lies inside the kernelet image’s text, and that the carrier’s service-call depth is zero. If all four hold, it overwrites the saved instruction pointer with the address of an <strong>exit stub</strong>, and nothing else.</p>
+<p><em>Simplified from <code>prototype/linux/endovisor/evict.c</code>: <code>klet_sweep</code>.</em></p>
+<pre><code class="language-c">static enum hrtimer_restart klet_sweep(struct hrtimer *timer)
+{
+	struct pt_regs *regs = get_irq_regs();
+
+	if (atomic_read(&amp;klet_sweeping) == 0)           /* no dying sandbox has a carrier left */
+		return HRTIMER_NORESTART;
+	if (!regs || user_mode(regs) || !klet_in_image_text(regs-&gt;ip) || !current-&gt;carrier_hooks)
+		goto again;
+	c = klet_current_carrier();
+	if (!inst-&gt;dying || c-&gt;depth != 0 || c-&gt;evicted || c-&gt;state != KLET_RUNNING)
+		goto again;
+
+	c-&gt;evicted = true;
+	regs-&gt;ip = (unsigned long)klet_exit_stub;    /* the only register the endovisor touches */
+again:
+	hrtimer_forward_now(timer, ns_to_ktime(KLET_SWEEP_INTERVAL_NS));
+	return HRTIMER_RESTART;
+}
+</code></pre>
+<p>The interrupt then returns to the stub instead of the loop. The stub realigns the stack pointer, because an interrupt can land between any two instructions, and leaves through the ordinary stack switch, never to come back:</p>
+<p><em>Simplified from <code>prototype/linux/endovisor/switch.S</code> and <code>prototype/linux/endovisor/carrier.c</code>: <code>klet_exit_stub</code>, <code>klet_evict_leave</code>.</em></p>
+<pre><code class="language-asm">klet_exit_stub:
+	andq	$-16, %rsp
+	call	klet_evict_leave
+	ud2                        /* never reached */
+</code></pre>
+<pre><code class="language-c">void klet_evict_leave(void)
+{
+	struct klet_carrier *c = klet_current_carrier();
+	c-&gt;evicted = true;
+	for (;;)
+		klet_leave(c, KLET_DEAD);   /* to the Linux stack; the hook there calls klet_carrier_die */
+}
+</code></pre>
+<pre class="mermaid">flowchart TB
+    a["carrier in kernelet code&lt;br/&gt;loop {} at depth 0"] -- "timer interrupt" --&gt; b["klet_sweep:&lt;br/&gt;dying? kernel mode? ip in the image? depth 0?"]
+    b -- "all four" --&gt; c["saved ip := klet_exit_stub"]
+    c -- "interrupt returns" --&gt; d["klet_exit_stub: realign,&lt;br/&gt;klet_evict_leave: klet_leave(DEAD)"]
+    d --&gt; e["the hook on the Linux stack:&lt;br/&gt;klet_carrier_die, SIGKILL"]
+</pre>
+
+<p>Why this is safe to do at an arbitrary instruction: at depth 0, in kernelet text, a carrier holds nothing of Linux’s. It cannot hold a Linux lock, because kernelet code cannot call Linux; the only thing it may hold is the one increment of Linux’s preemption count from chapter 11, and <code>klet_leave</code> with the state <code>DEAD</code> runs <code>klet_mirror_out</code> with <code>forever</code> set, which measures and removes it. The kernelet’s own half-finished state, its locks and its data, does not matter: the kernelet is dying, and no kernelet code runs afterwards. Kernelet code never masks hardware interrupts: the kernel proper is safe Rust, and vOSTD, the only code beneath it, has no interface that would; so there is no state in which the timer cannot land.</p>
+<p>The sweep is needed only for a carrier that was in kernelet code; every other carrier is caught on another path. A carrier that is not on a processor at that instant is interrupted by nothing; it is caught by the sweep when it next runs, since the sweep is on every processor. A carrier inside a service call is left alone by the depth test, and finishes the service; by then the <code>SIGKILL</code> the mark sent is pending on it, so the service body dooms it and the stub leaves for good, as the previous section said.</p>
+<h2 id="the-test"><a class="header" href="#the-test">The test</a></h2>
+<p><code>make probe</code> boots one probe kernel three times and ends its sandbox a different way each time. The kernel, in <code>prototype/kernels/probe/src/lib.rs</code>, has a handler for system call number 1000 that is <code>loop {}</code>. In the first boot the holder waits a second and then sends <code>SIGKILL</code> to the carrier of virtual CPU 0, which is spinning in kernelet code; the log shows the watch timer finding the signal on it and killing it there, its lifeline closing and ending the sandbox, and the module unloading with its reference count at zero. In the second boot the tenant runs under a seccomp filter that kills on its endless system call, and the sandbox ends by that signal. In the third the holder asks the endovisor instead, with <code>KLET_KILL</code>: the log then shows the sweep being armed and the spinning carrier evicted by an early sweep, at an address the endovisor places a few kilobytes into the kernelet image’s text. The build checks those lines and that Linux printed no warning, a check that means something only because the Linux the tests boot is built with <code>CONFIG_BUG</code> on, which the minimal configuration it starts from turns off.</p>
+<p>The same test exercises the other mechanisms of chapter 8 that the hundred-line kernel never reaches: a demand-paging fault, which the next chapter builds, an illegal instruction (<code>ud2</code>, twice, so that the drain’s re-ignoring of chapter 8 is exercised), a breakpoint (<code>int3</code>) and a privileged instruction (<code>hlt</code>), the last two being exceptions Linux reports with <code>SI_KERNEL</code>; the kernel proper steps past the three instructions, and the test reads the carrier’s signal dispositions back and checks that everything but <code>SIGKILL</code> and <code>SIGSTOP</code> is ignored. The tenant also asks for a 4 MiB write, which the kernel proper refuses for want of memory rather than letting the host warn.</p>
+<p>One of the memory tests, <code>make mem-kill</code>, kills a virtual CPU’s carrier while its sibling is taking page faults in the same address space, and checks that the whole sandbox ends cleanly, with the module’s reference count at zero.</p>
+<p>The same test checks that the signals chapter 8 discards never reach the carrier. On the way it sends that carrier <code>SIGTERM</code> and <code>SIGUSR1</code>, and then two thousand rounds of <code>SIGQUIT</code>, <code>SIGABRT</code>, <code>SIGTSTP</code>, <code>SIGTTIN</code> and <code>SIGTTOU</code>, which chapter 8 said are discarded, and checks that it lives and that none of them reached its queue.</p>
+<p>Two more boots of the same test kill the carrier where Linux by itself would never act on the signal: once while it is idle in <code>vcpu_idle</code> with nothing to run, and once while it runs a kernel task that loops and calls no service. The log must show the sandbox ending within a bounded time after the kill, the endovisor’s counter saying which path caught it, no stall report from Linux, and a clean unload.</p>
+<div class="recap">
+<p><strong>Recap.</strong> A kernelet ends by the <code>stop</code> service or by the death of any of its carriers; either marks the instance and sends <code>SIGKILL</code> to every carrier. A carrier in user mode dies by Linux’s own exit path, after a hook sees the mark and detaches it; one asleep in a killable service is woken and leaves for good on its way back, as does one that was running a service. A carrier running kernelet code is evicted: a timer on its processor finds the interrupted instruction in the image’s text at depth 0 and points it at an exit stub, which leaves through the stack switch for good. The last lifeline’s release is the sandbox’s end, and returns everything the kernelet held.</p>
+</div>
+
+
+                    </main>
+
+                    <nav class="nav-wrapper" aria-label="Page navigation">
+                        <!-- Mobile navigation buttons -->
+                            <a rel="prev" href="../accepted-design/sharing-a-processor-politely.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                                <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M41.4 233.4c-12.5 12.5-12.5 32.8 0 45.3l160 160c12.5 12.5 32.8 12.5 45.3 0s12.5-32.8 0-45.3L109.3 256 246.6 118.6c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0l-160 160z"/></svg></span>
+                            </a>
+
+                            <a rel="next prefetch" href="../accepted-design/tenant-memory-on-linux-page-tables.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                                <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M278.6 233.4c12.5 12.5 12.5 32.8 0 45.3l-160 160c-12.5 12.5-32.8 12.5-45.3 0s-12.5-32.8 0-45.3L210.7 256 73.4 118.6c-12.5-12.5-12.5-32.8 0-45.3s32.8-12.5 45.3 0l160 160z"/></svg></span>
+                            </a>
+
+                        <div style="clear: both"></div>
+                    </nav>
+                </div>
+            </div>
+
+            <nav class="nav-wide-wrapper" aria-label="Page navigation">
+                    <a rel="prev" href="../accepted-design/sharing-a-processor-politely.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                        <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M41.4 233.4c-12.5 12.5-12.5 32.8 0 45.3l160 160c12.5 12.5 32.8 12.5 45.3 0s12.5-32.8 0-45.3L109.3 256 246.6 118.6c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0l-160 160z"/></svg></span>
+                    </a>
+
+                    <a rel="next prefetch" href="../accepted-design/tenant-memory-on-linux-page-tables.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                        <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M278.6 233.4c12.5 12.5 12.5 32.8 0 45.3l-160 160c-12.5 12.5-32.8 12.5-45.3 0s-12.5-32.8 0-45.3L210.7 256 73.4 118.6c-12.5-12.5-12.5-32.8 0-45.3s32.8-12.5 45.3 0l160 160z"/></svg></span>
+                    </a>
+            </nav>
+
+        </div>
+
+        <template id=fa-eye><span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 576 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M288 32c-80.8 0-145.5 36.8-192.6 80.6C48.6 156 17.3 208 2.5 243.7c-3.3 7.9-3.3 16.7 0 24.6C17.3 304 48.6 356 95.4 399.4C142.5 443.2 207.2 480 288 480s145.5-36.8 192.6-80.6c46.8-43.5 78.1-95.4 93-131.1c3.3-7.9 3.3-16.7 0-24.6c-14.9-35.7-46.2-87.7-93-131.1C433.5 68.8 368.8 32 288 32zM432 256c0 79.5-64.5 144-144 144s-144-64.5-144-144s64.5-144 144-144s144 64.5 144 144zM288 192c0 35.3-28.7 64-64 64c-11.5 0-22.3-3-31.6-8.4c-.2 2.8-.4 5.5-.4 8.4c0 53 43 96 96 96s96-43 96-96s-43-96-96-96c-2.8 0-5.6 .1-8.4 .4c5.3 9.3 8.4 20.1 8.4 31.6z"/></svg></span></template>
+        <template id=fa-eye-slash><span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M38.8 5.1C28.4-3.1 13.3-1.2 5.1 9.2S-1.2 34.7 9.2 42.9l592 464c10.4 8.2 25.5 6.3 33.7-4.1s6.3-25.5-4.1-33.7L525.6 386.7c39.6-40.6 66.4-86.1 79.9-118.4c3.3-7.9 3.3-16.7 0-24.6c-14.9-35.7-46.2-87.7-93-131.1C465.5 68.8 400.8 32 320 32c-68.2 0-125 26.3-169.3 60.8L38.8 5.1zM223.1 149.5C248.6 126.2 282.7 112 320 112c79.5 0 144 64.5 144 144c0 24.9-6.3 48.3-17.4 68.7L408 294.5c5.2-11.8 8-24.8 8-38.5c0-53-43-96-96-96c-2.8 0-5.6 .1-8.4 .4c5.3 9.3 8.4 20.1 8.4 31.6c0 10.2-2.4 19.8-6.6 28.3l-90.3-70.8zm223.1 298L373 389.9c-16.4 6.5-34.3 10.1-53 10.1c-79.5 0-144-64.5-144-144c0-6.9 .5-13.6 1.4-20.2L83.1 161.5C60.3 191.2 44 220.8 34.5 243.7c-3.3 7.9-3.3 16.7 0 24.6c14.9 35.7 46.2 87.7 93 131.1C174.5 443.2 239.2 480 320 480c47.8 0 89.9-12.9 126.2-32.5z"/></svg></span></template>
+        <template id=fa-copy><span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M502.6 70.63l-61.25-61.25C435.4 3.371 427.2 0 418.7 0H255.1c-35.35 0-64 28.66-64 64l.0195 256C192 355.4 220.7 384 256 384h192c35.2 0 64-28.8 64-64V93.25C512 84.77 508.6 76.63 502.6 70.63zM464 320c0 8.836-7.164 16-16 16H255.1c-8.838 0-16-7.164-16-16L239.1 64.13c0-8.836 7.164-16 16-16h128L384 96c0 17.67 14.33 32 32 32h47.1V320zM272 448c0 8.836-7.164 16-16 16H63.1c-8.838 0-16-7.164-16-16L47.98 192.1c0-8.836 7.164-16 16-16H160V128H63.99c-35.35 0-64 28.65-64 64l.0098 256C.002 483.3 28.66 512 64 512h192c35.2 0 64-28.8 64-64v-32h-47.1L272 448z"/></svg></span></template>
+        <template id=fa-play><span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 384 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M73 39c-14.8-9.1-33.4-9.4-48.5-.9S0 62.6 0 80V432c0 17.4 9.4 33.4 24.5 41.9s33.7 8.1 48.5-.9L361 297c14.3-8.7 23-24.2 23-41s-8.7-32.2-23-41L73 39z"/></svg></span></template>
+        <template id=fa-clock-rotate-left><span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M75 75L41 41C25.9 25.9 0 36.6 0 57.9V168c0 13.3 10.7 24 24 24H134.1c21.4 0 32.1-25.9 17-41l-30.8-30.8C155 85.5 203 64 256 64c106 0 192 86 192 192s-86 192-192 192c-40.8 0-78.6-12.7-109.7-34.4c-14.5-10.1-34.4-6.6-44.6 7.9s-6.6 34.4 7.9 44.6C151.2 495 201.7 512 256 512c141.4 0 256-114.6 256-256S397.4 0 256 0C185.3 0 121.3 28.7 75 75zm181 53c-13.3 0-24 10.7-24 24V256c0 6.4 2.5 12.5 7 17l72 72c9.4 9.4 24.6 9.4 33.9 0s9.4-24.6 0-33.9l-65-65V152c0-13.3-10.7-24-24-24z"/></svg></span></template>
+
+
+
+        <script>
+            window.playground_copyable = true;
+        </script>
+
+
+        <script src="../elasticlunr-ef4e11c1.min.js"></script>
+        <script src="../mark-09e88c2c.min.js"></script>
+        <script src="../searcher-c2a407aa.js"></script>
+
+        <script src="../clipboard-1626706a.min.js"></script>
+        <script src="../highlight-abc7f01d.js"></script>
+        <script src="../book-a0b12cfe.js"></script>
+
+        <!-- Custom JS scripts -->
+        <script src="../assets/mermaid-eefea253.min.js"></script>
+        <script src="../assets/mermaid-init-9b03b796.js"></script>
+
+
+
+    </div>
+    </body>
+</html>
