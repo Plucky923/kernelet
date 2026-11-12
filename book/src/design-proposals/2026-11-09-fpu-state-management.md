@@ -4,7 +4,7 @@
 - Author(s): Plucky923
 - Discussion: Local design discussion beginning on 2026-11-09, revised on 2026-11-11; public review link not yet available.
 - Affected chapters: [Tasks and virtual CPUs](../accepted-design/tasks-and-virtual-cpus.md), [The kernelet ABI](../accepted-design/the-kernelet-abi.md), [Into user mode and back](../accepted-design/into-user-mode-and-back.md), [Virtual interrupts](../accepted-design/virtual-interrupts.md), and [What it costs](../accepted-design/what-it-costs.md).
-- Implementation or experiments: The complete protocol is not yet implemented. The source review uses Linux v6.12 and the current prototype; functional and performance validation of this protocol remains pending.
+- Implementation or experiments: An [isolated direct-vOSTD experiment](#validation-and-evidence) measures the proposed path. Main-prototype integration and complete validation remain pending.
 
 ## Summary
 
@@ -115,9 +115,9 @@ Linux's first save of A and the final restore of B are baseline work. The PoC ad
 
 </div>
 
-**Same-tenant syscalls, ns/call.** With FPU state preloaded, we compared Linux `getpid` with constant-return kernelet handlers: a minimal handler without tenant FPU management, and the same `CpuSync` handler with conditional or per-call save/load.
+**Same-tenant syscalls, ns/call.** The user program sets FPU registers before timing and checks them afterward. The timed user loop contains only syscalls and loop control, with no FPU arithmetic. We compared Linux `getpid` with constant-return kernelet handlers: a minimal handler without tenant FPU management, and the same `CpuSync` handler with conditional or per-call save/load.
 
-| Active state | Linux | Minimal kernelet handler | Conditional `CpuSync` | `CpuSync`: save/load every syscall |
+| Preloaded state | Linux | Minimal kernelet handler | Conditional `CpuSync` | `CpuSync`: save/load every syscall |
 |---|---:|---:|---:|---:|
 | x87 + SSE | 57.340 | 62.849 | 67.350 | 399.212 |
 | + AVX | 57.336 | 63.094 | 66.591 | 404.881 |
@@ -125,7 +125,7 @@ Linux's first save of A and the final restore of B are baseline work. The PoC ad
 
 Conditional handling makes no tenant FPU service calls or transfers in the timed loop; its management path adds 3.5–4.6 ns over the minimal handler. Per-call save/load adds **331.9–343.7 ns** over conditional handling. Its two services save and restore registers, copy a 2,688-byte state image twice (**5,376 bytes**), clear 8,192 bytes, and validate one image per syscall.
 
-**Task switching, ns per A→B→A.** We compared two Linux threads, two carriers with one tenant each, and two tenants within one carrier. Each round trip includes two work blocks, two syscalls, and two switches. FPU groups perform arithmetic before each handoff; Linux participants alternate with `SCHED_FIFO` and yield.
+**Task switching, ns per A→B→A.** We compared two Linux threads, two carriers with one tenant each, and two tenants within one carrier. Each participant changes its FPU registers through user-mode arithmetic before each handoff. Each round trip measures two arithmetic blocks, two syscalls, and two switches. Linux participants alternate with `SCHED_FIFO` and yield.
 
 | User work | Linux threads | Two carriers | Two tenants in one carrier |
 |---|---:|---:|---:|
@@ -149,7 +149,7 @@ Conditional handling makes no tenant FPU service calls or transfers in the timed
 
 ### Recover faults and stop the instance
 
-Route instruction faults to one common Host recovery and termination path. Reuse Linux's [signal-return recovery](https://github.com/torvalds/linux/blob/v6.12/arch/x86/kernel/fpu/signal.c#L294) and [`fpu__clear_user_states()`](https://github.com/torvalds/linux/blob/v6.12/arch/x86/kernel/fpu/core.c#L736) cleanup logic. This path does not return to the save/load service. Connect it directly to the kernelet instance termination path.
+Route instruction faults to one common Host recovery and termination path. Reuse Linux's [signal-return recovery](https://github.com/torvalds/linux/blob/v6.12/arch/x86/kernel/fpu/signal.c#L294) and [`fpu__clear_user_states()`](https://github.com/torvalds/linux/blob/v6.12/arch/x86/kernel/fpu/core.c#L736) cleanup logic. Terminate the instance without resuming kernelet execution.
 
 <div class="background">
 
@@ -186,11 +186,11 @@ vOSTD manages tenant ownership, buffer lifetime, and synchronization. This inter
 
 A later Linux restore can overwrite B's registers with A. Reusing C's save area before recovering A loses A's latest state.
 
-**Restore C before vOSTD resumes.** Keep Linux's carrier save area, but run its [restore logic](https://github.com/torvalds/linux/blob/v6.12/arch/x86/kernel/fpu/context.h#L54) before vOSTD resumes. Restore registers when needed, update CPU ownership, then clear `TIF_NEED_FPU_LOAD`. Clearing the flag alone does not restore the registers. Keep the registers valid through entry or return to vOSTD, including after Linux FPU use.
+**Restore C before vOSTD resumes.** Establish carrier FPU ownership once at startup. After Linux scheduling or kernel FPU borrowing, run Linux's [restore logic](https://github.com/torvalds/linux/blob/v6.12/arch/x86/kernel/fpu/context.h#L54) before vOSTD resumes. Restore registers when needed, update CPU ownership, and clear `TIF_NEED_FPU_LOAD`. Ordinary syscall entry and service return need no FPU check or lock. vOSTD can then save and load tenant state directly.
 
 **Alternative: save directly to the tenant context.** Linux could save into the active tenant's `FpuContext` when descheduling C. This would avoid restoring A to save it again, but requires adapting Linux's FPU save and restore paths to tenant context selection and format. The current proposal keeps the carrier save area and changes restoration timing.
 
-**Remaining cost.** Normal tenant switches retain register saves and restores, ownership tracking, and synchronization, with no FPU services, staging copies, clears, or image validation. If A's latest state is only in C's save area, resuming C and then switching to B still adds a restore and save of A. Earlier restoration can also add work if C is descheduled again before user return. The protocol remains unimplemented and unvalidated; its latency is unmeasured.
+**Remaining cost.** Normal tenant switches retain register saves and restores, ownership tracking, and synchronization, with no FPU services, staging copies, clears, or image validation. If A's latest state is only in C's save area, resuming C and then switching to B still adds a restore and save of A. Earlier restoration can also add work if C is descheduled again before user return. An isolated implementation is measured below; the main prototype still needs integration and full validation.
 
 
 ## Alternatives and tradeoffs
@@ -198,6 +198,34 @@ A later Linux restore can overwrite B's registers with A. Reusing C's save area 
 ## Implementation and integration
 
 ## Validation and evidence
+
+**2026-11-12: direct vOSTD without repeated entry checks.** Both comparisons reuse the [original workloads](#experimental-results) with unchanged user binaries. The conditional and direct configurations use one Linux image. The direct path prepares FPU ownership once at carrier startup. Patched Linux restores the carrier after scheduling and kernel FPU borrowing. Ordinary syscall entry and service return perform no FPU check or lock.
+
+**Same-tenant syscalls, ns/call.** Set FPU registers before timing, run the original syscall-only loop, then check the registers. Compare Linux, conditional `CpuSync`, and direct vOSTD.
+
+| Preloaded state | Linux | Conditional `CpuSync` | Direct vOSTD |
+|---|---:|---:|---:|
+| x87 + SSE | 56.997 | 67.098 | 66.459 |
+| + AVX | 57.011 | 68.042 | 66.636 |
+| + AVX-512 | 56.963 | 67.525 | 66.612 |
+
+Linux values come from the preceding syscall campaign, which used a separate Linux build for the same workload. Both kernelet paths skip tenant saves and loads in this loop; `CpuSync` state tracking remains.
+
+**Two tenants in one carrier, ns per A→B→A.** Repeat the earlier internal-switch workload: two user FPU arithmetic blocks, two syscalls, and two tenant switches. The staged and direct paths use the same user program and `CpuSync` policy.
+
+| User work | Linux threads | Old staged path | Direct vOSTD | Change from staged |
+|---|---:|---:|---:|---:|
+| x87 + SSE | 796.1 | 1339.6 | 848.0 | −36.7% |
+| x87 + AVX | 818.1 | 1294.8 | 850.6 | −34.3% |
+| x87 + AVX-512 | 865.8 | 1392.3 | 861.3 | −38.1% |
+
+Direct execution reduces the mean internal round-trip time by **34.3–38.1%**. vOSTD executes `XSAVE/XRSTOR` without FPU services or repeated entry preparation.
+
+The campaign used a Xeon Platinum 8259CL, five independent boots per configuration in shuffled order, and ten timed batches per boot. All **90 formal boots, 900 batches, and 42 diagnostic boots** passed. Independent analysis recomputed the results from raw logs and checked the packed binaries. Register checks ran outside timing; separate boots collected FPU diagnostic counts. Module disassembly confirmed that only startup retains the endovisor's FPU preparation call.
+
+Conditional same-tenant diagnostics made no tenant FPU transfers. Without injected faults, direct switch diagnostics completed 1,000 round trips with 2,000 saves and 2,000 restores, with zero FPU service calls, staging bytes, clears, or validations. Forced Linux borrowing and descheduling preserved register patterns. Misaligned save and invalid-MXCSR restore faults terminated the instance; a native FPU test then passed in the same guest.
+
+The host was shared, with variable frequency. All samples and boot ranges are retained, including large variations in the switch tests. Recovery latency was not measured. Full Host containment and process lifecycle correctness remain unvalidated. Reproduce with `prototype/bench/fpu-direct/no-entry.py`. Results and independent verification are in `prototype/bench/results/2026-11-12-fpu-direct-no-entry/`; the Linux syscall reference is in `prototype/bench/results/2026-11-12-fpu-direct-syscall/`.
 
 ## Open questions
 
