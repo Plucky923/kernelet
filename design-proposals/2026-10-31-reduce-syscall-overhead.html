@@ -36,10 +36,10 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-f5a74a96.js";
+            window.path_to_searchindex_js = "../searchindex-0cd4f786.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-e271ffef.js"></script>
+        <script src="../toc-dd7541c6.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -180,17 +180,15 @@
 <li>Status: Draft</li>
 <li>Author(s): Plucky923</li>
 <li>Discussion: Not yet available.</li>
-<li>Affected chapters: <a href="../accepted-design/carrier-hooks.html">Carrier hooks and patch overview</a>, <a href="../accepted-design/the-first-kernel-we-will-run.html">The first kernel we will run</a>, <a href="../accepted-design/two-stacks.html">Two stacks</a>, <a href="../accepted-design/into-user-mode-and-back.html">Into user mode and back</a>, <a href="../accepted-design/the-kernelet-abi.html">The kernelet ABI</a>, <a href="../accepted-design/tasks-and-virtual-cpus.html">Tasks and virtual CPUs</a>, <a href="../accepted-design/tenant-memory-on-linux-page-tables.html">Tenant memory on Linux’s page tables</a>, <a href="../accepted-design/virtual-interrupts.html">Virtual interrupts</a>, <a href="../accepted-design/sharing-a-processor-politely.html">Sharing a processor politely</a>, <a href="../accepted-design/what-it-costs.html">What it costs</a>, and <a href="../accepted-design/why-a-kernel-of-your-own.html">Why a kernel of your own</a>.</li>
-<li>Implementation or experiments: <code>prototype/</code> has the new build profile. The system call path is implemented and measured in a separate worktree and is not merged; <a href="#validation-and-evidence">Validation and evidence</a> gives the results. Smaller Linux stacks, the additional scheduler-state interface, host-aware task placement, static checks and alternative preemption policy are not yet implemented or measured.</li>
+<li>Affected chapters: <a href="../accepted-design/carrier-hooks.html">Carrier hooks and patch overview</a>, <a href="../accepted-design/the-first-kernel-we-will-run.html">The first kernel we will run</a>, <a href="../accepted-design/two-stacks.html">Two stacks</a>, <a href="../accepted-design/into-user-mode-and-back.html">Into user mode and back</a>, <a href="../accepted-design/the-kernelet-abi.html">The kernelet ABI</a>, <a href="../accepted-design/tasks-and-virtual-cpus.html">Tasks and virtual CPUs</a>, <a href="../accepted-design/tenant-memory-on-linux-page-tables.html">Tenant memory on Linux’s page tables</a>, <a href="../accepted-design/virtual-interrupts.html">Virtual interrupts</a>, <a href="../accepted-design/what-it-costs.html">What it costs</a>, and <a href="../accepted-design/why-a-kernel-of-your-own.html">Why a kernel of your own</a>.</li>
+<li>Implementation or experiments: <a href="#validation-and-evidence">Validation and evidence</a>.</li>
 </ul>
 <h2 id="summary"><a class="header" href="#summary">Summary</a></h2>
-<p>A system call on a kernelet takes 125.1 ns, against 56.4 ns for native <code>getpid</code>. The extra time is the handoff between Linux and the kernelet. This proposal makes vOSTD follow Linux’s protocol at that handoff: events go to a handler that returns, each user task keeps its registers in its own Linux stack, and checks on every return move to where their cause happens. A system call then takes 66.2 ns, 9.3 ns more than native <code>getpid</code>.</p>
-<p>We propose a mechanism to coordinate the Linux and kernelet schedulers. It retains the mirror and watch timer. Static proofs would replace the corresponding runtime boundary checks, and direct access to host CPU state would guide task placement.</p>
+<p>A prototype system call whose handler only returns a constant takes 125.1 ns, compared with 56.4 ns for native <code>getpid</code>. This proposal aligns vOSTD’s execution model with Linux’s to reduce handoff overhead. Event handlers return before user execution resumes. User registers stay in the carrier’s <code>pt_regs</code> until another user task needs it. <strong>In a later experiment, the measured implementation takes 63.7 ns per call, compared with 57.4 ns for native <code>getpid</code> on the same Linux build.</strong> Linux’s task stacks stay unchanged.</p>
 <h2 id="problem-and-motivation"><a class="header" href="#problem-and-motivation">Problem and motivation</a></h2>
-<h3 id="system-call-overhead"><a class="header" href="#system-call-overhead">System call overhead</a></h3>
-<p>On the prototype, a system call whose handler only returns a constant takes 125.1 ns, compared with 56.4 ns for native <code>getpid</code>. The difference is 68.7 ns.</p>
-<h4 id="background-one-system-call-today"><a class="header" href="#background-one-system-call-today">Background: one system call today</a></h4>
-<p>The figure shows one system call through the prototype. Step numbers match those in the timing table below. The <a href="#appendix-the-prototypes-mechanisms">appendix</a> explains the mechanisms.</p>
+<p>A prototype system call whose handler only returns a constant takes 125.1 ns, compared with 56.4 ns for native <code>getpid</code>. The difference is 68.7 ns.</p>
+<h3 id="background-one-system-call-today"><a class="header" href="#background-one-system-call-today">Background: one system call today</a></h3>
+<p>The figure traces one prototype system call, with step numbers from the timing table. The <a href="#appendix-the-prototypes-mechanisms">appendix</a> explains the mechanisms.</p>
 <pre class="mermaid">sequenceDiagram
     participant U as tenant user task
     participant L as Linux
@@ -213,10 +211,10 @@
     L-&gt;&gt;U: 12. exit work, SYSRET
 </pre>
 
-<h4 id="where-the-cost-is"><a class="header" href="#where-the-cost-is">Where the cost is</a></h4>
+<h3 id="where-the-cost-is"><a class="header" href="#where-the-cost-is">Where the cost is</a></h3>
 <p>We collected one 10 ms trace per boot across five boots, using Intel PT from the host. The traces cover about 450,000 system calls. The table reports each step’s median time.</p>
 <div class="background">
-<p><strong>x86: Intel Processor Trace.</strong> The processor records branch outcomes, with cycle counts at selected branches. A decoder uses this record and the binaries to reconstruct the executed instructions. Timing is available only at branches with cycle counts. Tracing adds no instructions to the code, but traced runs took 1.2% to 1.6% longer than untraced runs. Some steps occasionally took much longer than usual. The table uses medians to reduce the effect of these slow samples.</p>
+<p><strong>x86: Intel Processor Trace.</strong> The processor records branch outcomes and, at selected branches, cycle counts. A decoder combines these records with the binaries to reconstruct the executed instructions. Only branches with cycle counts provide timing. Tracing inserts no instructions, but traced runs took 1.2% to 1.6% longer than untraced runs. The table reports medians to limit the effect of occasional slow samples.</p>
 </div>
 
 <div class="table-wrapper">
@@ -250,88 +248,273 @@
 </table>
 </div>
 <p>The step medians sum to 126.1 ns. Without tracing, we measured 125.9–128.4 ns per call in the same boots.</p>
-<p>Linux entry and exit (steps 1 and 12), plus the user-mode interval, take 47.6 ns. <strong>This proposal retains that work and reduces the 78.5 ns kernelet handoff (steps 2–11).</strong> To match native <code>getpid</code> at 56.4 ns, the handoff would need to take about 8.8 ns. This target is approximate: native <code>getpid</code> uses a faster Linux entry and exit path than carriers.</p>
-<p><strong>The handoff includes work to bridge the two kernel models and <a href="#two-level-scheduling">coordinate their schedulers</a>.</strong></p>
-<h5 id="two-kernels-models-meet-at-the-handoff"><a class="header" href="#two-kernels-models-meet-at-the-handoff">Two kernels’ models meet at the handoff</a></h5>
-<p>Linux gives each task its own kernel stack, with no active call frames while the task runs in user mode. <strong>In the prototype, kernelet tasks share a carrier’s Linux stack but keep suspended <code>execute</code> calls on their own kernelet stacks.</strong> On a system call, <code>execute</code> resumes and returns to the kernel proper. The prototype translates between these models on each system call. The list below describes five sources of handoff work; the figure shows the first two.</p>
+<p>The Linux–kernelet handoff costs <strong>78.5 ns</strong> (steps 2–11). <strong>This proposal addresses the handoff overhead caused by differences between Linux’s and the kernelet’s execution models.</strong></p>
+<h4 id="two-kernels-models-meet-at-the-handoff"><a class="header" href="#two-kernels-models-meet-at-the-handoff">Two kernels’ models meet at the handoff</a></h4>
+<p>Linux gives each task a kernel stack and saves user registers there in <code>pt_regs</code>. No kernel call remains suspended while the task runs in user mode. <strong>In the prototype, kernelet tasks share a carrier’s Linux stack. Each task keeps <code>execute</code> suspended on its own kernelet stack and stores user registers in a separate <code>UserContext</code>.</strong> Each syscall copies registers between these representations and resumes the suspended call chain to reach the kernel proper.</p>
+<p><strong>The resumption steps take 9.7 ns; register copying and adjacent hook checks take about 9 ns.</strong> These two groups of steps total about <strong>18.7 ns</strong>. They do not isolate the full cost of adapting the two execution models.</p>
 <p><img src="2026-10-31-reduce-syscall-overhead-models.png" alt="A Linux thread beside the prototype’s carrier, while the program runs in user mode"></p>
-<p><em>A Linux thread (a) and the prototype’s carrier (b) during user execution. <strong>Red numbers mark the first two costs below: resuming calls (1) and copying registers (2).</strong></em></p>
+<p><em>A Linux thread (a) and the prototype’s carrier (b) during user execution. <strong>Red numbers mark the two costs below: resuming calls (1) and copying registers (2).</strong></em></p>
 <ol>
-<li>
-<p><strong>Resuming the suspended call: steps 5 and 6a, 9.7 ns.</strong> Each system call resumes <code>user_run</code> on the kernelet stack. Control returns through <code>execute</code> to the kernel proper, which checks the return reason (<a href="#appendix-the-prototypes-mechanisms">Appendix</a>, <code>execute</code> and Two stacks). These steps execute 13 instructions. The stack switch itself costs little.</p>
-</li>
-<li>
-<p><strong>Copying the registers: steps 3 and 11, about 9 ns.</strong> The hook copies 18 registers from Linux’s <code>pt_regs</code> to the kernelet’s <code>UserContext</code>, then copies them back before returning to user mode. These copies and the hook’s checks execute 95 instructions in about 30 cycles.</p>
-</li>
-<li>
-<p><strong>Checking the address space: step 10, 22.9 ns.</strong> The kernel proper may call <code>vm_activate</code> with virtual interrupts masked; Asterinas calls it after a task switch (<a href="../accepted-design/tenant-memory-on-linux-page-tables.html">Tenant memory on Linux’s page tables</a>). Switching address spaces can drop the old space’s last reference; <code>mmput()</code> then frees it and may sleep (Linux v6.12 <code>kernel/fork.c</code>). While the carrier sleeps, no kernelet task can run on its vCPU. With virtual interrupts masked, other vCPUs’ requests, including wakeups, wait until the carrier resumes and the kernel proper unmasks interrupts (<a href="../accepted-design/what-vostd-adds-on-top.html">What vOSTD adds on top</a>, rule 2). vOSTD forbids sleep with virtual interrupts masked. <strong><code>vm_activate</code> therefore records only the space ID in the vCPU record; the hook switches before returning to user mode, where sleep is allowed.</strong></p>
-<p><code>vm_activate</code> records only the space ID, so the hook cannot tell whether it ran since the last return to user mode. <strong>The hook therefore repeats the five-step check before every return to user mode.</strong> The kernelet can write any ID, and another vCPU of the same kernelet can call <code>vm_destroy</code> during the check. Figure steps 2, 3 and 5 validate the ID and hold a reference while the hook uses the space. The hook makes two atomic updates to the reference count shared by the vCPUs. These updates take <strong>16.7 ns of the 22.9 ns total</strong> (table steps 10b and 10d).</p>
-<p><img src="2026-10-31-reduce-syscall-overhead-space.png" alt="The prototype’s address-space check before each return to user mode"></p>
-<p><em>The prototype’s address-space check before each return to user mode. <strong>Red steps 3 and 5 update the reference count atomically.</strong></em></p>
-<p>The address space changes only when the kernelet switches to a task of another process, so almost every check finds no change. <strong>The hook still spends 22.9 ns on this check for every system call.</strong></p>
-</li>
-<li>
-<p><strong>Ordering the event check: part of step 8.</strong> To return to user mode, the kernelet calls <code>user_run</code>. It sets <code>c-&gt;state</code> to <code>KLET_USER</code>, checks for pending virtual interrupts, and hands control to Linux if none are pending. An interrupt raiser that sees <code>KLET_USER</code> sets a notification flag for Linux. Before returning to user mode, Linux checks this flag and calls <code>on_resume</code> if it is set. The hook re-enters the kernelet if virtual interrupts are pending. <strong>Ordering the state write before the pending check requires a full memory barrier (<code>lock addl</code>) on every system call</strong> (<a href="#appendix-the-prototypes-mechanisms">Appendix</a>, Virtual interrupts).</p>
-</li>
-<li>
-<p><strong>Calling through the service table: step 7b, 7.3 ns.</strong> The endovisor requires images with only relative relocations and no imported symbols. This lets it validate images at registration and share code pages across sandboxes (<a href="../accepted-design/the-endovisor-uapi.html">The endovisor UAPI</a>). The kernelet therefore calls <code>user_run</code> through the service table supplied at startup. <strong>The call performs two dependent loads before the jump: the table address, then <code>user_run</code>’s address from that table.</strong></p>
-</li>
+<li><strong>Resuming the suspended call: steps 5 and 6a, 9.7 ns.</strong> Each system call resumes <code>user_run</code> on the kernelet stack. Control returns through <code>execute</code> to the kernel proper, which checks the return reason (<a href="#appendix-the-prototypes-mechanisms">Appendix</a>, <code>execute</code> and Two stacks). These steps execute 13 instructions. The stack switch itself costs little.</li>
+<li><strong>Copying the registers: steps 3 and 11, about 9 ns.</strong> The hook copies 18 registers from Linux’s <code>pt_regs</code> to the kernelet’s <code>UserContext</code>, then copies them back before returning to user mode. These copies and the hook’s checks execute 95 instructions in about 30 cycles.</li>
 </ol>
-<h3 id="two-level-scheduling"><a class="header" href="#two-level-scheduling">Two-level scheduling</a></h3>
-<h4 id="background-two-levels-of-scheduling"><a class="header" href="#background-two-levels-of-scheduling">Background: two levels of scheduling</a></h4>
-<p>Linux schedules carriers on physical CPUs. The kernelet schedules tasks on the virtual CPUs that these carriers run. <strong>Without coordination, Linux does not account for dependencies between kernelet tasks. The kernelet places tasks without considering how much processor time each carrier gets.</strong> Virtual machines have the same scheduling structure. The guest kernel schedules tasks on virtual CPUs; the hypervisor schedules virtual CPUs on physical CPUs.</p>
-<h4 id="scheduling-problems"><a class="header" href="#scheduling-problems">Scheduling problems</a></h4>
-<ol>
-<li><strong>Preemption during a guarded critical section.</strong> A virtual preemption guard or virtual interrupt mask prevents the kernelet from preempting the current task. It does not by itself prevent Linux from descheduling the carrier. <strong>If Linux deschedules a spin lock holder’s carrier, waiters on other virtual CPUs can spin until the holder resumes and releases the lock.</strong></li>
-<li><strong>Delays in sleeping and waking.</strong> A task waiting on a mutex or event needs the holder or waking task to run. Linux can delay the wakeup by descheduling the holder’s or waking task’s carrier. <strong>Even when runnable, the waiter may still wait for Linux to schedule its own carrier.</strong></li>
-<li><strong>Task placement without host-load information.</strong> Linux assigns carriers to physical CPUs; the kernelet assigns tasks to virtual CPUs. Competing Linux tasks on the same CPU may reduce a carrier’s processor time. <strong>If the kernelet ignores this difference, it may place new tasks on virtual CPUs whose carriers get little processor time.</strong> The prototype does not use host processor-time information for task placement.</li>
-</ol>
-<h4 id="what-the-prototype-does"><a class="header" href="#what-the-prototype-does">What the prototype does</a></h4>
-<div class="background">
-<p><strong>Linux: kernel preemption models.</strong> <strong>A preemption model controls when Linux can switch away from a task executing kernel code.</strong> Linux 6.12 has three non-real-time models:</p>
+<h4 id="other-costs-and-engineering-optimizations"><a class="header" href="#other-costs-and-engineering-optimizations">Other costs and engineering optimizations</a></h4>
 <ul>
-<li><strong><code>none</code>.</strong> <strong>Linux can switch away from a task executing kernel code only when it blocks or reaches an explicit scheduling point.</strong> Examples include yields and rescheduling checks.</li>
-<li><strong><code>voluntary</code>.</strong> <strong>Compared with <code>none</code>, Linux adds rescheduling checks at selected points in its kernel code.</strong></li>
-<li><strong><code>full</code>.</strong> <strong>Linux can also preempt kernel code on interrupt return if rescheduling is requested and the preemption count is zero.</strong></li>
+<li><strong>Address-space checks (step 10, 22.9 ns).</strong> On each return, the prototype looks up the requested address space, takes and drops a reference, and compares it with the current space. The benchmark has one task, so its address space does not change. This design moves the switch to <code>vm_activate</code> and defers cleanup that can sleep, removing this work from the return path.</li>
+<li><strong>Event ordering (part of step 8).</strong> <code>user_run</code> publishes <code>KLET_USER</code>, then checks for pending virtual interrupts. A full memory barrier (<code>lock addl</code>) orders these steps. This design sets Linux’s notification flag for each virtual interrupt in any carrier state, removing the check and barrier from <code>user_run</code>.</li>
+<li><strong>Build settings (steps 6b and 7a).</strong> The prototype builds the image as a shared library. Calls between crates then go through the global offset table, and integer-overflow checks stay on. The <code>release-lto</code> profile makes a position-independent executable with direct calls and no overflow checks.</li>
+<li><strong>Service-table call (step 7b, 7.3 ns).</strong> The image permits only relative relocations and no imported symbols (<a href="../accepted-design/the-endovisor-uapi.html">The endovisor UAPI</a>). The kernelet therefore calls <code>user_run</code> through a service table, with two dependent loads and an indirect jump. This design keeps this call.</li>
+<li><strong>The mirror and watch timer.</strong> This design keeps both; their optimization is outside its scope.</li>
 </ul>
-<p><strong>All three models allow preemption of user code and scheduling before return to user mode.</strong> With <code>CONFIG_PREEMPT_DYNAMIC</code> enabled, <code>preempt=</code> selects the model at boot. See Linux v6.12’s <a href="https://github.com/torvalds/linux/blob/v6.12/kernel/Kconfig.preempt">model definitions</a>, <a href="https://github.com/torvalds/linux/blob/v6.12/kernel/sched/core.c">model selection</a>, and <a href="https://github.com/torvalds/linux/blob/v6.12/kernel/entry/common.c">interrupt and user-mode exit paths</a>.</p>
-</div>
-
-<div class="background">
-<p><strong>x86: per-CPU data.</strong> Linux keeps a separate copy of some kernel variables for each CPU. <strong>In the x86-64 Linux kernel, <code>%gs:[offset]</code> selects a field in the current CPU’s copy.</strong> A VM guest uses its own address space and <code>%gs</code> base, so this access selects guest data. The guest needs a host interface to read host scheduling state.</p>
-</div>
-
-<p><strong>The prototype coordinates the two schedulers through three parts</strong> (<a href="../accepted-design/sharing-a-processor-politely.html">mechanism details</a>):</p>
-<ol>
-<li><strong>Direct updates through <code>%gs:[offset]</code>.</strong> The endovisor supplies the offset of Linux’s preemption count. <strong>vOSTD uses <code>inc</code> and <code>dec</code> through <code>%gs</code> to update this count on the current host CPU.</strong> After decrementing, vOSTD yields if the count is zero and Linux requests rescheduling.</li>
-<li><strong>Mirror state.</strong> Each vCPU has a <code>mirrored</code> flag. On entry to the outermost virtual critical section, vOSTD increments Linux’s preemption count, then sets the flag. On exit, it clears the flag, then decrements the count. <strong>The flag prevents repeated count updates when guards or virtual interrupt masks nest.</strong></li>
-<li><strong>Watch timer.</strong> When Linux requests rescheduling, the watch arranges a yield outside a virtual critical section and defers it inside. It records the first tick that finds both a critical section and a rescheduling request. <strong>A later tick can force the carrier to yield if both conditions still hold and at least 1 ms has elapsed.</strong></li>
-</ol>
-<p><strong>Before a service call or forced yield, the endovisor saves and removes any mirror increment from Linux’s preemption count.</strong> It restores the increment before returning to kernelet code. The vCPU’s <code>mirrored</code> flag remains unchanged.</p>
-<p><strong>The prototype uses all three parts under <code>none</code>, <code>voluntary</code>, and <code>full</code>, but their scheduling roles differ:</strong></p>
-<ul>
-<li><strong><code>full</code>.</strong> <strong>The mirrored count defers Linux’s automatic preemption while the carrier runs kernelet code in a virtual critical section.</strong> The watch provides the forced-yield fallback.</li>
-<li><strong><code>none</code> and <code>voluntary</code>.</strong> Linux does not automatically preempt kernel code on interrupt return. <strong>The watch provides a path for the carrier to yield when Linux requests rescheduling.</strong> The prototype still maintains the mirror.</li>
-</ul>
-<p><strong>As a backstop, a task spinning on a lock can request a yield to another runnable carrier in the same sandbox.</strong></p>
-<h4 id="limitations-and-overhead"><a class="header" href="#limitations-and-overhead">Limitations and overhead</a></h4>
-<ul>
-<li><strong>Sleeping and waking.</strong> <strong>These mechanisms do not address delays to sleeping-lock holders or tasks responsible for wakeups when Linux deschedules their carriers.</strong> A woken task may still wait for Linux to run its own carrier.</li>
-<li><strong>Task placement.</strong> The kernelet still assigns tasks to virtual CPUs <strong>without using host processor-time information</strong>.</li>
-<li><strong>Overhead.</strong> The mirror updates Linux’s preemption count on entry to and exit from <strong>each outermost virtual critical section</strong>, including under <code>none</code> and <code>voluntary</code>. <strong>Each system call</strong> also pays for mirror bookkeeping on entry and exit (steps 4 and 8). Checking whether the watch timer is active adds <strong>about 2 ns</strong> to step 4.</li>
-</ul>
-<h5 id="the-build"><a class="header" href="#the-build">The build</a></h5>
-<p><strong>Two costs come from the build settings.</strong> In step 6b, <code>execute</code> calls <code>RawUserContext::run</code> in another crate. The image was compiled as shared-library code (<code>relocation-model = pic</code>), so this call uses the global offset table (<a href="../accepted-design/the-endovisor-uapi.html">The endovisor UAPI</a>). The image is a single executable, so the call could be direct. In step 7a, enabled integer-overflow checks add a test to each arithmetic operation.</p>
 <h2 id="proposed-change"><a class="header" href="#proposed-change">Proposed change</a></h2>
 <h3 id="design-overview"><a class="header" href="#design-overview">Design overview</a></h3>
 <p><img src="2026-10-31-reduce-syscall-overhead-paths.png" alt="One system call through the prototype and through this design, step by step"></p>
-<p><em>One system call through the prototype (a) and the proposed design (b). Steps on the same row do the same job. <strong>Red steps are removed from the system-call path.</strong> The blue box lists work triggered by task switches, address-space changes, virtual interrupts, or vCPU startup.</em></p>
+<p><em>One system call through the prototype (a) and this design (b). Steps on the same row do the same job. <strong>This design removes the red steps from the system-call path.</strong> The blue box lists work that runs only on a task switch, an address-space change, a virtual interrupt, or vCPU startup.</em></p>
 <h3 id="the-kernelet-user-task"><a class="header" href="#the-kernelet-user-task">The kernelet user task</a></h3>
 <p><img src="2026-10-31-reduce-syscall-overhead-task.png" alt="What a user task holds, in the prototype and in this design"></p>
-<p><em><strong>Stacks and saved user registers</strong> in the prototype (a) and proposed design (b).</em></p>
-<p><strong>Each kernelet user task uses the <code>pt_regs</code> on its own Linux stack as its <code>UserContext</code>.</strong> This removes the register copies in item 2. Linux also uses this stack for entry, services and exit work.</p>
-<p>Linux saves user registers on the carrier’s registered stack. <strong>When a user task becomes current on a carrier, the endovisor registers that task’s Linux stack by its base address and size.</strong> A kernel task uses the carrier’s original Linux stack. A user task’s Linux and kernelet stacks come from the sandbox’s stack pool, subject to its task limit. Both are charged to the sandbox’s memory cgroup.</p>
-<p>Linux restores these registers when returning to user mode, so they must always hold safe values. <strong>The kernel proper writes them only through <code>UserContext</code> and only during the task’s own handler call.</strong> <code>UserContext</code> keeps the segment fields and privileged flag bits fixed.</p>
+<p><em><strong>Stacks and saved user registers</strong> in the prototype (a) and this design (b). The blue arrows show a later switch from A to B.</em></p>
+<p><strong>A carrier keeps its own Linux stack, and each task has its own kernelet stack.</strong> On entry from user mode, Linux saves the current user task’s registers in <code>pt_regs</code> at the top of the carrier’s Linux stack. The kernelet runs each task’s code on that task’s kernelet stack.</p>
+<p><strong>While a user task stays current on the carrier, its registers stay in <code>pt_regs</code>.</strong> The handler accesses them through a handle borrowed from vOSTD. For a system call, exception or kernel event without a task switch, <strong>vOSTD copies no registers at the handoff</strong>. This removes the two copies in item 2.</p>
+<p><strong>When another user task needs <code>pt_regs</code></strong>, vOSTD saves the previous task’s registers at the top of that task’s kernelet stack. It then copies the incoming task’s registers from its save area into <code>pt_regs</code> before that task’s code continues. A kernel task has no user registers, so vOSTD saves or installs nothing for it.</p>
+<h3 id="the-vostd-interface"><a class="header" href="#the-vostd-interface">The vOSTD interface</a></h3>
+<p>In the prototype, the kernel proper calls <code>execute</code>, which stays suspended on the kernelet stack while user code runs. In this design, <strong>vOSTD controls user execution and calls the kernel proper’s event callbacks.</strong> The handler returns before the task re-enters user mode. vOSTD can change the path between user mode and the handler without changing the handler.</p>
+<p><strong>Each user task holds its handler in its data.</strong> The kernel proper implements <code>UserEventHandler</code> for its thread type, such as Asterinas’s <code>Thread</code>. Each user task stores an <code>Arc</code> of that type as its data. Callbacks borrow the current task’s handler; for Asterinas, <code>self</code> is <code>&amp;Thread</code>. vOSTD also passes <code>&amp;CurrentTask</code>, the only way to access the task’s local data.</p>
+<p><em>Proposed: vOSTD’s interface for user events.</em></p>
+<pre><code class="language-rust">/// The type of the user tasks' data: each user task's data is an `Arc` of
+/// this type. vOSTD calls these methods on the current task's data.
+pub trait UserEventHandler: Send + Sync + 'static {
+    /// Called once on the new task, before its first entry into user mode.
+    fn init(&amp;self, task: &amp;CurrentTask, user: &amp;mut UserMode) {}
+    /// Handles one event of the current task; returns when done. It may sleep
+    /// or be preempted.
+    fn handle(&amp;self, event: UserEvent, task: &amp;CurrentTask, user: &amp;mut UserMode);
+    /// Asked before every return to user mode: whether the task ends.
+    fn should_exit(&amp;self, task: &amp;CurrentTask, user: &amp;UserMode) -&gt; bool;
+    /// Returns true if a virtual interrupt received in user mode left work
+    /// for the kernel proper. Otherwise, vOSTD skips `handle`.
+    fn has_kernel_event(&amp;self, task: &amp;CurrentTask, user: &amp;UserMode) -&gt; bool { false }
+    /// Called with virtual interrupts masked just before user mode, to load
+    /// the task's floating-point and segment state.
+    fn pre_user_run(&amp;self, task: &amp;CurrentTask, user: &amp;UserMode, guard: &amp;DisabledLocalIrqGuard) {}
+}
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub enum UserEvent { Syscall, Exception, KernelEvent }</code></pre>
+<p>The kernel proper marks its handler implementation with <code>#[ostd::user_event_handler]</code>, which <strong>exports six symbols for vOSTD to use</strong>.</p>
+<div class="background">
+<p><strong>Rust: <code>TypeId</code>.</strong> A <code>TypeId</code> identifies a concrete Rust type. vOSTD stores task data as a <code>Box&lt;dyn Any + Send + Sync&gt;</code> and queries the value’s type ID through <code>Any</code>. It compares this ID with the handler’s exported ID without knowing the handler type. <code>data.as_ref().type_id()</code> identifies the stored value; <code>data.type_id()</code> identifies the box itself. See the <a href="https://doc.rust-lang.org/std/any/index.html#smart-pointers-and-dyn-any">Rust documentation on smart pointers and <code>Any</code></a>.</p>
+</div>
+
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Generated symbol</th><th>Purpose</th></tr>
+</thead>
+<tbody>
+<tr><td><code>__ostd_user_data_type_id</code></td><td>Return the <code>TypeId</code> of <code>Arc&lt;Thread&gt;</code> for the <code>Thread</code> implementation.</td></tr>
+<tr><td><code>__ostd_user_init</code></td><td>Call <code>init</code> once on the new task, before its first entry into user mode.</td></tr>
+<tr><td><code>__ostd_user_handle</code></td><td>Call <code>handle</code> for a system call, an exception or a kernel event.</td></tr>
+<tr><td><code>__ostd_user_should_exit</code></td><td>Call <code>should_exit</code> before a return to user mode.</td></tr>
+<tr><td><code>__ostd_user_has_kernel_event</code></td><td>Check whether a kernel event needs <code>handle</code>.</td></tr>
+<tr><td><code>__ostd_user_pre_user_run</code></td><td>Call <code>pre_user_run</code> with virtual interrupts masked before user mode.</td></tr>
+</tbody>
+</table>
+</div>
+<p><code>TaskOptions::new_user(context)</code> takes initial user register values from <code>context</code>; <code>.data(value)</code> supplies the handler state. <strong>Before a user task can run, <code>build</code> compares the final data value’s <code>TypeId</code> with the ID returned by <code>__ostd_user_data_type_id</code>.</strong> For <code>Thread</code>, the value must be an <code>Arc&lt;Thread&gt;</code>; missing or mismatched data causes <code>build</code> to return <code>Error::InvalidArgs</code>. <code>spawn</code> calls <code>build</code> and propagates this error. <code>build</code> writes the initial registers to the save area at the top of the new task’s kernelet stack. On the first switch, vOSTD installs these registers in the carrier’s <code>pt_regs</code> and calls <code>init</code> on the new task before entering user mode. Objects needed across events remain in task data or local data.</p>
+<p><strong>Each callback borrows the current task and a <code>UserMode</code> handle from vOSTD.</strong> vOSTD creates the handle and lends it for the callback’s duration. The handle provides access to the task’s registers in the carrier’s <code>pt_regs</code> and its exception state. <code>UserMode</code> is neither <code>Send</code> nor <code>Sync</code>. Through <code>UserContext</code>, the kernel proper can update user registers while the segment fields and privileged flag bits remain fixed.</p>
+<p>A callback may sleep while another user task runs on the same carrier and reuses its <code>pt_regs</code>. A <code>&amp;mut</code> reference held across sleep would conflict with accesses by the switch path and the other task. Restoring the values before resumption would not remove this conflict. <strong>The callback therefore borrows a <code>UserContext</code> on its own kernelet stack, without borrowing <code>pt_regs</code>.</strong> Its methods read and write fields through raw pointers to the frame, without creating references to it. The kernel proper calls the same methods as before.</p>
+<p><strong>A switched-out task does not execute its callback or access registers through its handle.</strong> The task resumes on the same vCPU, and the handle keeps the same <code>pt_regs</code> address. If another user task took ownership of <code>pt_regs</code>, vOSTD restores the suspended task’s registers from its stack save area before resuming the callback. The callback then accesses its own task’s registers through the same handle.</p>
+<h4 id="porting-a-kernel-proper"><a class="header" href="#porting-a-kernel-proper">Porting a kernel proper</a></h4>
+<p><strong>The kernel proper replaces its <code>execute</code> loop with callbacks.</strong> Event handling moves to <code>handle</code>, the exit check to <code>should_exit</code>, and one-time setup on the new task to <code>init</code>. Objects that the loop created once and reused, such as the process reference, become task data. Each thread holds a strong process reference that callbacks borrow, avoiding reference-count updates on each event. <strong>This creates a reference cycle, because the process also holds its tasks.</strong> The reaper breaks the cycle by removing the main thread from the process’s task set. References that keep the thread alive can delay process destruction, so cleanup must run earlier. Process exit cancels the timers, and the reaper sends the pidfd’s hang-up event.</p>
+<p><em>Proposed: Asterinas’s user thread from <code>create_new_user_task</code>, written against the handler. The wait while the process is stopped and the panic catching are omitted.</em></p>
+<pre><code class="language-rust">/// Borrows the state that the thread and its task hold.
+fn context&lt;'a&gt;(thread: &amp;'a Thread, task: &amp;'a CurrentTask) -&gt; Context&lt;'a&gt; {
+    let posix_thread = thread.as_posix_thread().unwrap();
+    Context {
+        process: posix_thread.process_ref(),                // held by the thread, as in Linux
+        thread_local: task.as_thread_local().unwrap(),
+        posix_thread,
+        thread,
+        task,
+    }
+}
+
+#[ostd::user_event_handler]
+impl UserEventHandler for Thread {
+    fn init(&amp;self, task: &amp;CurrentTask, _: &amp;mut UserMode) {  // was before the loop
+        let ctx = context(self, task);
+        let child_tid_ptr = ctx.thread_local.set_child_tid().get();
+        if is_userspace_vaddr(child_tid_ptr) {
+            let _ = current_userspace!().write_val(child_tid_ptr, &amp;ctx.posix_thread.tid());
+        }
+        if ctx.posix_thread.tid() == FIRST_POSIX_TID {
+            crate::init::on_first_process_startup(&amp;ctx);
+        }
+    }
+    fn handle(&amp;self, event: UserEvent, task: &amp;CurrentTask, user: &amp;mut UserMode) {
+        let ctx = context(self, task);
+        let exception = user.take_exception();
+        let user_ctx = user.context_mut();
+        match event {
+            UserEvent::Exception =&gt; {
+                ctx.thread_local.set_orig_syscall_ret(None);
+                handle_exception(&amp;ctx, user_ctx, exception.unwrap())
+            }
+            UserEvent::Syscall =&gt; {
+                ctx.thread_local.set_orig_syscall_ret(Some(user_ctx.syscall_ret()));
+                let res = ctx.posix_thread.ptrace_may_stop_on_syscall(&amp;ctx, user_ctx);
+                if !matches!(res, PtraceStopResult::Interrupted) {
+                    handle_syscall(&amp;ctx, user_ctx);
+                    ctx.posix_thread.ptrace_may_stop_on_syscall(&amp;ctx, user_ctx);
+                }
+            }
+            UserEvent::KernelEvent =&gt; {
+                ctx.thread_local.set_orig_syscall_ret(None);
+            }
+        }
+        if ctx.thread.is_exited() {
+            return;                                         // the loop's check before signals
+        }
+        handle_pending_signal(user_ctx, &amp;ctx);
+    }
+    fn should_exit(&amp;self, _: &amp;CurrentTask, _: &amp;UserMode) -&gt; bool {
+        self.is_exited()                                    // the loop's exit check
+    }
+    fn has_kernel_event(&amp;self, task: &amp;CurrentTask, _: &amp;UserMode) -&gt; bool {
+        context(self, task).has_pending()                   // was a hook of `execute`
+    }
+    fn pre_user_run(&amp;self, task: &amp;CurrentTask, _: &amp;UserMode, guard: &amp;DisabledLocalIrqGuard) {
+        let thread_local = task.as_thread_local().unwrap();
+        thread_local.supp_user_context().before_user_exec(guard);   // was a hook of `execute`
+    }
+}
+
+TaskOptions::new_user(user_ctx)
+    .data(thread)                                           // an `Arc&lt;Thread&gt;`
+    .local_data(thread_local)
+    .spawn()
+    .unwrap();</code></pre>
+<h3 id="the-handoff-protocol"><a class="header" href="#the-handoff-protocol">The handoff protocol</a></h3>
+<p><strong>An event enters the kernelet through a Linux hook and leaves through a new Linux entry point.</strong> The kernelet never returns to the hook.</p>
+<h4 id="in-from-the-hook-to-the-handler"><a class="header" href="#in-from-the-hook-to-the-handler">In: from the hook to the handler</a></h4>
+<p>The syscall hook masks virtual interrupts, switches to the current task’s kernelet stack, and enters vOSTD with the event type. vOSTD reads the current task and event state from the vCPU record. <strong>Virtual interrupts stay masked until these reads finish</strong>, preventing another task’s events from overwriting the record before vOSTD reads it. vOSTD then unmasks virtual interrupts and calls the kernel proper’s handler. For a kernel event, vOSTD calls the handler only if <code>has_kernel_event</code> returns true. The resume hook uses the same path for exceptions and virtual interrupts.</p>
+<h4 id="out-from-the-handler-to-user-mode"><a class="header" href="#out-from-the-handler-to-user-mode">Out: from the handler to user mode</a></h4>
+<p><em>Proposed, simplified: vOSTD’s entry for a user event.</em></p>
+<pre><code class="language-rust">extern "C" fn user_event_entry(raw_event: u64) -&gt; ! {
+    let event = UserEvent::from_raw(raw_event);
+    // The hook entered with virtual interrupts masked:
+    // no task switch can happen before these reads.
+    let task = current_task();
+    let data = task.data().as_ref()
+        as *const (dyn core::any::Any + Send + Sync) as *const ();
+    let mut user = UserMode::for_current_carrier(); // also takes the exception, if any
+    unmask_virtual_interrupts();
+    // SAFETY: `build` checked this user task's data type. The data cannot
+    // be replaced, and the current task keeps it alive during these calls.
+    let should_exit = unsafe {
+        if event != UserEvent::KernelEvent || __ostd_user_has_kernel_event(data, &amp;task, &amp;user) {
+            __ostd_user_handle(data, event, &amp;task, &amp;mut user);
+        }
+        __ostd_user_should_exit(data, &amp;task, &amp;user)
+    };
+    if should_exit {
+        exit_current_task();
+    }
+    assert_no_guard_held();                     // a guard kept alive with mem::forget
+    preempt_if_wanted();                        // the scheduler's chance before user mode
+    let guard = mask_virtual_interrupts();
+    // SAFETY: The same task and checked data remain alive after rescheduling.
+    unsafe { __ostd_user_pre_user_run(data, &amp;task, &amp;user, &amp;guard) };
+    user_run()                                  // never returns
+}</code></pre>
+<p>After the handler returns, vOSTD completes the checks and callbacks above, then calls <code>user_run</code>. Virtual interrupts remain masked after <code>pre_user_run</code>. The endovisor unmasks them before invoking Linux’s return-to-user path. <strong><code>user_run</code> leaves through <code>kernelet_return_to_user</code>, which starts a call chain on the carrier’s Linux stack below the saved <code>pt_regs</code>.</strong> Linux runs its exit work on this chain and returns to user mode.</p>
+<h3 id="task-switch"><a class="header" href="#task-switch">Task switch</a></h3>
+<p><strong>Each vCPU records which user task owns its carrier’s <code>pt_regs</code>.</strong> vOSTD copies registers only when switching to a user task other than the owner. It saves the owner’s registers in that task’s save area, installs the incoming task’s registers, and records the new owner. Switches to kernel tasks or back to the owner copy nothing.</p>
+<p>vOSTD copies registers in <code>after_switching_to</code>, on the incoming task’s stack with virtual interrupts masked. The copies finish <strong>before the task’s own code continues</strong>, so the task finds its registers in <code>pt_regs</code>.</p>
+<ul>
+<li><strong>First run.</strong> <code>build</code> allocates the task’s kernelet stack and writes the initial registers to its save area. The first switch installs these registers in the carrier’s <code>pt_regs</code> before <code>init</code> runs. A vCPU without an owner has nothing to save.</li>
+<li><strong>Owner exit.</strong> The exiting owner’s registers are no longer needed. With virtual interrupts masked, <code>exit_current</code> clears the owner record and removes the task from the run queue. The task cannot run again, preventing the owner record from referring to its freed stack.</li>
+</ul>
+<p><strong>A task stays on the vCPU where it first runs.</strong> Asterinas’s scheduler has no load balancing. Its <code>select_cpu</code> chooses a CPU by load for a new thread and otherwise returns the thread’s last CPU. This design therefore keeps tasks on their vCPUs.</p>
+<p>Three parts of this design rely on the rule:</p>
+<ul>
+<li><strong>Lazy saving.</strong> A switched-out task’s registers may still be in its vCPU’s <code>pt_regs</code>.</li>
+<li><strong>Sleeping callbacks.</strong> A callback may keep its <code>UserContext</code> borrow while sleeping. The stored address still identifies the same carrier’s <code>pt_regs</code>.</li>
+<li><strong>vCPU lookups.</strong> vOSTD assumes that a task stays on the same vCPU between finding its record and using it.</li>
+</ul>
+<p>Every scheduler used with vOSTD must keep each task on the vCPU where it first runs. Load balancing would require saving a task’s registers from its old carrier’s <code>pt_regs</code> and making vCPU lookups safe across migration.</p>
+<h3 id="invariants"><a class="header" href="#invariants">Invariants</a></h3>
+<ul>
+<li><strong>Handler data.</strong> Each user task keeps an <code>Arc</code> of the registered handler type alive throughout its callbacks. <code>build</code> checks the type; safe APIs cannot replace the data afterwards.</li>
+<li><strong>Register owner.</strong> While a user task runs, in the kernel or in user mode, it owns its vCPU’s <code>pt_regs</code> (<a href="#task-switch">Task switch</a>).</li>
+<li><strong>No reference to <code>pt_regs</code>.</strong> Neither the kernel proper nor vOSTD creates a Rust reference to the carrier’s <code>pt_regs</code> (<a href="#the-vostd-interface">The vOSTD interface</a>).</li>
+<li><strong>vCPU binding.</strong> Every scheduler must keep each task on the vCPU where it first runs.</li>
+<li><strong>Return state.</strong> vOSTD’s register writes keep segment fields and privileged flag bits fixed. The endovisor sets <code>orig_ax</code> to -1 before Linux’s exit work (<a href="#implementation-and-integration">Implementation and integration</a>).</li>
+<li><strong>Handler return.</strong> The handler returns before its task enters user mode.</li>
+<li><strong>Masked entry.</strong> vOSTD reads the current task and the event state with virtual interrupts masked (<a href="#in-from-the-hook-to-the-handler">In</a>).</li>
+<li><strong>Services.</strong> vOSTD does not switch tasks while a service runs.</li>
+</ul>
+<h2 id="alternatives-and-tradeoffs"><a class="header" href="#alternatives-and-tradeoffs">Alternatives and tradeoffs</a></h2>
+<h3 id="one-linux-task-per-kernelet-task"><a class="header" href="#one-linux-task-per-kernelet-task">One Linux task per kernelet task</a></h3>
+<p>Each kernelet task has a separate Linux task, Linux stack and <code>pt_regs</code>.</p>
+<ul>
+<li>Gain: <strong>No register copy at a task switch, and no shared Linux stack.</strong></li>
+<li>Cost: <strong>A kernelet task switch becomes a Linux sleep and wakeup.</strong> Linux’s scheduler decides when the woken task runs. Each sandbox needs one Linux task per tenant thread.</li>
+</ul>
+<h3 id="per-task-linux-stacks"><a class="header" href="#per-task-linux-stacks">Per-task Linux stacks</a></h3>
+<p>Each user task has its own Linux stack, where Linux saves user registers in <code>pt_regs</code> and <code>UserContext</code> accesses them in place. On a switch to a user task, the endovisor installs that task’s Linux stack as the carrier’s by replacing <code>task_struct.stack</code> and the stack top.</p>
+<ul>
+<li>Gain: <strong>A system call copies no registers and takes 63.5 ns</strong>, 5.8 ns more than native <code>getpid</code> (<a href="#validation-and-evidence">Validation and evidence</a>). Task switches also copy no registers, and tasks may move between vCPUs.</li>
+<li>Cost: <strong>It breaks Linux’s stack-lifetime invariant, requires invasive changes, and uses more memory.</strong> Linux requires a fixed kernel stack throughout each task’s life to locate <code>pt_regs</code>, check stack bounds and walk the stack. Each Linux stack takes 16 KiB.</li>
+</ul>
+<h3 id="switcher-at-ia32_lstar"><a class="header" href="#switcher-at-ia32_lstar">Switcher at <code>IA32_LSTAR</code></a></h3>
+<p><a href="https://ranger.uta.edu/~jrao/papers/sosp23.pdf">PVM</a> (Huang et al., SOSP 2023) runs secure-container guests in hardware ring 3 inside a leased cloud VM. <strong>It points <code>IA32_LSTAR</code> at a short assembly switcher in the host kernel. A guest <code>syscall</code> then reaches the guest kernel without the hypervisor’s exit handler.</strong> PVM calls this a <em>direct switch</em>.</p>
+<div class="background">
+<p><strong>x86: <code>IA32_LSTAR</code>.</strong> This model-specific register stores the entry address for 64-bit system calls. <strong>When user code executes <code>syscall</code>, the processor enters ring 0 at this address.</strong> The kernel sets the register with the privileged <code>wrmsr</code> instruction, normally once at boot.</p>
+</div>
+
+<p>For kernelets, <code>IA32_LSTAR</code> could point to a switcher while a carrier runs, letting its <code>syscall</code> skip Linux’s system-call entry.</p>
+<p><img src="2026-10-31-reduce-syscall-overhead-pvm.png" alt="One system call under PVM’s direct switch and under this design. Numbers mark each change between ring 3 and ring 0"></p>
+<p><em>One system call under PVM’s direct switch and under this design. Numbers mark each change between ring 3 and ring 0.</em></p>
+<ul>
+<li>Gain: <strong>Linux’s system-call entry code stays unchanged, and ordinary tasks continue to use it.</strong></li>
+<li>Cost: <strong>The switcher must redo the required work of Linux’s entry and exit code.</strong> It skips seccomp, ptrace, audit and syscall tracing for carrier calls. Each switch to or from a carrier writes <code>IA32_LSTAR</code>. If Linux runs in a VM whose hypervisor traps this write, it causes a VM exit.</li>
+</ul>
+<h3 id="switcher-in-linuxs-entry-code"><a class="header" href="#switcher-in-linuxs-entry-code">Switcher in Linux’s entry code</a></h3>
+<p>After <code>entry_SYSCALL_64</code> saves the registers, new assembly code checks the current task’s syscall work bits before Linux’s C entry code runs. <strong>If only the kernelet’s bit is set, the code jumps to the switcher.</strong> Otherwise Linux takes its C path, where enabled checks such as seccomp and ptrace run before the kernelet hook.</p>
+<ul>
+<li>Gain: <strong>A carrier with only the kernelet’s work bit set skips Linux’s C entry code.</strong> Switches to and from carriers do not write <code>IA32_LSTAR</code>, avoiding the VM exits caused by that write.</li>
+<li>Cost: <strong>Every task runs two extra loads, a comparison and a branch on each system call.</strong> The switcher must redo the required work of Linux’s C entry and exit code.</li>
+</ul>
+<p><img src="2026-10-31-reduce-syscall-overhead-chain.png" alt="One system call, step by step. Each bar shows the Linux steps that a position skips on the way in"></p>
+<p><em>One system call, step by step. Positions 1 and 2 are the two switchers above; position 3 is this design’s hook. Each bar shows the Linux steps that a position skips on the way in.</em></p>
+<p><strong>This design keeps the hook in <code>syscall_trace_enter</code>, after user dispatch, ptrace and seccomp.</strong> Linux runs its enabled checks before the hook, its entry assembly stays unchanged, and no switch writes <code>IA32_LSTAR</code>. Keeping Linux’s C entry code and exit work means this position skips the least Linux code of the three. Both switchers must reproduce required work, such as enabling interrupts and checking pending work, across Linux versions and configurations. An earlier trace without the mirror measured about 20 ns across Linux’s entry, hook call and exit work. The switcher in Linux’s entry code would retain part of this work; <strong>its net saving is not measured</strong>.</p>
+<h2 id="implementation-and-integration"><a class="header" href="#implementation-and-integration">Implementation and integration</a></h2>
+<h3 id="linux"><a class="header" href="#linux">Linux</a></h3>
+<ul>
+<li><strong>Add <code>kernelet_return_to_user</code>.</strong> It completes the exit work from the carrier’s last entry, then uses the same checks as <code>do_syscall_64</code> to choose SYSRET or IRET. After a task switch, this work can belong to another task’s system call. The checks select IRET if the installed registers do not permit SYSRET.</li>
+</ul>
+<h3 id="endovisor"><a class="header" href="#endovisor">Endovisor</a></h3>
+<ul>
+<li><strong>Event entry.</strong> The hook masks virtual interrupts, switches to the current task’s kernelet stack below its save area, and never returns. This replaces <code>klet_switch</code>. On syscall entry, the hook sets <code>regs-&gt;ax = regs-&gt;orig_ax</code> so the kernel proper can read the syscall number through <code>UserContext::rax()</code>.</li>
+<li><strong>Services.</strong> A service runs on the carrier’s Linux stack and returns to its call site on the kernelet stack. The endovisor delivers no upcall during a service, so vOSTD does not switch tasks.</li>
+<li><strong>Address of <code>pt_regs</code>.</strong> The endovisor publishes the address of the carrier’s <code>pt_regs</code> in the vCPU record.</li>
+<li><strong>Reset of <code>orig_ax</code>.</strong> Before each return to user mode, the endovisor sets <code>orig_ax</code> to -1. Otherwise, a value of <code>rax</code> from <code>rt_sigreturn</code> or another task could look like a restart code.</li>
+</ul>
+<div class="background">
+<p><strong>Linux: <code>orig_ax</code> and system-call restart.</strong> Linux stores the syscall number in the <code>orig_ax</code> field of <code>pt_regs</code>, or -1 for an interrupt or exception. Linux may restart a call if a signal is pending, <code>orig_ax</code> differs from -1, and <code>rax</code> holds a restart code such as <code>-ERESTARTSYS</code>. Before returning to user mode, it puts the call number back in <code>rax</code> and moves <code>rip</code> back over the <code>syscall</code> instruction.</p>
+</div>
+
+<h3 id="vostd"><a class="header" href="#vostd">vOSTD</a></h3>
+<ul>
+<li><strong>Handler entry points.</strong> The macro emits the <a href="#the-vostd-interface">six functions</a> in the kernel proper with <code>#[unsafe(no_mangle)]</code> and the Rust ABI. The five callback entries take the task’s data address as <code>*const ()</code>, then the trait arguments except <code>self</code>. For <code>Thread</code>, each borrows <code>&amp;Arc&lt;Thread&gt;</code> and calls the method with <code>thread.as_ref()</code>, without cloning the <code>Arc</code> or creating <code>&amp;mut Thread</code>. Each image must define one registration.</li>
+<li><strong><code>UserContext</code> with two forms.</strong> <code>Owned</code> holds independent register values from <code>UserContext::default()</code> for initialization or <code>clone()</code> for a snapshot. <code>build</code> stores the initial values as <code>RawUserRegs</code> in the task’s stack save area. <code>Frame</code> is the handle that <code>context_mut</code> lends to a callback. On first run or event entry, <code>UserMode</code> gets the carrier’s <code>pt_regs</code> address from the vCPU record. <strong>Task switching copies registers between the save area and <code>pt_regs</code>; the handle’s form and address stay unchanged.</strong> <code>Frame</code> methods read and write through raw pointers and return values, without creating references to <code>pt_regs</code>. <code>general_regs</code> and <code>general_regs_mut</code> return objects containing copies; references into these objects point to the copies. The mutable object borrows its parent <code>UserContext</code> until it writes the copy back on drop.</li>
+<li><strong>No <code>Send</code> or <code>Sync</code>.</strong> <code>UserContext</code> implements neither trait. Asterinas creates and uses each context within one task, so it does not need <code>Send</code>. Task <code>data</code>, <code>local_data</code> and entry closures require <code>Send</code>, which prevents them from storing or transferring a <code>UserContext</code>.</li>
+<li><strong>Replaced context.</strong> If <code>init</code> or <code>handle</code> replaces the borrowed <code>UserContext</code> with an owned one, vOSTD installs those registers in the current task’s <code>pt_regs</code> after the callback returns. The same field restrictions apply as for other context writes.</li>
+<li><strong>Save area and owner.</strong> Each user task reserves a <code>pt_regs</code>-sized save area at the top of its kernelet stack. The first entry and every event entry start below it. Each vCPU records its <code>pt_regs</code> owner. <code>after_switching_to</code> copies registers when the owner changes; with virtual interrupts masked, <code>exit_current</code> clears an exiting owner’s record and removes the task from the run queue.</li>
+<li><strong>Default scheduler.</strong> vOSTD’s FIFO scheduler records the vCPU where a task first runs and wakes the task there.</li>
+<li><strong>Fixed fields.</strong> vOSTD keeps segment fields and privileged flag bits fixed on every user-register write, in both <code>UserContext</code> forms and when installing a task’s registers. This includes <code>general_regs_mut</code> writeback and replacement with an owned context. <code>set_rflags</code> keeps only <code>RFLAGS_USER</code> bits: those Linux lets a debugger set, plus <code>ID</code>. It always sets <code>IF</code> and bit 1.</li>
+</ul>
 <div class="background">
 <p><strong>x86: user-mode return state.</strong> <code>CS</code> selects the code segment, <code>SS</code> selects the stack segment, and <code>RFLAGS</code> contains status and control bits. This design fixes the following values for return to 64-bit user mode:</p>
 <div class="table-wrapper">
@@ -343,286 +526,65 @@
 <tr><td><code>CS</code></td><td style="text-align: right"><code>0x33</code></td><td>Select the 64-bit user code segment.</td></tr>
 <tr><td><code>SS</code></td><td style="text-align: right"><code>0x2b</code></td><td>Select the user stack segment; <code>RSP</code> supplies the stack address.</td></tr>
 <tr><td><code>RFLAGS.IF</code></td><td style="text-align: right"><code>1</code></td><td>Allow maskable hardware interrupts in user mode.</td></tr>
-<tr><td><code>RFLAGS.IOPL</code></td><td style="text-align: right"><code>0</code></td><td>Prevent this API from raising user I/O privileges.</td></tr>
+<tr><td><code>RFLAGS.IOPL</code></td><td style="text-align: right"><code>0</code></td><td>Prevent the kernel proper from raising user I/O privileges.</td></tr>
 </tbody>
 </table>
 </div>
 <p>The segment values and flag definitions come from Linux v6.12’s <a href="https://github.com/torvalds/linux/blob/v6.12/arch/x86/include/asm/segment.h">segment header</a> and <a href="https://github.com/torvalds/linux/blob/v6.12/arch/x86/include/uapi/asm/processor-flags.h">flags header</a>.</p>
 </div>
 
-<p>The <code>cs</code> and <code>ss</code> fields have no public setters. <strong><code>set_rflags</code> accepts only permitted bits and sets the required bits.</strong> <code>RFLAGS_USER</code> excludes <code>IOPL</code>; <code>RFLAGS_FIXED</code> sets <code>IF</code> and bit 1, which must be one.</p>
-<p><em>Experimental implementation (<code>syscall-opt</code> worktree), <code>prototype/vostd/src/arch/cpu/context.rs</code>: <code>UserContext::set_rflags</code>.</em></p>
-<pre><code class="language-rust">pub fn set_rflags(&amp;mut self, rflags: usize) {
-    self.rflags = (rflags &amp; RFLAGS_USER) | RFLAGS_FIXED;
+<p><em>Proposed: <code>UserContext::set_rflags</code> for owned registers and the carrier frame.</em></p>
+<pre><code class="language-rust">/// Sets rflags: only the bits a user program may hold are taken, and the
+/// interrupt flag and bit 1 are always set.
+#[inline(always)]
+pub fn set_rflags(&amp;mut self, rflags: usize) {
+    let value = (rflags &amp; RFLAGS_USER) | RFLAGS_FIXED;
+    match &amp;mut self.storage {
+        ContextStorage::Owned(regs) =&gt; regs.rflags = value,
+        // SAFETY: The current task owns this live carrier frame.
+        // This write does not create a reference to the frame.
+        ContextStorage::Frame(frame) =&gt; unsafe {
+            core::ptr::addr_of_mut!((**frame).rflags).write(value)
+        },
+    }
 }</code></pre>
-<p>For example, <code>set_rflags(0)</code> stores <code>0x202</code>, with <code>IF</code> and bit 1 set. <code>set_rflags(3 &lt;&lt; 12)</code> also stores <code>0x202</code>: the requested <code>IOPL = 3</code> is cleared. Registers such as <code>RAX</code>, <code>RIP</code>, and <code>RSP</code> remain writable through their setters.</p>
-<p>The current implementation allocates a 16 KiB Linux stack per user task. A smaller size remains to be established and tested. We propose to use smaller stacks under two requirements:</p>
-<ol>
-<li><strong>Determine the maximum stack use.</strong> For each supported Linux build, establish an upper bound for entry checks, services, exit work, and relevant error and exception paths, including nesting. The allocation must cover this bound and meet page and alignment requirements.</li>
-<li><strong>Keep the stack fixed after allocation.</strong> Its address and size must remain fixed for the task’s lifetime, so <code>pt_regs</code> keeps a stable address.</li>
-</ol>
-<p><strong>Linux uses the registered stack size to locate <code>pt_regs</code>, check stack bounds, and walk the stack.</strong> When Linux switches to a carrier, it restores the carrier’s stack top from the registered stack information. Ordinary Linux tasks retain their default stack size.</p>
-<h3 id="the-vostd-interface"><a class="header" href="#the-vostd-interface">The vOSTD interface</a></h3>
-<p>In the prototype, the kernel proper calls <code>execute</code>, which remains suspended on the kernelet stack while user code runs. With the proposed interface, <strong>vOSTD controls user execution and the kernel proper handles events.</strong> For each system call, exception, or kernel event, vOSTD calls the kernel proper’s handler. <strong>The handler returns before the task re-enters user mode</strong>, so no handler call remains suspended while user code runs. vOSTD can optimize the path between user mode and the handler without changing the handler:</p>
-<p><em>Proposed: vOSTD’s interface for user events.</em></p>
-<pre><code class="language-rust">/// Multiple vCPUs may call this shared handler concurrently.
-pub trait UserEventHandler: Sync {
-    /// Handles one event of the current task; returns when done.
-    fn handle(&amp;self, event: UserEvent, user: &amp;mut UserMode);
-    /// Asked before every return to user mode: whether the task ends.
-    fn should_exit(&amp;self, user: &amp;UserMode) -&gt; bool;
-    /// Returns true if a virtual interrupt received in user mode left work
-    /// for the kernel proper. Otherwise, vOSTD skips `handle`.
-    fn has_kernel_event(&amp;self, user: &amp;UserMode) -&gt; bool { false }
-    /// Called with virtual interrupts masked just before user mode, to load
-    /// the task's floating-point and segment state.
-    fn pre_user_run(&amp;self, user: &amp;UserMode, guard: &amp;DisabledLocalIrqGuard) {}
-}
-
-pub enum UserEvent { Syscall, Exception, KernelEvent }</code></pre>
-<p><strong>A static handler avoids a handler lookup on each event.</strong> The kernel proper declares it with <code>#[ostd::user_event_handler]</code>, which generates entry points for direct calls from vOSTD:</p>
-<p><em>Proposed: the hundred-line kernel’s handler.</em></p>
-<pre><code class="language-rust">struct Hello;
-
-impl UserEventHandler for Hello {
-    fn handle(&amp;self, event: UserEvent, user: &amp;mut UserMode) {
-        if event == UserEvent::Syscall {
-            let (context, task) = user.split();
-            let vm_space = task.data().downcast_ref::&lt;Arc&lt;VmSpace&gt;&gt;().unwrap();
-            handle_syscall(context, vm_space);
-        }
-    }
-    fn should_exit(&amp;self, _: &amp;UserMode) -&gt; bool { false }
-}
-
-#[ostd::user_event_handler]
-static HELLO: Hello = Hello;</code></pre>
-<p><code>TaskOptions::new_user(context)</code> specifies the initial user registers, and <code>spawn</code> creates and starts the task. <code>init(f)</code> registers a callback that vOSTD runs once on the new task, before its first entry into user mode. <strong><code>UserMode</code> gives the kernel proper access to the current task, its user registers and its exception state.</strong> Only vOSTD creates this handle and lends it for one callback at a time. The handle is neither <code>Send</code> nor <code>Sync</code>, so it cannot be transferred or shared across tasks.</p>
-<h4 id="porting-a-kernel-proper"><a class="header" href="#porting-a-kernel-proper">Porting a kernel proper</a></h4>
-<p><strong>The kernel proper replaces its <code>execute</code> loop with callbacks.</strong> The event handling code moves to <code>handle</code>, and the task’s exit check moves to <code>should_exit</code>. The setup code that runs once on the new task moves to <code>init</code>.</p>
-<p><em>Simplified from Asterinas’s <code>create_new_user_task</code>: a user thread written against <code>execute</code>.</em></p>
-<pre><code class="language-rust">TaskOptions::new(move || {
-    write_child_tid(&amp;ctx);                              // once, before user mode
-    let mut user_mode = UserMode::new(user_ctx);
-    while !thread.is_exited() {
-        match user_mode.execute(&amp;ctx) {
-            UserSyscall =&gt; handle_syscall(&amp;ctx, user_mode.context_mut()),
-            UserException =&gt; handle_exception(&amp;ctx, user_mode.context_mut()),
-            KernelEvent =&gt; {}
-        }
-        handle_pending_signal(user_mode.context_mut(), &amp;ctx);
-    }
-})</code></pre>
-<p><em>Proposed: the same thread written against the handler.</em></p>
-<pre><code class="language-rust">impl UserEventHandler for Kernel {
-    fn handle(&amp;self, event: UserEvent, user: &amp;mut UserMode) {
-        let exception = user.take_exception();
-        let (user_ctx, task) = user.split();
-        let ctx = Context::of(task);                        // state lives in the task
-        match event {
-            UserEvent::Syscall =&gt; handle_syscall(&amp;ctx, user_ctx),
-            UserEvent::Exception =&gt; handle_exception(&amp;ctx, user_ctx, exception.unwrap()),
-            UserEvent::KernelEvent =&gt; {}
-        }
-        handle_pending_signal(user_ctx, &amp;ctx);
-    }
-    fn should_exit(&amp;self, user: &amp;UserMode) -&gt; bool {
-        user.task().as_thread().is_exited()                 // the loop's exit check
-    }
-    fn has_kernel_event(&amp;self, _: &amp;UserMode) -&gt; bool {
-        // Keep the old loop's signal check after a kernel event.
-        true
-    }
-}
-
-TaskOptions::new_user(user_ctx)
-    .init(|user| write_child_tid(&amp;Context::of(user.task())))   // was before the loop
-    .data(thread)
-    .spawn();</code></pre>
-<h3 id="the-handoff-protocol"><a class="header" href="#the-handoff-protocol">The handoff protocol</a></h3>
-<p><strong>After handling an event, the kernelet enters a new Linux entry point without returning to the hook.</strong> This entry starts a new call chain below the saved <code>pt_regs</code> on the task’s Linux stack. It runs Linux’s exit work and returns to user mode.</p>
-<h4 id="in-from-the-hook-to-the-handler"><a class="header" href="#in-from-the-hook-to-the-handler">In: from the hook to the handler</a></h4>
-<p>The syscall hook masks virtual interrupts, switches to the top of the current task’s kernelet stack, and enters vOSTD with the event type. vOSTD reads the vCPU record, finds the current task and reads the event state. <strong>Virtual interrupts stay masked until these reads finish.</strong> If a virtual interrupt preempted the task and it resumed on another vCPU, vOSTD could still use the previous vCPU’s record and read another task’s state. vOSTD then unmasks virtual interrupts and calls the kernel proper’s handler when needed. The resume hook uses the same path for exceptions and virtual interrupts.</p>
-<h4 id="out-from-the-handler-to-user-mode"><a class="header" href="#out-from-the-handler-to-user-mode">Out: from the handler to user mode</a></h4>
-<p><em>Proposed, simplified: vOSTD’s entry for a user event.</em></p>
-<pre><code class="language-rust">extern "C" fn user_event_entry(event: UserEvent) -&gt; ! {
-    let mut user = UserMode::for_current_task();
-    HANDLER.handle(event, &amp;mut user);          // the kernel proper's handler returns
-    if HANDLER.should_exit(&amp;user) {
-        exit_current_task();
-    }
-    assert_no_guard_held();                    // a guard kept alive with mem::forget
-    preempt_if_wanted();                       // the scheduler's chance before user mode
-    let guard = mask_virtual_interrupts();
-    HANDLER.pre_user_run(&amp;user, &amp;guard);
-    user_run()                                 // never returns
-}</code></pre>
-<p>After the handler returns, vOSTD completes the checks and callbacks shown above, then calls <code>user_run</code>. <strong>The new Linux entry point switches to the task’s Linux stack, starts a call chain below the saved <code>pt_regs</code>, and runs Linux’s exit work.</strong> Linux then returns to user mode.</p>
-<h3 id="task-switch"><a class="header" href="#task-switch">Task switch</a></h3>
-<p><strong>Linux does not track task switches inside a carrier.</strong> If the kernelet switches the carrier from task A to task B without registering B’s Linux stack, Linux still uses A’s stack. B’s next system call then saves B’s registers in A’s <code>pt_regs</code>.</p>
-<p><strong>A kernel task is a kernelet task that never enters user mode.</strong> A user task remains a user task while it handles a system call. When the scheduler switches to a user task, vOSTD registers that task’s Linux stack base and size as the carrier’s stack. <strong>For a kernel task, vOSTD restores the carrier’s original Linux stack.</strong> The endovisor accepts a user task’s stack only if it belongs to the instance and no other carrier uses it. It updates the current host CPU’s stack top. Linux updates the stack top again when it schedules the carrier.</p>
-<h3 id="switching-the-address-space"><a class="header" href="#switching-the-address-space">Switching the address space</a></h3>
-<p>The kernel proper calls <code>vm_activate</code> to select the next task’s address space. <strong>This service must not sleep because the kernel proper can call it with virtual interrupts masked during a task switch.</strong> Releasing the last reference to the old address space can trigger cleanup that sleeps. The prototype therefore records the requested space and defers the switch until just before returning to user mode. The hook looks up the requested space and compares it with the carrier’s current space (step 10). <strong>This lookup and comparison run on every system call, even when the address space has not changed.</strong></p>
-<p><strong><code>vm_activate</code> switches to the requested address space immediately.</strong> It then calls <code>mmput_async</code> to release the carrier’s reference to the old space. If this releases the last reference, Linux runs the cleanup on a worker thread so that <code>vm_activate</code> does not sleep. <strong>The return path no longer needs to look up or compare address spaces.</strong></p>
-<h3 id="interrupts-raised-while-leaving"><a class="header" href="#interrupts-raised-while-leaving">Interrupts raised while leaving</a></h3>
-<p>In the prototype, an interrupt raiser first records the pending interrupt. It sets Linux’s resume flag (<code>TIF_NOTIFY_RESUME</code>) only if the carrier is marked for user mode. The carrier must write this state before checking for pending interrupts, which requires a memory barrier. <strong>The new design sets the resume flag for every virtual interrupt, regardless of the carrier’s state.</strong> The raiser orders the pending-bit update before setting the flag. <strong>This removes the pending check and its memory barrier from <code>user_run</code>.</strong></p>
-<p>Linux checks the resume flag before returning to user mode and calls the resume hook if it is set. <strong>A flag set after the final check remains set for the next return from the kernel.</strong> A system call or a delivered watch-timer interrupt provides another opportunity to handle it, as in the prototype for interrupts raised in user mode. If the kernelet has already handled the interrupt, the flag can cause an extra resume-hook call with no virtual interrupt left to deliver.</p>
-<h3 id="scheduler-coordination"><a class="header" href="#scheduler-coordination">Scheduler coordination</a></h3>
-<p><strong>Direct access to host per-CPU state.</strong> On x86-64, the kernelet runs in Linux’s kernel address space and uses Linux’s per-CPU <code>%gs</code> base. Given a variable’s offset, vOSTD can access any Linux per-CPU variable through <code>%gs:[offset]</code>. <strong>Each access selects the copy on the host CPU currently running the carrier.</strong> The prototype uses this mechanism to update Linux’s preemption count. We propose that the endovisor also supply offsets for host CPU load and location, so the kernelet scheduler can use this information to place tasks.</p>
-<p><strong>Mirror virtual critical sections to Linux.</strong> vOSTD adds one to Linux’s preemption count when the vCPU enters its outermost virtual critical section, and removes it on exit. <strong>Under <code>full</code> preemption, this makes Linux defer automatic preemption of the carrier while it runs kernelet code in that section.</strong> After removing the increment, vOSTD yields if Linux requests rescheduling and the count is zero.</p>
-<p>Before returning to user mode, vOSTD must ensure that no forbidden lock or guard remains held. A service that may sleep must be called from a context that permits sleep. <strong>We propose compile-time checks for these rules and for balanced Mirror increments and decrements.</strong> The analysis must cover <code>pre_user_run</code>, the final return to user mode and every service call. <strong>A runtime check can be removed where the analysis proves its condition.</strong> The checker and proofs are not yet complete.</p>
-<p>If static analysis also proves that the Mirror increment is zero at a boundary, <strong>the endovisor can omit saving, removing and restoring it there.</strong> Other boundaries retain these operations. vOSTD still handles pending preemption before returning to user mode.</p>
-<p><strong>Watch as a scheduling fallback.</strong> Boundary checks do not limit how long kernelet code runs before its next service call or return to user mode. When Linux requests rescheduling, the watch timer allows a short delay inside a virtual critical section. <strong>If the request remains pending, the timer forces the carrier to yield even if the section has not ended.</strong> It also provides scheduling opportunities under <code>none</code> and <code>voluntary</code>. This mechanism depends on timer delivery and provides no hard wall-clock bound.</p>
-<p>The prototype checks that the watch timer is active on every entry into kernelet code. Whenever Linux schedules a carrier, the endovisor’s callback starts that CPU’s timer if it is not already active. <strong>We remove the repeated entry check and retain the check at vCPU startup and in the scheduling callback.</strong></p>
-<h4 id="sleeping-and-waking"><a class="header" href="#sleeping-and-waking">Sleeping and waking</a></h4>
-<p><strong>Coordination to reduce scheduling delays after wakeup is deferred.</strong></p>
-<h4 id="task-placement-using-host-cpu-load"><a class="header" href="#task-placement-using-host-cpu-load">Task placement using host CPU load</a></h4>
-<p><strong>The kernelet scheduler could use host CPU state to choose a vCPU for a new or woken task.</strong> Linux would still decide when and on which host CPU each carrier runs. The fields below are candidate inputs for the kernelet scheduler.</p>
-<div class="background">
-<p><strong>Linux: per-CPU state.</strong> Linux keeps a separate copy of each per-CPU variable for each CPU. These variables include CPU load information, such as the number of runnable tasks. <strong>Through <code>%gs:[offset]</code>, vOSTD can read the values for the host CPU currently running the carrier.</strong></p>
-</div>
-
-<div class="background">
-<p><strong>Hardware: memory locality.</strong> In a non-uniform memory access (NUMA) system, a CPU can access nearby memory faster than memory attached to another node. CPUs can also share a last-level cache. Keeping related tasks near their data can reduce memory-access costs.</p>
-</div>
-
-<p><code>runqueues</code> is Linux’s per-CPU runqueue. Field offsets must match the host kernel build.</p>
-<div class="table-wrapper">
-<table>
-<thead>
-<tr><th>Candidate per-CPU field</th><th>Host information</th></tr>
-</thead>
-<tbody>
-<tr><td><code>runqueues.nr_running</code></td><td>Number of runnable Linux tasks, including the running carrier.</td></tr>
-<tr><td><code>runqueues.cfs.avg.util_avg</code>, <code>runqueues.cfs.avg.runnable_avg</code></td><td>Recent CPU use and runnable demand for fair-scheduled tasks, including the carrier.</td></tr>
-<tr><td><code>runqueues.cpu_capacity</code></td><td>Processing capacity available to fair-scheduled tasks, not the current idle fraction.</td></tr>
-<tr><td><code>pcpu_hot.cpu_number</code></td><td>Host CPU ID.</td></tr>
-<tr><td><code>numa_node</code></td><td>NUMA node ID; requires NUMA support on x86-64.</td></tr>
-<tr><td><code>cpu_info.topo.llc_id</code></td><td>Shared last-level cache ID.</td></tr>
-</tbody>
-</table>
-</div>
-<p>Linux uses CPU load, capacity and topology information to place tasks on CPUs. vOSTD can read these values for the current host CPU through <code>%gs</code>. <strong>The kernelet scheduler can use this information to place its tasks on vCPUs.</strong></p>
-<p>A conventional x86-64 VM uses its own <a href="https://docs.kernel.org/virt/kvm/x86/mmu.html">address space</a> and <code>%gs</code> base, so it cannot directly read host per-CPU variables. The guest needs an interface such as <a href="https://docs.kernel.org/virt/kvm/x86/msr.html">shared memory</a> to obtain host data, or measurements to estimate host behavior. <strong>The kernelet uses Linux’s kernel address space and per-CPU <code>%gs</code> base, so vOSTD can read these variables directly using offsets from the endovisor.</strong></p>
-<p>These values are hints, not guarantees of carrier CPU time. Queue counts can change, and load averages retain history. Comparing vCPUs also requires a mapping from each carrier to its host CPU and observations from those CPUs. A <code>%gs</code> access supplies only the current CPU’s value. The field set, sampling protocol and placement policy remain to be selected and measured.</p>
-<h3 id="building-the-image"><a class="header" href="#building-the-image">Building the image</a></h3>
-<p>The image is compiled as a position-independent executable, the form in which it is linked, so its calls between crates are direct and no longer go through the global offset table (step 6b). It uses Asterinas’s benchmark profile, <code>release-lto</code>: link-time optimization, one code-generation unit, and no overflow checks (step 7a). The kernelet’s memory safety does not depend on overflow checks, because vOSTD bounds user ranges with <code>checked_add</code> and <code>saturating_add</code>.</p>
-<h3 id="what-stays"><a class="header" href="#what-stays">What stays</a></h3>
-<ul>
-<li><strong>The hook’s place.</strong> Linux still calls the hook after seccomp, so the sandbox’s filter still bounds what a carrier can ask of Linux.</li>
-<li><strong>The service table.</strong> The kernelet still calls <code>user_run</code> through it.</li>
-</ul>
-<h2 id="alternatives-and-tradeoffs"><a class="header" href="#alternatives-and-tradeoffs">Alternatives and tradeoffs</a></h2>
-<ul>
-<li><strong>One Linux task per kernelet task.</strong> Each task would have its own Linux stack, so stack registration would be unnecessary. <strong>Each kernelet task switch would require a Linux sleep, wakeup, and context switch.</strong> The prototype took fewer than 2,000 cycles per task switch in the reported measurements (<a href="../accepted-design/what-it-costs.html">What it costs</a>). Each sandbox would also require one Linux task per tenant thread.</li>
-</ul>
-<h4 id="defer-preemption-throughout-kernelet-execution"><a class="header" href="#defer-preemption-throughout-kernelet-execution">Defer preemption throughout kernelet execution</a></h4>
-<p>To reduce the cost at virtual critical-section boundaries, an unimplemented alternative would add one to Linux’s preemption count for the entire time the carrier runs kernelet code, and remove that increment before returning to user mode, calling a service or yielding. It would restore the increment when kernelet code resumes. This would move the count updates from each outermost virtual critical section to kernelet entry and exit, including the user-mode crossings.</p>
-<p>With the candidate increment in place, Linux’s automatic kernel preemption would be deferred even outside virtual critical sections. The watch timer would provide opportunities to yield when Linux wants the processor, while retaining the virtual critical-section check and the forced-yield mechanism. Services, explicit yields and returns to user mode remain scheduling opportunities.</p>
-<p>This changes the tradeoff: it could avoid per-critical-section mirror updates, but could also delay Linux tasks while the carrier runs kernelet code. The timer’s first observation and its later forced yield depend on ticks being delivered; they do not establish a hard wall-clock limit. The transition protocol, host latency and lock-wait effects need validation. The candidate alone does not solve sleeping-lock wakeups or task placement.</p>
-<h3 id="pvm-switcher"><a class="header" href="#pvm-switcher">PVM switcher</a></h3>
-<p><a href="https://ranger.uta.edu/~jrao/papers/sosp23.pdf">PVM</a> (Huang et al., SOSP 2023) provides a <em>direct switch</em> for system calls. <strong>The switcher forwards calls from guest user mode to the guest kernel without entering the hypervisor’s general exit handler.</strong></p>
-<p>PVM hosts guest VMs for secure containers inside a VM that a vendor leases from a cloud provider. Nested hardware virtualization would require the cloud hypervisor to expose virtualization support to the leased VM. <strong>PVM instead runs both the guest kernel and guest user code in hardware ring 3.</strong> Guest privileged instructions and exceptions trap to the PVM hypervisor. Without direct switching, guest system calls also pass through the PVM hypervisor before reaching the guest kernel.</p>
-<div class="background">
-<p><strong>x86: <code>IA32_LSTAR</code>.</strong> This model-specific register stores the entry address for 64-bit system calls. <strong>When user code executes <code>syscall</code>, the processor enters ring 0 at this address.</strong> The kernel sets the register with the privileged <code>wrmsr</code> instruction, normally once at boot.</p>
-</div>
-
-<p>PVM adds a <strong>switcher</strong>, a short assembly routine, to the Linux kernel’s entry code inside the leased VM. While a guest runs, <code>IA32_LSTAR</code> points to the switcher, so a <code>syscall</code> from guest user mode enters it. <strong>The switcher loads the page table for the guest kernel and enters its syscall entry code, which saves the user registers.</strong> To return, the guest kernel invokes a hypercall implemented with <code>syscall</code>, which enters the switcher again. The switcher loads the page table for guest user mode and returns there. PVM calls this a <em>direct switch</em>.</p>
-<p><strong>The figure compares the path of one system call under PVM’s direct switch and the proposed design.</strong></p>
-<p><img src="2026-10-31-reduce-syscall-overhead-pvm.png" alt="One system call under PVM’s direct switch and under this design. Numbers mark each change between ring 3 and ring 0"></p>
-<p><strong>PVM’s switcher transfers control directly to the guest kernel, which handles the system call.</strong></p>
-<p>We consider three locations for the kernelet’s switcher, numbered in the figure below. <strong>This design uses the third: the hook in <code>syscall_trace_enter</code>, after user dispatch, ptrace, and seccomp checks.</strong></p>
-<p><img src="2026-10-31-reduce-syscall-overhead-chain.png" alt="One system call, step by step. Each bar shows the Linux steps that a position skips on the way in"></p>
-<p>The three positions:</p>
-<ol>
-<li><strong>Switcher at <code>IA32_LSTAR</code>.</strong>
-<ul>
-<li>How: While a carrier runs, <code>IA32_LSTAR</code> points to the switcher. <strong>A carrier’s <code>syscall</code> enters the switcher directly and skips Linux’s normal system-call entry.</strong> The endovisor updates the register whenever Linux switches to or from a carrier on a CPU.</li>
-<li>Gain: <strong>Linux’s system-call entry code stays unchanged, and ordinary tasks continue to use it.</strong></li>
-<li>Cost: <strong>The switcher must reproduce the required work of Linux’s entry assembly and C entry and exit code.</strong> It bypasses seccomp, ptrace, audit, and syscall tracing for carrier calls. Switching to or from a carrier also writes <code>IA32_LSTAR</code>. If Linux runs inside a VM and the hypervisor intercepts these writes, each write causes a VM exit.</li>
-</ul>
-</li>
-<li><strong>Switcher in Linux’s entry code.</strong>
-<ul>
-<li>How: After <code>entry_SYSCALL_64</code> saves the registers, new assembly code checks the current task’s syscall work bits before calling C code. <strong>If only the kernelet bit is set, it jumps to the switcher.</strong> Otherwise, execution follows Linux’s C path, where enabled checks, such as seccomp and ptrace, run before the kernelet hook.</li>
-<li>Gain: <strong>A carrier with only the kernelet work bit set skips Linux’s C entry code.</strong> Switching to or from a carrier requires no <code>IA32_LSTAR</code> write, so it avoids the VM exits that such writes can cause.</li>
-<li>Cost: <strong>All tasks execute two extra loads, a comparison, and a branch on each system call.</strong> The switcher must reproduce the required work of Linux’s C entry and exit code.</li>
-</ul>
-</li>
-<li><strong>Hook in <code>syscall_trace_enter</code>.</strong>
-<ul>
-<li>How: The carrier’s syscall work bit makes Linux call <code>syscall_trace_enter</code>. <strong>After seccomp, the hook enters the kernelet, which handles the call without using Linux’s syscall table.</strong> The kernelet returns through the new Linux entry <code>kernelet_return_to_user</code>. This entry runs Linux’s exit work, including the resume hook when needed, before returning to user mode.</li>
-<li>Gain: <strong>Linux still runs enabled user dispatch, ptrace, and seccomp checks before the hook.</strong> The syscall entry assembly stays unchanged, and switching to or from a carrier requires no <code>IA32_LSTAR</code> write.</li>
-<li>Cost: Linux’s C entry code and exit work remain on the syscall path. <strong>This option skips the least Linux code of the three.</strong></li>
-</ul>
-</li>
-</ol>
-<p><strong>This proposal keeps the hook to reuse Linux’s entry and exit code.</strong> Positions 1 and 2 must reproduce required work, such as enabling interrupts and checking for pending work, and track changes across Linux versions and configurations. Position 1 also requires <code>IA32_LSTAR</code> writes when switching to or from a carrier. An earlier trace without the mirror measured about 20 ns across Linux entry, the call to the hook, and exit work. Position 2 must retain some of this work, and <strong>its net saving remains unmeasured</strong>.</p>
-<h2 id="implementation-and-integration"><a class="header" href="#implementation-and-integration">Implementation and integration</a></h2>
-<p><strong>Linux adds <code>kernelet_return_to_user</code> and task-stack registration.</strong> The new entry uses the same SYSRET checks as <code>do_syscall_64</code>. Linux continues to account for the carrier’s original stack. <strong>Before freeing that stack, Linux restores <code>task_struct.stack</code> to its original address.</strong></p>
-<p><strong>To support smaller stacks, registration must include the stack size.</strong> Linux must use this size to calculate stack bounds. The stack pool must allocate each user task’s Linux stack at this size and charge the allocation to the sandbox.</p>
-<p><strong>The endovisor replaces <code>klet_switch</code> with separate stack operations for event entry and service calls.</strong> Event entry switches from the Linux stack to the current task’s kernelet stack. After handling the event, the kernelet returns to user mode through <code>kernelet_return_to_user</code>, <strong>without returning to the original hook</strong>. A service call runs on the Linux stack; <strong>when it returns, execution continues at the call site on the kernelet stack</strong>. The carrier’s state replaces <code>user_live</code> to identify when <code>pt_regs</code> holds the user task’s current context. During sandbox cleanup, the endovisor frees the tasks’ Linux stacks only after all carrier stack reference counts reach zero.</p>
-<p><strong>In vOSTD, <code>UserContext</code> matches the layout of Linux’s <code>pt_regs</code>, so vOSTD can use the saved registers directly.</strong> Its fields are private; the kernel proper reads and updates registers through vOSTD’s methods.</p>
-<p><strong>Each kernel proper that runs user code must implement <code>UserEventHandler</code>.</strong> The memory tests in <code>kernels/mem</code> run the user program in a separate task instead of calling <code>execute</code>. The event handler posts the program’s reports to a mailbox, where the test waits for them. Before a task switch, the scheduler in <code>kernels/sched</code> saves the outgoing user task’s floating-point state when needed. <strong><code>pre_user_run</code> restores the current task’s state when needed, before the task enters user mode.</strong></p>
+<p>For example, <code>set_rflags(0)</code> stores <code>0x202</code>, with <code>IF</code> and bit 1 set. <code>set_rflags(3 &lt;&lt; 12)</code> also stores <code>0x202</code>: the requested <code>IOPL = 3</code> is cleared.</p>
 <p><strong>Update the Accepted Design chapters listed under Affected chapters together with the corresponding prototype changes.</strong></p>
-<p><strong>The endovisor needs an interface in Linux to obtain per-CPU field offsets, because <code>runqueues</code> is not exported to modules.</strong> Host code must validate the offsets against the kernel build. The endovisor passes them to vOSTD at initialization for direct <code>%gs</code> reads. vOSTD must handle unavailable fields and identify the host CPU for each observation, since a carrier can migrate. <strong>The interface and the policy for placing tasks using host data are not yet implemented.</strong></p>
-<p><strong>A runtime check can be removed only where static analysis proves its condition.</strong> The analysis must cover <code>pre_user_run</code>, the final return to user mode, all service calls, and balanced mirror increments and decrements. The mirror and watch timer remain in use. <strong>Coordination to reduce scheduling delays after wakeup is deferred.</strong> The alternative that defers automatic Linux preemption throughout kernelet execution remains unimplemented.</p>
 <h2 id="validation-and-evidence"><a class="header" href="#validation-and-evidence">Validation and evidence</a></h2>
-<p><strong>We implemented and measured the system call design in a separate prototype worktree.</strong> The host runs Linux 6.12 on two Intel Xeon Platinum 8259CL processors (48 cores, one thread per core). A QEMU 10.0/KVM guest runs patched Linux 6.12 with 512 MiB of memory and two vCPUs pinned to separate host cores. <strong>The kernelet uses one vCPU, so its spin lock is uncontended.</strong> We compare against native Linux <code>getpid</code> in the guest and the prototype. The design has four test configurations: mirror on or off, with a handler that returns a constant or also takes and releases one spin lock. We run native and these four configurations for five rounds, booting each once per round in shuffled order. We report the mean of the five per-boot averages.</p>
+<p><strong>We measured this design and <a href="#per-task-linux-stacks">per-task Linux stacks</a> in one run, with the same Linux configuration.</strong> Both share the handler and the return path. A QEMU/KVM guest runs patched Linux 6.12 with two vCPUs pinned to separate host cores. The kernelet uses one vCPU and one user task, and its handler returns a constant. Each configuration boots five times in shuffled order.</p>
 <h3 id="the-time-of-one-system-call"><a class="header" href="#the-time-of-one-system-call">The time of one system call</a></h3>
-<p>The prototype’s row comes from another run. <strong>Range gives the minimum and maximum of the averages from individual VM boots.</strong></p>
+<p><strong>The table reports the mean of the five per-boot averages; range gives the smallest and largest.</strong> Each ratio uses the native time on that design’s Linux build. The prototype’s row comes from another run.</p>
 <div class="table-wrapper">
 <table>
 <thead>
-<tr><th>Setting</th><th>Mirror</th><th>Handler</th><th style="text-align: right">Time (ns)</th><th style="text-align: right">Range (ns)</th><th style="text-align: right">Ratio to native</th></tr>
+<tr><th>Setting</th><th style="text-align: right">Time (ns)</th><th style="text-align: right">Range (ns)</th><th style="text-align: right">Ratio to native</th></tr>
 </thead>
 <tbody>
-<tr><td>Native <code>getpid</code></td><td></td><td></td><td style="text-align: right">56.9</td><td style="text-align: right">56.8–57.1</td><td style="text-align: right">1.00</td></tr>
-<tr><td>The prototype</td><td>kept</td><td>returns a constant</td><td style="text-align: right">125.1</td><td style="text-align: right">123.9–125.9</td><td style="text-align: right">2.22</td></tr>
-<tr><td>This design</td><td>kept</td><td>returns a constant</td><td style="text-align: right">66.2</td><td style="text-align: right">66.0–66.3</td><td style="text-align: right">1.16</td></tr>
-<tr><td>This design</td><td>kept</td><td>takes one lock</td><td style="text-align: right">91.5</td><td style="text-align: right">91.3–91.6</td><td style="text-align: right">1.61</td></tr>
-<tr><td>This design</td><td>removed</td><td>returns a constant</td><td style="text-align: right">63.1</td><td style="text-align: right">62.6–64.1</td><td style="text-align: right">1.11</td></tr>
-<tr><td>This design</td><td>removed</td><td>takes one lock</td><td style="text-align: right">71.7</td><td style="text-align: right">71.4–72.1</td><td style="text-align: right">1.26</td></tr>
+<tr><td>Native <code>getpid</code></td><td style="text-align: right">57.5</td><td style="text-align: right">57.3–57.8</td><td style="text-align: right">1.00</td></tr>
+<tr><td>The prototype</td><td style="text-align: right">125.1</td><td style="text-align: right">123.9–125.9</td><td style="text-align: right">2.22</td></tr>
+<tr><td>Per-task Linux stacks</td><td style="text-align: right">63.5</td><td style="text-align: right">63.1–63.8</td><td style="text-align: right">1.10</td></tr>
+<tr><td>This design</td><td style="text-align: right">63.7</td><td style="text-align: right">62.7–65.6</td><td style="text-align: right">1.11</td></tr>
 </tbody>
 </table>
 </div>
-<p><strong>With the mirror and no lock, this design takes 66.2 ns per system call, 9.2 ns more than native <code>getpid</code>.</strong> The prototype’s excess was 68.7 ns. Without a lock, the design build with the mirror takes 3.1 ns longer than the build without it. Taking and releasing one spin lock adds 25.3 ns with the mirror and 8.6 ns without it, a difference of about 16.7 ns. <strong>Other scheduling code also differs between the builds, so the 3.1 ns and 16.7 ns differences do not isolate the mirror’s cost.</strong></p>
-<p>A separate comparison reported lock costs of about 23.7 ns with the mirror and 14.3 ns without it, and a difference of about 9.5 ns. The no-lock baseline with the mirror used the first four boots because the fifth was slower. These builds also differed in other scheduling code. <strong>The mirror updates Linux’s preemption count and the vCPU’s <code>mirrored</code> flag at the outermost virtual critical-section boundaries.</strong> Accessing the flag also requires finding the vCPU record. These operations were not timed separately.</p>
-<h3 id="where-the-time-goes-now"><a class="header" href="#where-the-time-goes-now">Where the time goes now</a></h3>
-<p>We traced this design, with a handler that returns a constant, the same way as the prototype: five boots, 183,000 to 212,000 round trips each.</p>
-<div class="table-wrapper">
-<table>
-<thead>
-<tr><th>Steps</th><th>What runs</th><th style="text-align: right">Instructions</th><th style="text-align: right">Cycles</th><th style="text-align: right">Time (ns)</th><th style="text-align: right">Prototype (ns)</th></tr>
-</thead>
-<tbody>
-<tr><td>1</td><td>Linux’s entry, up to the check of the syscall work bits</td><td style="text-align: right">64</td><td style="text-align: right">42</td><td style="text-align: right">12.7</td><td style="text-align: right">12.7</td></tr>
-<tr><td>2, 3</td><td>The work bit, the hook, and the jump to the task’s kernelet stack</td><td style="text-align: right">42</td><td style="text-align: right">20</td><td style="text-align: right">6.1</td><td style="text-align: right">19.4</td></tr>
-<tr><td>4</td><td>vOSTD’s entry, the handler, the checks before user mode, and the call of <code>user_run</code></td><td style="text-align: right">58</td><td style="text-align: right">45</td><td style="text-align: right">13.6</td><td style="text-align: right">21.2</td></tr>
-<tr><td>5, 6</td><td><code>user_run</code>, the move below <code>pt_regs</code>, and Linux’s exit work</td><td style="text-align: right">74</td><td style="text-align: right">21</td><td style="text-align: right">6.4</td><td style="text-align: right">43.7</td></tr>
-<tr><td>7</td><td>Restoring the user registers, and SYSRET</td><td style="text-align: right">23</td><td style="text-align: right">51</td><td style="text-align: right">15.5</td><td style="text-align: right">15.8</td></tr>
-<tr><td>—</td><td>User mode, from SYSRET to the next <code>syscall</code></td><td style="text-align: right"></td><td style="text-align: right"></td><td style="text-align: right">13.3</td><td style="text-align: right">13.3</td></tr>
-<tr><td></td><td>Total</td><td style="text-align: right">261</td><td style="text-align: right">179</td><td style="text-align: right">67.5</td><td style="text-align: right">126.1</td></tr>
-</tbody>
-</table>
-</div>
-<p>The kernelet’s part, steps 2 to 6, falls from 84.3 ns to 26.1 ns, and the kernel runs 261 instructions instead of 475. Steps 1 and 7 and the time in user mode do not change, so all of the gain is in the handoff. The return path, steps 5 and 6, gains the most: 37.3 ns. Step 4 is now the longest step, at 13.6 ns; in the build without the mirror, step 4 takes 8.0 ns. This difference is between builds, not an isolated timing of the mirror operations.</p>
-<h3 id="scheduling-evidence-to-collect"><a class="header" href="#scheduling-evidence-to-collect">Scheduling evidence to collect</a></h3>
-<p>The system call benchmark does not measure the benefit of avoiding lock-holder preemption or the delay to other Linux tasks. Scheduler coordination needs separate validation:</p>
+<p><strong>This design and per-task Linux stacks take the same time; their ranges overlap.</strong> The times include Linux’s own entry and exit work, which this proposal does not change.</p>
+<h3 id="functional-checks"><a class="header" href="#functional-checks">Functional checks</a></h3>
+<p><strong>On the final implementation of this design, system calls and task scheduling work correctly.</strong></p>
 <ul>
-<li>Compare the existing mirror with the build without it under contention. Measure system call time, lock wait, spinning and host-task scheduling latency.</li>
-<li>Validate the static checks across user returns, including <code>pre_user_run</code>, service calls and forced yields. Verify guard constraints and balanced mirror transitions before removing runtime checks.</li>
-<li>Check host-state reads across carrier migration and supported kernel configurations. Compare host-aware placement with the existing scheduler under uneven host load, including sampling cost and task waiting time.</li>
-<li>Measure RCU grace-period duration. Any implementation of the alternative that disables preemption throughout kernelet execution needs its own correctness and latency evaluation.</li>
+<li><strong>System calls.</strong> Handlers received the expected arguments; user tasks received the expected results and retained their other general registers, including after a handler slept.</li>
+<li><strong>Scheduling.</strong> Several user tasks shared a vCPU, blocked, woke and switched through kernel tasks without losing their saved registers. Each resumed on its original vCPU.</li>
 </ul>
 <h2 id="open-questions"><a class="header" href="#open-questions">Open questions</a></h2>
+<ul>
+<li><strong>Floating-point and segment-base state across task switches.</strong> <code>pt_regs</code> holds only general registers. Linux keeps FPU registers and FS and GS bases in the CPU. It saves them only on carrier switches or, for the FPU, when kernel code uses it. During kernelet execution, a task’s FPU state can therefore be in the CPU or the carrier’s <code>thread.fpu</code>. Task switches must coordinate with Linux to save and load this state. Linux marks saved FPU state with <code>TIF_NEED_FPU_LOAD</code> and reloads it before user mode.</li>
+</ul>
 <h2 id="decision-and-follow-up"><a class="header" href="#decision-and-follow-up">Decision and follow-up</a></h2>
 <p>Pending review.</p>
 <h2 id="appendix-the-prototypes-mechanisms"><a class="header" href="#appendix-the-prototypes-mechanisms">Appendix: the prototype’s mechanisms</a></h2>
-<p>A system call of a tenant program passes through these mechanisms of the prototype.</p>
+<p>A tenant system call uses these prototype mechanisms.</p>
 <ul>
 <li>
-<p><strong>Kernelet.</strong> The tenant’s kernel, linked into one image: the <strong>kernel proper</strong>, written in safe Rust, and <strong>vOSTD</strong>, the framework under it that provides OSTD’s interface on Linux.</p>
+<p><strong>Kernelet.</strong> The tenant’s kernel, linked into one image: the <strong>kernel proper</strong>, written in safe Rust, and <strong>vOSTD</strong>, which provides OSTD’s interface on Linux.</p>
 </li>
 <li>
 <p><strong>Carrier.</strong> A Linux task that runs one virtual CPU of the kernelet. The tenant program runs on it in user mode (<a href="../accepted-design/carriers.html">Carriers</a>).</p>
@@ -631,10 +593,10 @@ TaskOptions::new_user(user_ctx)
 <p><strong>Endovisor.</strong> The Linux module that serves kernelets. The syscall hook and every <code>klet_*</code> function in the figure belong to it.</p>
 </li>
 <li>
-<p><strong>Syscall hook.</strong> Our Linux patch adds this hook to the system-call entry. Linux calls it for each system call of a carrier, after seccomp. The hook gives the call to the kernelet, and Linux skips its own system-call table (<a href="../accepted-design/carrier-hooks.html">Carrier hooks and patch overview</a>).</p>
+<p><strong>Syscall hook.</strong> Our Linux patch adds this hook after seccomp in the system-call entry. Linux calls it for each carrier syscall. The hook passes the call to the kernelet, and Linux skips its own system-call table (<a href="../accepted-design/carrier-hooks.html">Carrier hooks and patch overview</a>).</p>
 </li>
 <li>
-<p><strong><code>execute</code>.</strong> OSTD’s interface for running user code. The kernel proper calls it in a loop. <code>execute</code> enters user mode and returns when the program makes a system call or raises an exception, or when an event for the kernel proper arrives. The kernel proper handles the event and calls <code>execute</code> again (<a href="../accepted-design/into-user-mode-and-back.html">Into user mode and back</a>). The loop of the hundred-line kernel:</p>
+<p><strong><code>execute</code>.</strong> OSTD’s interface for running user code, called in a loop by the kernel proper. <code>execute</code> enters user mode and returns on a system call, exception, or event for the kernel proper. The kernel proper handles the event and calls <code>execute</code> again (<a href="../accepted-design/into-user-mode-and-back.html">Into user mode and back</a>). The hundred-line kernel uses this loop:</p>
 <p><em>Simplified from <code>prototype/kernels/hello/src/lib.rs</code>: <code>create_user_task</code>.</em></p>
 <pre><code class="language-rust">let mut user_mode = UserMode::new(create_user_context());
 loop {
@@ -646,25 +608,22 @@ loop {
 }</code></pre>
 </li>
 <li>
-<p><strong>Two stacks.</strong> A task’s Linux kernel stack is empty each time the task returns to user mode. <code>execute</code> returns only at the program’s next system call, so its frames must stay on a stack while the program runs. Each kernelet task therefore runs on a kernelet stack of its own. <code>klet_switch</code> switches between two kernel-mode contexts: the hook’s, on the carrier’s Linux stack, and the current kernelet task’s, on that task’s kernelet stack. While the kernelet runs, the hook’s context waits. While the program runs, the task’s context waits inside <code>execute</code> (<a href="../accepted-design/two-stacks.html">Two stacks</a>).</p>
+<p><strong>Two stacks.</strong> A task’s Linux kernel stack is empty on return to user mode. <code>execute</code> returns on a system call, exception or kernel event; its frames remain on the task’s kernelet stack while the program runs. <code>klet_switch</code> switches between the hook’s kernel-mode context on the carrier’s Linux stack and the current task’s context on its kernelet stack. The hook waits while the kernelet runs; the task waits inside <code>execute</code> while the user program runs (<a href="../accepted-design/two-stacks.html">Two stacks</a>).</p>
 </li>
 <li>
-<p><strong><code>UserContext</code>.</strong> The kernelet’s copy of a task’s user registers. On each entry into the kernel, Linux saves the user registers in <code>pt_regs</code>, at the top of the carrier’s Linux stack. The hook copies them from <code>pt_regs</code> into the task’s <code>UserContext</code>, and copies them back before the carrier returns to user mode (<a href="../accepted-design/into-user-mode-and-back.html">Into user mode and back</a>).</p>
+<p><strong><code>UserContext</code>.</strong> The kernelet’s copy of a task’s user registers. On kernel entry, Linux saves them in <code>pt_regs</code> at the top of the carrier’s Linux stack. The hook copies them into the task’s <code>UserContext</code> and back before returning to user mode (<a href="../accepted-design/into-user-mode-and-back.html">Into user mode and back</a>).</p>
 </li>
 <li>
-<p><strong>Service table.</strong> The kernelet image imports no host symbols. It calls the endovisor only through a table of function pointers that it receives when it starts. One entry is <code>user_run</code>, the service that enters user mode (<a href="../accepted-design/the-kernelet-abi.html">The kernelet ABI</a>).</p>
+<p><strong>Service table.</strong> The kernelet image imports no host symbols. It calls the endovisor only through a function-pointer table received at startup. The <code>user_run</code> entry enters user mode (<a href="../accepted-design/the-kernelet-abi.html">The kernelet ABI</a>).</p>
 </li>
 <li>
-<p><strong>Virtual CPU record.</strong> Memory that the carrier and the kernelet share, one for each virtual CPU. It holds the pending virtual interrupts and the address space that the kernelet last activated with <code>vm_activate</code>. Each tenant process has its own address space, a Linux <code>mm</code>. The carrier switches to the activated address space on its way to user mode (<a href="../accepted-design/tasks-and-virtual-cpus.html">Tasks and virtual CPUs</a>, <a href="../accepted-design/tenant-memory-on-linux-page-tables.html">Tenant memory on Linux’s page tables</a>).</p>
+<p><strong>Virtual CPU record.</strong> One shared record per virtual CPU, holding pending virtual interrupts and the address space last activated with <code>vm_activate</code>. Each tenant process has its own address space, a Linux <code>mm</code>. The carrier switches to the activated space before returning to user mode (<a href="../accepted-design/tasks-and-virtual-cpus.html">Tasks and virtual CPUs</a>, <a href="../accepted-design/tenant-memory-on-linux-page-tables.html">Tenant memory on Linux’s page tables</a>).</p>
 </li>
 <li>
-<p><strong>Virtual interrupts.</strong> The kernelet’s own interrupts: a timer tick, or a request from another virtual CPU. To raise one, the endovisor sets a pending bit in the virtual CPU record. Kernelet code checks this bit before the carrier returns to user mode. If the carrier is already in user mode, the endovisor also tells Linux to give the carrier to the kernelet at its next entry into the kernel. Linux does this through the endovisor’s <strong>resume hook</strong>. These two paths leave a gap. Kernelet code has already checked the bit, but the carrier is not yet in user mode, so the endovisor does not tell Linux. An interrupt raised in this gap would wait until the watch timer’s next tick, up to 1 ms. The prototype closes the gap with a memory barrier (step 8) (<a href="../accepted-design/virtual-interrupts.html">Virtual interrupts</a>).</p>
+<p><strong>Virtual interrupts.</strong> A kernelet timer tick or request from another virtual CPU. The endovisor sets a pending bit, then checks whether the carrier is in or entering user mode and notifies Linux if so. Before checking pending events, <code>user_run</code> publishes <code>KLET_USER</code>. Memory barriers order both sequences, so an interrupt raised during this handoff is either seen by <code>user_run</code> or causes a Linux notification. Linux clears the notification flag before calling the resume hook, preserving notifications raised during the hook (<a href="../accepted-design/virtual-interrupts.html">Virtual interrupts</a>).</p>
 </li>
 <li>
-<p><strong>The mirror.</strong> While kernelet code is in a virtual critical section, for example holding a spin lock, vOSTD adds one to Linux’s preemption count. This defers Linux’s automatic kernel preemption and reduces the chance that another virtual CPU spins while the holder’s carrier is preempted. Linux code that runs for the carrier must see only Linux’s own count. The endovisor therefore removes the kernelet’s share each time the carrier leaves kernelet code, and adds it back each time the carrier returns (<a href="../accepted-design/sharing-a-processor-politely.html">Sharing a processor politely</a>).</p>
-</li>
-<li>
-<p><strong>Watch timer.</strong> A per-processor timer of the endovisor that takes the processor back from kernelet code when Linux wants it. Under Linux’s <code>none</code> and <code>voluntary</code> preemption models, Linux does not preempt a task in kernel code. Linux’s own code gives up the processor where it calls <code>cond_resched()</code>. Kernelet code cannot call that function, so without the timer a carrier in kernelet code would keep its processor. The timer also delivers the kernelet’s timer tick. On each entry into kernelet code, the carrier checks that the timer runs (<a href="../accepted-design/sharing-a-processor-politely.html">Sharing a processor politely</a>, which also explains the preemption models).</p>
+<p><strong>The mirror and watch timer.</strong> The prototype uses these mechanisms to coordinate with Linux’s scheduler; the timer also delivers virtual timer ticks. Their implementation is described in <a href="../accepted-design/sharing-a-processor-politely.html">Sharing a processor politely</a>.</p>
 </li>
 </ul>
 
@@ -676,6 +635,9 @@ loop {
                                 <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M41.4 233.4c-12.5 12.5-12.5 32.8 0 45.3l160 160c12.5 12.5 32.8 12.5 45.3 0s12.5-32.8 0-45.3L109.3 256 246.6 118.6c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0l-160 160z"/></svg></span>
                             </a>
 
+                            <a rel="next prefetch" href="../design-proposals/2026-11-04-coordinate-the-two-schedulers.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                                <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M278.6 233.4c12.5 12.5 12.5 32.8 0 45.3l-160 160c-12.5 12.5-32.8 12.5-45.3 0s-12.5-32.8 0-45.3L210.7 256 73.4 118.6c-12.5-12.5-12.5-32.8 0-45.3s32.8-12.5 45.3 0l160 160z"/></svg></span>
+                            </a>
 
                         <div style="clear: both"></div>
                     </nav>
@@ -687,6 +649,9 @@ loop {
                         <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M41.4 233.4c-12.5 12.5-12.5 32.8 0 45.3l160 160c12.5 12.5 32.8 12.5 45.3 0s12.5-32.8 0-45.3L109.3 256 246.6 118.6c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0l-160 160z"/></svg></span>
                     </a>
 
+                    <a rel="next prefetch" href="../design-proposals/2026-11-04-coordinate-the-two-schedulers.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                        <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M278.6 233.4c12.5 12.5 12.5 32.8 0 45.3l-160 160c-12.5 12.5-32.8 12.5-45.3 0s-12.5-32.8 0-45.3L210.7 256 73.4 118.6c-12.5-12.5-12.5-32.8 0-45.3s32.8-12.5 45.3 0l160 160z"/></svg></span>
+                    </a>
             </nav>
 
         </div>
