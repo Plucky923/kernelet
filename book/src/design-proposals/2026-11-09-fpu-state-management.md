@@ -2,204 +2,167 @@
 
 - Status: Draft
 - Author(s): Plucky923
-- Discussion: Local design discussion beginning on 2026-11-09, revised on 2026-11-11; public review link not yet available.
+- Discussion: [PR #7](https://github.com/tatetian/kernelet/pull/7).
 - Affected chapters: [Tasks and virtual CPUs](../accepted-design/tasks-and-virtual-cpus.md), [The kernelet ABI](../accepted-design/the-kernelet-abi.md), [Into user mode and back](../accepted-design/into-user-mode-and-back.md), [Virtual interrupts](../accepted-design/virtual-interrupts.md), and [What it costs](../accepted-design/what-it-costs.md).
-- Implementation or experiments: The complete protocol is not yet implemented. The source review uses Linux v6.12 and the current prototype; functional and performance validation of this protocol remains pending.
+- Implementation or experiments: [Direct-execution measurements](#validation-and-evidence) are available. Checked import, main-prototype integration, and complete validation remain pending.
 
 ## Summary
 
-**Omit tenant FPU transfers on eligible syscalls; remove staging copies and software image validation from direct transfers.** The syscall must request no FPU-state operation, and kernelet code must preserve FPU state. The ABI defines permitted state; instruction faults trigger cleanup and instance termination. Linux carrier recovery can still require an extra restore. Host containment and performance of the complete protocol remain unvalidated.
+Let vOSTD save and restore tenant FPU state directly, validate imported state, and skip transfers on eligible same-tenant syscalls. Linux retains carrier preservation and fault handling. Experiments cover direct execution; checked import and full protocol validation remain pending.
 
 ## Problem and motivation
 
 <div class="background">
 
-**x86: FPU state.** FPU state includes the contents of floating-point and vector registers, plus control and status fields such as rounding modes. It is separate from the general-purpose register state. On x86, `XSAVE` saves extended processor state from registers to memory, and `XRSTOR` restores it from memory to registers. These transfers let threads share the registers without losing their state.
+**x86: FPU state.** FPU state includes floating-point and vector registers and their control fields. x87 holds floating-point values; SSE, AVX, and AVX-512 provide overlapping vector registers. MXCSR controls SSE and AVX operations. `XSAVE` saves extended processor state to memory; `XRSTOR` restores it. Invalid format or control fields can cause a general-protection exception (`#GP`) during restoration. See [Intel's restore rules](https://cdrdv2-public.intel.com/843827/253665-sdm-vol-1-dec-24.pdf#page=336).
 
 </div>
 
-**An ordinary syscall in native Linux or Asterinas need not save or restore FPU state.** The state can remain in the registers if the same task runs throughout the syscall, kernel code does not use the FPU registers, and no explicit FPU-state operation is requested.
+**Native Linux baseline.** [Linux v6.12](https://github.com/torvalds/linux/blob/v6.12/arch/x86/include/asm/fpu/sched.h) saves live FPU state when switching a task out and restores it as needed before returning to user mode. A syscall needs neither transfer if no task switch, kernel FPU use, or explicit FPU-state operation occurs.
 
-**When switching from task A to task B, the kernel saves A's latest FPU state to memory if needed.** B's state need not be restored during the switch, but the registers must hold B's state before B runs in user mode.
+**Check external FPU state when importing it.** Signal return and `ptrace` writes can supply user-controlled FPU state. Ordinary syscalls need no FPU content checks. Internally saved or validated state needs no repeated checks while it remains protected from external writes. Invalid MXCSR bits can make `XRSTOR` raise `#GP` in kernel mode. Asterinas #3920, item 128, reports this failure: [x86 rt_sigreturn accepts an invalid MXCSR image and can abort the kernel during FPU restore](https://github.com/asterinas/asterinas/issues/3920#issuecomment-5848180215). Even after software validation, `XRSTOR` can raise `#GP` if checks miss a condition or a writable alias permits later changes. The kernel therefore needs a recovery path for `#GP` at FPU restore instructions to prevent a restore fault from aborting the kernel.
 
-**Kernelet adds FPU work through its save/load policy and its use of separate buffers.** Let A and B be tenants on Linux carrier C. Each tenant has a `FpuContext`; Linux keeps a separate save area for C. The kernelet [switches between A and B](../accepted-design/tasks-and-virtual-cpus.md#one-carrier-many-threads) on the same Linux carrier C.
+**The PoC checks each FPU load in the endovisor, inside the Linux kernel.** The load service copies the tenant image into a staging page, checks its header, applies a fixed MXCSR mask, and restores that copy. The private page prevents changes to the checked bytes before restoration. On a restore fault, the PoC only skips the failed instruction; Linux's [FPU restore fixup](https://github.com/torvalds/linux/blob/v6.12/arch/x86/mm/extable.c#L112) resets the registers. The PoC neither resets FPU state nor reports failure, so the caller can continue with partially restored state. Each save/load pair adds two service calls, two buffer copies, two page clears, and one image validation.
 
-We distinguish four basic scheduling cases and one combination:
-
-1. **A syscall without a task switch.** A makes a syscall and resumes on C; neither scheduler switches tasks.
-2. **A tenant switch within C.** The kernelet switches from A to B on the same carrier.
-3. **Linux deschedules C, then resumes A.** Linux runs another task, then resumes C with A still selected.
-4. **Carrier scheduling followed by a tenant switch.** Linux resumes C, then the kernelet switches from A to B before A returns to user mode.
-
-### A syscall without a task switch
-
-Under the baseline conditions above, A's FPU state can stay in the registers throughout the syscall. The PoC scheduler example still saves and reloads it through a temporary endovisor buffer, the staging page:
-
-```mermaid
-flowchart TD
-    entry["A enters the kernel: syscall<br/>FPU state is in CPU registers"]
-    save["fpu_save<br/>Clear the staging page<br/>XSAVE: registers → staging page<br/>Copy: staging page → A.FpuContext"]
-    handle["Handle the syscall<br/>A remains selected"]
-    load["fpu_load<br/>Clear the staging page<br/>Copy: A.FpuContext → staging page<br/>Validate the staging image<br/>XRSTOR: staging page → registers"]
-    resume["A resumes in user mode"]
-    entry --> save --> handle --> load --> resume
-```
-
-Each syscall therefore adds **one register save, one restore, two buffer copies, two page clears, one validation, and two service calls**. The conditional `CpuSync` handler skips both services: A enters the kernel, the handler processes the syscall, and A resumes with its FPU state still in the registers. Task-local access, callbacks, and state checks remain.
-
-### A tenant switch within C
-
-When A's latest FPU state is only in the registers, the kernelet must save A before loading B. Here, Linux neither deschedules C nor uses the FPU during the handoff:
-
-```mermaid
-flowchart TD
-    entry["A enters the kernel<br/>Registers hold A's latest FPU state"]
-    save["fpu_save<br/>Clear the staging page<br/>XSAVE: registers → staging page<br/>Copy: staging page → A.FpuContext"]
-    switch["Kernelet switches from A to B<br/>Linux continues to run carrier C"]
-    load["fpu_load<br/>Clear the staging page<br/>Copy: B.FpuContext → staging page<br/>Validate the staging image<br/>XRSTOR: staging page → registers"]
-    resume["B starts user execution<br/>Registers now hold B's FPU state"]
-    entry --> save --> switch --> load --> resume
-```
-
-**Saving A's registers and restoring B's registers are necessary**, as in native task switching. The staging protocol adds **two buffer copies, two page clears, one image validation, and two service calls** per A→B switch. The conditional `CpuSync` policy still needs the save and load services for this switch.
-
-### Linux deschedules C while it runs A
-
-Linux sees C as the running task. When it deschedules C, it saves A's live FPU state in C's Linux buffer as needed. If C continues A after resuming, the flow is:
-
-```mermaid
-flowchart TD
-    out["Linux deschedules C<br/>Save A to C's Linux FPU buffer if needed"]
-    other["Another Linux task runs"]
-    back["C resumes in kernel mode<br/>A remains the selected tenant"]
-    restore["Before returning A to user mode<br/>Linux restores A if its registers are invalid"]
-    resume["A resumes user execution"]
-    out --> other --> back --> restore --> resume
-```
-
-These saves and restores belong to the native baseline. **When A continues without an explicit FPU-state operation, conditional `CpuSync` adds no tenant save/load calls or staging copies.** Resuming C in kernel mode does not require an immediate restore of A.
-
-### A carrier switch followed by a tenant switch
-
-Linux has saved A in C's buffer and resumed C in kernel mode. Before A returns to user mode, the kernelet switches to B. If `A.FpuContext` is stale and A's registers are invalid, `fpu_save` must first recover A from C's buffer:
-
-```mermaid
-flowchart TD
-    out["Linux deschedules C<br/>Save A: registers → C's Linux FPU buffer"]
-    other["Another Linux task runs<br/>It uses the FPU registers"]
-    back["C resumes in kernel mode<br/>The kernelet will run B next<br/>A.FpuContext is still stale"]
-    save["fpu_save(A)<br/>Linux restores A: C's buffer → registers<br/>XSAVE: registers → staging page<br/>Copy: staging page → A.FpuContext"]
-    load["fpu_load(B)<br/>Copy: B.FpuContext → staging page<br/>Validate and restore B to registers"]
-    resume["B resumes user execution"]
-    out --> other --> back --> save --> load --> resume
-```
-
-Linux's first save of A and the final restore of B are baseline work. The PoC adds **one restore of A and another save of A** because Linux's saved image does not update `A.FpuContext`. The internal switch's two copies, two page clears, one validation, and two service calls also remain. These counts assume no further Linux scheduling or kernel FPU use during the handoff. If A's registers remain valid, Linux skips the restore of A. The extra recovery's latency and frequency remain unmeasured.
-
-### Why staging and validation are used
-
-**Staging keeps the validated state unchanged until restoration.** `fpu_load` copies the tenant's image into an endovisor-private page, then validates and restores that copy. A design that retains validation must keep those bytes unchanged until restoration. The proposal instead removes software image validation and requires Host containment for untrusted input.
-
-**Invalid format or control fields can trigger an exception while `XRSTOR` executes in Linux kernel mode.** The current service checks the layout and permitted components and filters control bits. It does not check floating-point or vector data values. See [Intel's restore rules](https://cdrdv2-public.intel.com/843827/253665-sdm-vol-1-dec-24.pdf#page=336).
-
-| Check | Example input | Possible effect |
-|---|---|---|
-| State components | The image declares AVX state that Linux has not enabled. | A kernel-mode exception during `XRSTOR`. |
-| Control fields | A reserved bit in the vector control field is set to 1. | A kernel-mode exception when that field is restored. |
-
-### Experimental results
-
-<div class="background">
-
-**x86: test states.** x87 holds floating-point values. SSE, AVX, and AVX-512 use overlapping 128-, 256-, and 512-bit vector registers; AVX-512 also adds mask registers. See the [Intel manual](https://cdrdv2-public.intel.com/843827/253665-sdm-vol-1-dec-24.pdf).
-
-</div>
-
-**Same-tenant syscalls, ns/call.** With FPU state preloaded, we compared Linux `getpid` with constant-return kernelet handlers: a minimal handler without tenant FPU management, and the same `CpuSync` handler with conditional or per-call save/load.
-
-| Active state | Linux | Minimal kernelet handler | Conditional `CpuSync` | `CpuSync`: save/load every syscall |
-|---|---:|---:|---:|---:|
-| x87 + SSE | 57.340 | 62.849 | 67.350 | 399.212 |
-| + AVX | 57.336 | 63.094 | 66.591 | 404.881 |
-| + AVX-512 | 57.368 | 62.906 | 67.479 | 411.222 |
-
-Conditional handling makes no tenant FPU service calls or transfers in the timed loop; its management path adds 3.5–4.6 ns over the minimal handler. Per-call save/load adds **331.9–343.7 ns** over conditional handling. Its two services save and restore registers, copy a 2,688-byte state image twice (**5,376 bytes**), clear 8,192 bytes, and validate one image per syscall.
-
-**Task switching, ns per A→B→A.** We compared two Linux threads, two carriers with one tenant each, and two tenants within one carrier. Each round trip includes two work blocks, two syscalls, and two switches. FPU groups perform arithmetic before each handoff; Linux participants alternate with `SCHED_FIFO` and yield.
-
-| User work | Linux threads | Two carriers | Two tenants in one carrier |
-|---|---:|---:|---:|
-| x87 + SSE | 796.2 | 810.7 | 1314.7 |
-| x87 + AVX | 817.6 | 837.1 | 1393.8 |
-| x87 + AVX-512 | 865.6 | 889.0 | 1272.2 |
-
-**Carrier switches:** Linux preserves FPU state; diagnostics record **zero tenant services or staging copies**. The active-FPU gap of 14.5–23.4 ns includes the experimental yield service and syscall handling.
-
-**Tenant switches:** each diagnostic round trip saves and restores both tenants through four services. Staging adds four 2,688-byte copies (**10,752 bytes**), 16,384 cleared bytes, and two validations. The active-FPU gap from Linux is **406.6–576.2 ns**, including scheduling and handoff costs.
+Earlier measurements show that per-call FPU saves and loads add about **330–340 ns per syscall** over conditional `CpuSync`. The internal A→B→A workload costs about **410–580 ns more per round trip** than Linux thread switching. This second gap includes kernelet scheduling and handoff costs as well as FPU handling.
 
 ## Proposed change
 
-### Design constraints
+### Design overview
 
-**Use the recovery path as the sole fallback for FPU instruction faults.** If `XSAVE` or `XRSTOR` faults, the Host recovery path terminates the entire kernelet instance.
+**Validate imported FPU state in vOSTD.** A checked import interface reads external state into a private `FpuContext` and validates that allocation. vOSTD controls later writes and uses the same buffer for direct saves and restores. This removes endovisor FPU services, staging copies, and repeated content checks. Linux must restore carrier state before vOSTD resumes after scheduling or kernel FPU borrowing. On an FPU instruction fault, the Host cleans up carrier state and terminates the entire instance.
 
-**No runtime checks or intermediate copies in normal FPU saves and loads.** `XSAVE` writes directly to the tenant's `FpuContext`, and `XRSTOR` reads directly from it. Neither uses the endovisor staging page. Do not validate image contents or buffer metadata, sanitize control fields, repair state, or retry failed operations on this path. Initialize storage once.
+**vOSTD saves and restores tenant FPU state directly.** It validates imported state and controls later writes, so `XSAVE` and `XRSTOR` can use tenant buffers without an endovisor staging page. Let tenants A and B [share Linux task C, their carrier](../accepted-design/tasks-and-virtual-cpus.md#one-carrier-many-threads). Each stays on C and owns a `FpuContext`; Linux keeps C's separate save area.
 
-**Linux retains a separate FPU save area for each carrier.** When Linux schedules the carrier out, it saves the carrier's live FPU state there as needed. This updates Linux's save area, not the tenant's `FpuContext`.
 
-### Recover faults and stop the instance
+### Task A makes a syscall and resumes
 
-Route instruction faults to one common Host recovery and termination path. Reuse Linux's [signal-return recovery](https://github.com/torvalds/linux/blob/v6.12/arch/x86/kernel/fpu/signal.c#L294) and [`fpu__clear_user_states()`](https://github.com/torvalds/linux/blob/v6.12/arch/x86/kernel/fpu/core.c#L736) cleanup logic. This path does not return to the save/load service. Connect it directly to the kernelet instance termination path.
+When tenant task A enters a syscall, carrier C still preserves task A's FPU state, so task A remains the **FPU owner**. If no other tenant runs and no FPU-state operation is requested, resume task A without saving, restoring, or validating a tenant image. Kernelet code must leave FPU registers unchanged.
 
-<div class="background">
+### vOSTD switches from task A to task B on carrier C
 
-**Linux: FPU restore faults.** Linux v6.12 marks kernel FPU restore instructions with [`EX_TYPE_FPU_RESTORE`](https://github.com/torvalds/linux/blob/v6.12/arch/x86/kernel/fpu/xstate.h#L130), which selects their exception handler. If invalid reserved bits cause a restore fault, [`ex_handler_fprestore()`](https://github.com/torvalds/linux/blob/v6.12/arch/x86/mm/extable.c#L112) calls [`fpu_reset_from_exception_fixup()`](https://github.com/torvalds/linux/blob/v6.12/arch/x86/kernel/fpu/core.c#L190) to reset the FPU registers from `init_fpstate`. The handler resumes execution after the failed instruction; it does not terminate the task.
-
-</div>
-
-### New execution paths
-
-**A syscall without a task switch.** Neither scheduler switches tasks during A's syscall. If kernel code does not use the FPU and the syscall requests no FPU-state operation, A's state stays in the registers. As in native execution, this path needs no FPU save, restore, buffer copy, or service call.
-
-**A to B within carrier C.** Assume C's FPU state is live, with no pending Linux restoration, and Linux neither preempts C nor borrows its FPU registers. vOSTD saves A directly to `A.FpuContext` before another tenant uses the registers. It restores B directly from `B.FpuContext` before B enters user mode:
+When task A changes an FPU register, its saved copy in `A.FpuContext` does not change. With task A as the FPU owner, vOSTD saves its latest state before loading task B's state:
 
 ```text
-CPU registers -> A.FpuContext    XSAVE
-B.FpuContext -> CPU registers   XRSTOR
+Save task A: CPU registers -> A.FpuContext    XSAVE
+Load task B: B.FpuContext -> CPU registers    XRSTOR
 ```
 
-vOSTD manages tenant ownership, buffer lifetime, and synchronization. This internal switch needs no endovisor FPU service.
+Keep tenant switching disabled through the save, load, and owner update. After task B's state loads successfully, record task B as the owner and let it continue. With no owner, skip the save but still load task B's context, using its initialized state on first entry. Both instructions access tenant buffers directly, without an endovisor FPU service or staging copy.
+
+### Linux deschedules carrier C or uses the FPU for kernel work
+
+Linux saves carrier C's live FPU registers to C's Linux save area when needed. If task A is the owner, this preserves task A's state without updating `A.FpuContext`.
 
 <div class="background">
 
-**Linux: deferred FPU restoration.** After a task switch, Linux sets `TIF_NEED_FPU_LOAD` and normally restores FPU state, if needed, before user return. Resuming vOSTD only resumes kernel code, so it does not trigger this deferred restoration.
+**Linux: temporary FPU use.** Linux kernel code can use FPU registers for calculations such as [encryption](https://github.com/torvalds/linux/blob/v6.12/arch/x86/crypto/aesni-intel_glue.c#L146). If those registers hold task A's state, Linux [saves it when needed](https://github.com/torvalds/linux/blob/v6.12/arch/x86/kernel/fpu/core.c#L421) in carrier C's Linux save area. Kernel code then overwrites the registers for its own work. This can happen without descheduling carrier C.
+
+**Linux: deferred restoration.** After kernel FPU use or scheduling, Linux can continue running kernel code without first restoring task A's registers. Task A's state remains in carrier C's Linux save area. `TIF_NEED_FPU_LOAD` tells Linux to check and restore the registers as needed before returning to user mode.
 
 </div>
 
-**Carrier preemption during the switch.** Without coordination, the following sequence can occur:
+vOSTD can switch from task A to task B without first returning task A to user mode. It must save task A's latest FPU state before loading task B. Waiting until Linux returns to user mode would therefore be too late. Direct register access while Linux restoration remains pending can cause two errors:
 
-1. Linux preempts C while it runs A and saves A's FPU state in C's Linux area.
-2. Another Linux task uses the FPU registers.
-3. C resumes in vOSTD, but A's state remains in C's Linux area because restoration is deferred until user return.
-4. vOSTD selects B and executes `XSAVE` into `A.FpuContext`, saving the other task's register contents as A.
-5. vOSTD loads `B.FpuContext` into the registers. Linux still records a pending restore for C.
+1. **Wrong contents saved for task A.** The registers may still hold another Linux task's state or values from kernel FPU use. A direct `XSAVE` would save those contents into `A.FpuContext` as task A's state.
+2. **Task B's restored state overwritten.** vOSTD loads task B while Linux still has a pending restore for carrier C. Linux can then overwrite task B's registers with task A's state from C's Linux save area.
 
-A later Linux restore can overwrite B's registers with A. Reusing C's save area before recovering A loses A's latest state.
+Before carrier C first enters vOSTD, restore its FPU state if needed. Update Linux's records to show that the CPU's FPU registers now hold carrier C's state. After carrier scheduling or Linux kernel FPU use, run Linux's [restore logic](https://github.com/torvalds/linux/blob/v6.12/arch/x86/kernel/fpu/context.h#L54) before vOSTD resumes. Restore carrier C's state when needed, update CPU ownership, and clear the pending-load flag. With this guarantee, ordinary syscall entry and service return need no additional `fpregs_lock()` section to check `TIF_NEED_FPU_LOAD`.
 
-**Restore C before vOSTD resumes.** Keep Linux's carrier save area, but run its [restore logic](https://github.com/torvalds/linux/blob/v6.12/arch/x86/kernel/fpu/context.h#L54) before vOSTD resumes. Restore registers when needed, update CPU ownership, then clear `TIF_NEED_FPU_LOAD`. Clearing the flag alone does not restore the registers. Keep the registers valid through entry or return to vOSTD, including after Linux FPU use.
+Staging removal leaves carrier recovery unchanged. If task A's latest state is only in C's Linux save area, Linux must restore it before vOSTD saves `A.FpuContext`. This costs one Linux restore in addition to saving task A and loading task B. Earlier restoration can also add work if carrier C is descheduled again before tenant execution or a vOSTD FPU operation. Linux restores C's registers on resume, then saves them again on the next deschedule. Deferred restoration could leave the state in memory throughout that interval, avoiding both transfers.
 
-**Alternative: save directly to the tenant context.** Linux could save into the active tenant's `FpuContext` when descheduling C. This would avoid restoring A to save it again, but requires adapting Linux's FPU save and restore paths to tenant context selection and format. The current proposal keeps the carrier save area and changes restoration timing.
+### Signal return or ptrace supplies new FPU state
 
-**Remaining cost.** Normal tenant switches retain register saves and restores, ownership tracking, and synchronization, with no FPU services, staging copies, clears, or image validation. If A's latest state is only in C's save area, resuming C and then switching to B still adds a restore and save of A. Earlier restoration can also add work if C is descheduled again before user return. The protocol remains unimplemented and unvalidated; its latency is unmeasured.
+**OSTD and vOSTD need the same checked FPU import interface.** Read external state directly into a private candidate `FpuContext`. Check its layout, permitted components, reserved fields, and MXCSR bits; reject invalid input before loading or installing it. In vOSTD, exclude tenant switches while checking ownership, loading, and installing the candidate. If the target is the FPU owner, load the candidate before installing it; otherwise, load it when that tenant is next selected. Install the accepted allocation itself, without an endovisor staging copy.
 
+Initialize context storage once. vOSTD guarantees capacity, alignment, lifetime, and exclusive access during writes. Neither the kernel proper nor tenants may modify accepted state through writable aliases. State produced by initialization, checked import, or successful saves needs no repeated content validation while these guarantees hold.
+
+### An exception occurs in kernelet kernel code
+
+vOSTD currently has no recovery interface for kernel-mode exceptions. **Any CPU exception in kernelet kernel code must terminate the entire instance**, including `#GP` from `XRSTOR`. For an FPU instruction fault, the Host must reset carrier user FPU state and repair its ownership records before termination. Adapt Linux's [signal-return recovery](https://github.com/torvalds/linux/blob/v6.12/arch/x86/kernel/fpu/signal.c#L294) and [user-state cleanup](https://github.com/torvalds/linux/blob/v6.12/arch/x86/kernel/fpu/core.c#L741) for this path. Do not resume kernelet execution after the fault. Import validation does not remove this fallback.
+
+<div class="background">
+
+**Linux: FPU restore faults.** Linux v6.12 registers [exception handlers for restore instructions](https://github.com/torvalds/linux/blob/v6.12/arch/x86/kernel/fpu/xstate.h#L130). Its [restore fixup](https://github.com/torvalds/linux/blob/v6.12/arch/x86/mm/extable.c#L112) [resets FPU registers](https://github.com/torvalds/linux/blob/v6.12/arch/x86/kernel/fpu/core.c#L190) and continues after the failed instruction; it does not terminate the task.
+
+</div>
 
 ## Alternatives and tradeoffs
 
+**Let Linux save directly into the active tenant context.** This could avoid restoring A from the carrier's save area only to save it again into `A.FpuContext`. Each tenant switch would also need to update Linux's FPU save target and coordinate its ownership and pending-restore records. Linux scheduling and kernel FPU use must follow that selection. This requires broader changes to Linux's FPU management than the selected design, which retains the carrier save area and changes restoration timing.
+
 ## Implementation and integration
+
+The kernel proper uses Asterinas's `CpuSync` policy to track FPU ownership and calls vOSTD's `FpuContext` interface. Linux keeps its per-carrier FPU save area and save logic.
+
+- **vOSTD: checked imports and direct register access.** Provide `FpuContext::read_from` as proposed in [Asterinas #4210](https://github.com/asterinas/asterinas/pull/4210). The kernel proper uses it for signal return and other external FPU-state writes. Keep mutable access to context storage inside vOSTD. Save and restore directly between CPU registers and `FpuContext`, without endovisor FPU services or repeated image validation.
+- **Linux: earlier carrier restoration.** For participating carriers, complete pending restoration before first vOSTD entry and before vOSTD resumes after scheduling or kernel FPU use. The existing Linux restore helper loads registers when needed, updates ownership, and clears `TIF_NEED_FPU_LOAD`. Ordinary syscall entry and service return need no additional FPU check.
+- **Host: fault cleanup and instance termination.** Connect kernelet kernel exceptions to the existing termination path. For an FPU instruction fault, reset the carrier's user FPU state and repair ownership records before terminating the entire instance.
 
 ## Validation and evidence
 
+### Same-tenant syscalls
+
+One thread makes N consecutive `getpid` syscalls. Linux returns the process ID; kernelet returns `123` and resumes the same tenant. FPU setup and checks are outside timing; no FPU arithmetic occurs between calls. Values are **mean ns/call**.
+
+All kernelet variants use the [optimized syscall PoC](https://github.com/tatetian/kernelet/pull/3). Original PoC omits `CpuSync`; the other variants use it.
+
+| Preloaded state | Linux reference | Original PoC | PoC: save/load each syscall | PoC with `CpuSync` | This design |
+|---|---:|---:|---:|---:|---:|
+| x87 + SSE | 56.997 | 62.959 | 399.749 | 67.098 | 66.459 |
+| + AVX | 57.011 | 63.079 | 405.611 | 68.042 | 66.636 |
+| + AVX-512 | 56.963 | 63.298 | 413.857 | 67.525 | 66.612 |
+
+Per-call save/load adds two FPU service calls, one register save and restore, **5,376 copied bytes**, 8,192 cleared bytes, and one image validation. Conditional `CpuSync` and this design make **zero tenant saves or restores**. Task-local access, callbacks, and state checks remain.
+
+### Tenant switches within one carrier
+
+A and B perform FPU arithmetic before each syscall. Linux switches two threads with `SCHED_FIFO` and `sched_yield`; kernelet switches two tenants on one carrier. Values are **mean ns per A→B→A**, including both tasks' arithmetic, two syscalls, and two switches. User work, address-space sharing, and guest CPU placement are the same.
+
+| User work | Linux threads | PoC with `CpuSync` | This design | Change from PoC |
+|---|---:|---:|---:|---:|
+| x87 + SSE | 796.1 | 1339.6 | 848.0 | −36.7% |
+| x87 + AVX | 818.1 | 1294.8 | 850.6 | −34.3% |
+| x87 + AVX-512 | 865.8 | 1392.3 | 861.3 | −38.1% |
+
+This design removes FPU services, staging copies, page clears, and repeated validation, reducing time by **34.3–38.1%**.
+
+### Carrier scheduling
+
+A and B run on separate carriers. Each performs FPU arithmetic and makes a syscall. The handler uses the test service `fpu_bench` to call Linux `yield()` and schedule the other carrier. Each carrier keeps its tenant. Native threads use `sched_yield`. Values are **mean ns per A→B→A**, including two syscalls and two Linux switches.
+
+| User work | Linux threads | PoC with `CpuSync` | This design |
+|---|---:|---:|---:|
+| x87 + SSE | 789.5 | 798.9 | 787.8 |
+| x87 + AVX | 816.7 | 825.7 | 822.0 |
+| x87 + AVX-512 | 864.7 | 865.0 | 867.9 |
+
+All three paths record **two Linux saves and two restores per round trip**, with **zero tenant FPU services or copies**. Boot ranges overlap; the small timing gaps are inconclusive.
+
+### Cost of earlier FPU restoration
+
+**This test measures the extra cost when a carrier resumes kernel code, then yields again before running user code.** Linux carrier C1 runs user thread A; carrier C2 runs user thread B. Each carrier keeps the same tenant. The test forces this sequence:
+
+1. C1 runs A's FPU arithmetic. A enters a syscall, and C1 yields the CPU.
+2. C2 runs B's FPU arithmetic. B enters a syscall, and C2 yields the CPU.
+3. **C1 resumes the same syscall in Linux, then yields again. No user code or FPU computation runs during this visit.**
+4. C2 runs B's FPU arithmetic again. B enters another syscall, and C2 yields the CPU.
+5. C1 finishes A's original syscall and returns to A in user mode.
+
+Both policies use the same test service. Values are **mean ns for this full sequence**, including **three syscalls and four Linux switches**.
+
+| User work | PoC with `CpuSync` | This design | Increase |
+|---|---:|---:|---:|
+| x87 + SSE | 1343.0 | 1459.3 | 116.3 |
+| x87 + AVX | 1365.7 | 1504.3 | 138.6 |
+| x87 + AVX-512 | 1438.6 | 1590.4 | 151.7 |
+
+With deferred restoration, Linux leaves B's FPU registers intact during step 3, so B can reuse them in step 4. This design instead restores A in step 3, saves A when C1 yields again, then restores B in step 4.
+
+Diagnostics confirm **one extra Linux FPU save and two extra restores**: four saves and four restores, compared with three saves and two restores. Neither policy transfers tenant buffers. The **116.3–151.7 ns increase** covers this full sequence and its FPU state tracking, not a single restore instruction.
+
 ## Open questions
 
-
 ## Decision and follow-up
+
+- pending review
