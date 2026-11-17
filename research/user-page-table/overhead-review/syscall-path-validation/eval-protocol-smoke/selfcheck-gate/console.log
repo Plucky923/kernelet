@@ -1,0 +1,3 @@
+STEP 0 SELFCHECK FAIL [L selfcheck.vdso]: non-zero exit code: rc=1; vDSO fallback syscalls=200000 > max 0
+STEP 0 SELFCHECK FAIL [K selfcheck.vdso]: non-zero exit code: rc=1; unexpected CPU migration outside allowed set; cpu_start=1 not in allowed (0,); cpu_end=1 not in allowed (0,); vDSO fallback syscalls=200000 > max 0; kernelet sandbox failed: exit_kind=0, exit_code=256, msg=''
+STEP 0 SELFCHECK FAIL [K selfcheck.noop]: unexpected CPU migration outside allowed set; cpu_start=1 not in allowed (0,); cpu_end=1 not in allowed (0,)

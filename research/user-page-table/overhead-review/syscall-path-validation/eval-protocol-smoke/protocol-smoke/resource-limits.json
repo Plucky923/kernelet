@@ -1,0 +1,26 @@
+{
+  "memlock_before": {
+    "soft_bytes": 8388608,
+    "hard_bytes": 8388608
+  },
+  "memlock_for_cli_and_qemu": {
+    "soft_bytes": 0,
+    "hard_bytes": 8388608
+  },
+  "cli_args": [
+    "run",
+    "--targets",
+    "L,K",
+    "--rounds",
+    "1",
+    "--seed",
+    "1",
+    "--case",
+    "sys.lm.null",
+    "--skip-selfcheck",
+    "--tag",
+    "standards-protocol-smoke",
+    "--results-dir",
+    "/mnt/data/projects/kernelet/.syscall-overhead-work/standards-eval-live"
+  ]
+}

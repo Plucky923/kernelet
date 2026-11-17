@@ -1,0 +1,195 @@
+
+/usr/lib/modules/7.2.8-9-omarchy/build/vmlinux:     file format elf64-x86-64
+
+
+Disassembly of section .text:
+
+ffffffff813d2d40 <check_tsc_sync_source>:
+ffffffff813d2d40:	f3 0f 1e fa          	endbr64
+ffffffff813d2d44:	e8 c7 e8 00 00       	call   ffffffff813e1610 <__fentry__>
+ffffffff813d2d49:	48 0f ba 25 de aa e4 	btq    $0x21,0x2e4aade(%rip)        # ffffffff8421d830 <__pi_boot_cpu_data+0x50>
+ffffffff813d2d50:	02 21 
+ffffffff813d2d52:	55                   	push   %rbp
+ffffffff813d2d53:	89 fd                	mov    %edi,%ebp
+ffffffff813d2d55:	53                   	push   %rbx
+ffffffff813d2d56:	0f 82 f9 00 00 00    	jb     ffffffff813d2e55 <check_tsc_sync_source+0x115>
+ffffffff813d2d5c:	c7 05 b6 81 96 03 01 	movl   $0x1,0x39681b6(%rip)        # ffffffff84d3af1c <test_runs>
+ffffffff813d2d63:	00 00 00 
+ffffffff813d2d66:	89 fb                	mov    %edi,%ebx
+ffffffff813d2d68:	83 3d b5 81 96 03 01 	cmpl   $0x1,0x39681b5(%rip)        # ffffffff84d3af24 <start_count>
+ffffffff813d2d6f:	74 0b                	je     ffffffff813d2d7c <check_tsc_sync_source+0x3c>
+ffffffff813d2d71:	f3 90                	pause
+ffffffff813d2d73:	83 3d aa 81 96 03 01 	cmpl   $0x1,0x39681aa(%rip)        # ffffffff84d3af24 <start_count>
+ffffffff813d2d7a:	75 f5                	jne    ffffffff813d2d71 <check_tsc_sync_source+0x31>
+ffffffff813d2d7c:	f0 ff 05 a1 81 96 03 	lock incl 0x39681a1(%rip)        # ffffffff84d3af24 <start_count>
+ffffffff813d2d83:	89 df                	mov    %ebx,%edi
+ffffffff813d2d85:	e8 66 fd ff ff       	call   ffffffff813d2af0 <loop_timeout>
+ffffffff813d2d8a:	89 c7                	mov    %eax,%edi
+ffffffff813d2d8c:	e8 0f fe ff ff       	call   ffffffff813d2ba0 <check_tsc_warp>
+ffffffff813d2d91:	83 3d 88 81 96 03 01 	cmpl   $0x1,0x3968188(%rip)        # ffffffff84d3af20 <stop_count>
+ffffffff813d2d98:	74 0b                	je     ffffffff813d2da5 <check_tsc_sync_source+0x65>
+ffffffff813d2d9a:	f3 90                	pause
+ffffffff813d2d9c:	83 3d 7d 81 96 03 01 	cmpl   $0x1,0x396817d(%rip)        # ffffffff84d3af20 <stop_count>
+ffffffff813d2da3:	75 f5                	jne    ffffffff813d2d9a <check_tsc_sync_source+0x5a>
+ffffffff813d2da5:	8b 35 59 81 96 03    	mov    0x3968159(%rip),%esi        # ffffffff84d3af04 <nr_warps>
+ffffffff813d2dab:	85 f6                	test   %esi,%esi
+ffffffff813d2dad:	75 5c                	jne    ffffffff813d2e0b <check_tsc_sync_source+0xcb>
+ffffffff813d2daf:	c7 05 63 81 96 03 00 	movl   $0x0,0x3968163(%rip)        # ffffffff84d3af1c <test_runs>
+ffffffff813d2db6:	00 00 00 
+ffffffff813d2db9:	66 90                	xchg   %ax,%ax
+ffffffff813d2dbb:	c7 05 5f 81 96 03 00 	movl   $0x0,0x396815f(%rip)        # ffffffff84d3af24 <start_count>
+ffffffff813d2dc2:	00 00 00 
+ffffffff813d2dc5:	c7 05 31 81 96 03 00 	movl   $0x0,0x3968131(%rip)        # ffffffff84d3af00 <random_warps>
+ffffffff813d2dcc:	00 00 00 
+ffffffff813d2dcf:	c7 05 2b 81 96 03 00 	movl   $0x0,0x396812b(%rip)        # ffffffff84d3af04 <nr_warps>
+ffffffff813d2dd6:	00 00 00 
+ffffffff813d2dd9:	48 c7 05 24 81 96 03 	movq   $0x0,0x3968124(%rip)        # ffffffff84d3af08 <max_warp>
+ffffffff813d2de0:	00 00 00 00 
+ffffffff813d2de4:	48 c7 05 21 81 96 03 	movq   $0x0,0x3968121(%rip)        # ffffffff84d3af10 <last_tsc>
+ffffffff813d2deb:	00 00 00 00 
+ffffffff813d2def:	f0 ff 05 2a 81 96 03 	lock incl 0x396812a(%rip)        # ffffffff84d3af20 <stop_count>
+ffffffff813d2df6:	8b 05 20 81 96 03    	mov    0x3968120(%rip),%eax        # ffffffff84d3af1c <test_runs>
+ffffffff813d2dfc:	85 c0                	test   %eax,%eax
+ffffffff813d2dfe:	0f 8f 64 ff ff ff    	jg     ffffffff813d2d68 <check_tsc_sync_source+0x28>
+ffffffff813d2e04:	5b                   	pop    %rbx
+ffffffff813d2e05:	5d                   	pop    %rbp
+ffffffff813d2e06:	e9 25 0c 69 01       	jmp    ffffffff82a63a30 <__pi___x86_return_thunk>
+ffffffff813d2e0b:	f0 ff 0d 0a 81 96 03 	lock decl 0x396810a(%rip)        # ffffffff84d3af1c <test_runs>
+ffffffff813d2e12:	0f 84 a7 67 e3 ff    	je     ffffffff812095bf <check_tsc_sync_source.cold>
+ffffffff813d2e18:	8b 0d e2 80 96 03    	mov    0x39680e2(%rip),%ecx        # ffffffff84d3af00 <random_warps>
+ffffffff813d2e1e:	85 c9                	test   %ecx,%ecx
+ffffffff813d2e20:	74 99                	je     ffffffff813d2dbb <check_tsc_sync_source+0x7b>
+ffffffff813d2e22:	e9 98 67 e3 ff       	jmp    ffffffff812095bf <check_tsc_sync_source.cold>
+ffffffff813d2e27:	65 8b 15 06 82 8e 03 	mov    %gs:0x38e8206(%rip),%edx        # ffffffff84cbb034 <cpu_number>
+ffffffff813d2e2e:	89 e9                	mov    %ebp,%ecx
+ffffffff813d2e30:	48 c7 c6 80 d7 42 83 	mov    $0xffffffff8342d780,%rsi
+ffffffff813d2e37:	48 c7 c7 68 84 1e 84 	mov    $0xffffffff841e8468,%rdi
+ffffffff813d2e3e:	e8 7d 74 cc 00       	call   ffffffff8209a2c0 <__dynamic_pr_debug>
+ffffffff813d2e43:	f6 05 41 56 e1 02 40 	testb  $0x40,0x2e15641(%rip)        # ffffffff841e848b <__UNIQUE_ID_ddebug_323.19+0x23>
+ffffffff813d2e4a:	0f 84 6b ff ff ff    	je     ffffffff813d2dbb <check_tsc_sync_source+0x7b>
+ffffffff813d2e50:	e9 cc 67 e3 ff       	jmp    ffffffff81209621 <check_tsc_sync_source.cold+0x62>
+ffffffff813d2e55:	c7 05 bd 80 96 03 03 	movl   $0x3,0x39680bd(%rip)        # ffffffff84d3af1c <test_runs>
+ffffffff813d2e5c:	00 00 00 
+ffffffff813d2e5f:	e9 02 ff ff ff       	jmp    ffffffff813d2d66 <check_tsc_sync_source+0x26>
+
+Disassembly of section .data:
+
+Disassembly of section .init.text:
+
+Disassembly of section .altinstr_aux:
+
+Disassembly of section .altinstr_replacement:
+
+Disassembly of section .exit.text:
+
+/usr/lib/modules/7.2.8-9-omarchy/build/vmlinux:     file format elf64-x86-64
+
+
+Disassembly of section .text:
+
+ffffffff813d30c0 <tsc_store_and_check_tsc_adjust>:
+ffffffff813d30c0:	f3 0f 1e fa          	endbr64
+ffffffff813d30c4:	e8 47 e5 00 00       	call   ffffffff813e1610 <__fentry__>
+ffffffff813d30c9:	48 83 ec 40          	sub    $0x40,%rsp
+ffffffff813d30cd:	48 89 6c 24 18       	mov    %rbp,0x18(%rsp)
+ffffffff813d30d2:	48 8b 2d 57 a7 e4 02 	mov    0x2e4a757(%rip),%rbp        # ffffffff8421d830 <__pi_boot_cpu_data+0x50>
+ffffffff813d30d9:	48 c1 ed 21          	shr    $0x21,%rbp
+ffffffff813d30dd:	83 e5 01             	and    $0x1,%ebp
+ffffffff813d30e0:	75 10                	jne    ffffffff813d30f2 <tsc_store_and_check_tsc_adjust+0x32>
+ffffffff813d30e2:	89 e8                	mov    %ebp,%eax
+ffffffff813d30e4:	48 8b 6c 24 18       	mov    0x18(%rsp),%rbp
+ffffffff813d30e9:	48 83 c4 40          	add    $0x40,%rsp
+ffffffff813d30ed:	e9 3e 09 69 01       	jmp    ffffffff82a63a30 <__pi___x86_return_thunk>
+ffffffff813d30f2:	40 88 7c 24 07       	mov    %dil,0x7(%rsp)
+ffffffff813d30f7:	bf 3b 00 00 00       	mov    $0x3b,%edi
+ffffffff813d30fc:	48 89 5c 24 10       	mov    %rbx,0x10(%rsp)
+ffffffff813d3101:	4c 89 64 24 20       	mov    %r12,0x20(%rsp)
+ffffffff813d3106:	4c 89 6c 24 28       	mov    %r13,0x28(%rsp)
+ffffffff813d310b:	4c 89 74 24 30       	mov    %r14,0x30(%rsp)
+ffffffff813d3110:	4c 89 7c 24 38       	mov    %r15,0x38(%rsp)
+ffffffff813d3115:	65 4c 8b 35 0b 7f 8e 	mov    %gs:0x38e7f0b(%rip),%r14        # ffffffff84cbb028 <this_cpu_off>
+ffffffff813d311c:	03 
+ffffffff813d311d:	65 8b 1d 10 7f 8e 03 	mov    %gs:0x38e7f10(%rip),%ebx        # ffffffff84cbb034 <cpu_number>
+ffffffff813d3124:	ff 15 be 86 a7 02    	call   *0x2a786be(%rip)        # ffffffff83e4b7e8 <pv_ops+0xa8>
+ffffffff813d312a:	49 89 c5             	mov    %rax,%r13
+ffffffff813d312d:	49 89 86 80 f8 cb 84 	mov    %rax,-0x7b340780(%r14)
+ffffffff813d3134:	49 89 c7             	mov    %rax,%r15
+ffffffff813d3137:	48 8b 05 c2 48 a3 02 	mov    0x2a348c2(%rip),%rax        # ffffffff83e07a00 <jiffies_64>
+ffffffff813d313e:	49 c7 c4 80 bc cb 84 	mov    $0xffffffff84cbbc80,%r12
+ffffffff813d3145:	41 c6 86 98 f8 cb 84 	movb   $0x0,-0x7b340768(%r14)
+ffffffff813d314c:	00 
+ffffffff813d314d:	48 05 e8 03 00 00    	add    $0x3e8,%rax
+ffffffff813d3153:	4d 89 ae 88 f8 cb 84 	mov    %r13,-0x7b340778(%r14)
+ffffffff813d315a:	49 89 86 90 f8 cb 84 	mov    %rax,-0x7b340770(%r14)
+ffffffff813d3161:	89 d8                	mov    %ebx,%eax
+ffffffff813d3163:	81 fb ff 1f 00 00    	cmp    $0x1fff,%ebx
+ffffffff813d3169:	0f 87 d4 00 00 00    	ja     ffffffff813d3243 <tsc_store_and_check_tsc_adjust+0x183>
+ffffffff813d316f:	48 8b 04 c5 e0 40 5c 	mov    -0x7ca3bf20(,%rax,8),%rax
+ffffffff813d3176:	83 
+ffffffff813d3177:	4e 8b 24 20          	mov    (%rax,%r12,1),%r12
+ffffffff813d317b:	4d 85 e4             	test   %r12,%r12
+ffffffff813d317e:	74 23                	je     ffffffff813d31a3 <tsc_store_and_check_tsc_adjust+0xe3>
+ffffffff813d3180:	8b 35 8a f7 e4 02    	mov    0x2e4f78a(%rip),%esi        # ffffffff84222910 <nr_cpu_ids>
+ffffffff813d3186:	31 d2                	xor    %edx,%edx
+ffffffff813d3188:	eb 07                	jmp    ffffffff813d3191 <tsc_store_and_check_tsc_adjust+0xd1>
+ffffffff813d318a:	39 c3                	cmp    %eax,%ebx
+ffffffff813d318c:	75 4c                	jne    ffffffff813d31da <tsc_store_and_check_tsc_adjust+0x11a>
+ffffffff813d318e:	8d 53 01             	lea    0x1(%rbx),%edx
+ffffffff813d3191:	4c 89 e7             	mov    %r12,%rdi
+ffffffff813d3194:	e8 b7 26 ba 00       	call   ffffffff81f75850 <_find_next_bit>
+ffffffff813d3199:	8b 35 71 f7 e4 02    	mov    0x2e4f771(%rip),%esi        # ffffffff84222910 <nr_cpu_ids>
+ffffffff813d319f:	39 f0                	cmp    %esi,%eax
+ffffffff813d31a1:	72 e7                	jb     ffffffff813d318a <tsc_store_and_check_tsc_adjust+0xca>
+ffffffff813d31a3:	4d 85 ed             	test   %r13,%r13
+ffffffff813d31a6:	75 7a                	jne    ffffffff813d3222 <tsc_store_and_check_tsc_adjust+0x162>
+ffffffff813d31a8:	4d 89 be 88 f8 cb 84 	mov    %r15,-0x7b340778(%r14)
+ffffffff813d31af:	31 ed                	xor    %ebp,%ebp
+ffffffff813d31b1:	89 e8                	mov    %ebp,%eax
+ffffffff813d31b3:	48 8b 5c 24 10       	mov    0x10(%rsp),%rbx
+ffffffff813d31b8:	4c 8b 64 24 20       	mov    0x20(%rsp),%r12
+ffffffff813d31bd:	4c 8b 6c 24 28       	mov    0x28(%rsp),%r13
+ffffffff813d31c2:	4c 8b 74 24 30       	mov    0x30(%rsp),%r14
+ffffffff813d31c7:	4c 8b 7c 24 38       	mov    0x38(%rsp),%r15
+ffffffff813d31cc:	48 8b 6c 24 18       	mov    0x18(%rsp),%rbp
+ffffffff813d31d1:	48 83 c4 40          	add    $0x40,%rsp
+ffffffff813d31d5:	e9 56 08 69 01       	jmp    ffffffff82a63a30 <__pi___x86_return_thunk>
+ffffffff813d31da:	48 c7 c3 80 f8 cb 84 	mov    $0xffffffff84cbf880,%rbx
+ffffffff813d31e1:	41 89 c4             	mov    %eax,%r12d
+ffffffff813d31e4:	3d ff 1f 00 00       	cmp    $0x1fff,%eax
+ffffffff813d31e9:	77 47                	ja     ffffffff813d3232 <tsc_store_and_check_tsc_adjust+0x172>
+ffffffff813d31eb:	4a 03 1c e5 e0 40 5c 	add    -0x7ca3bf20(,%r12,8),%rbx
+ffffffff813d31f2:	83 
+ffffffff813d31f3:	4c 39 2b             	cmp    %r13,(%rbx)
+ffffffff813d31f6:	74 0d                	je     ffffffff813d3205 <tsc_store_and_check_tsc_adjust+0x145>
+ffffffff813d31f8:	80 3d 1c 7a df 02 00 	cmpb   $0x0,0x2df7a1c(%rip)        # ffffffff841cac1b <__already_done.22>
+ffffffff813d31ff:	0f 84 97 64 e3 ff    	je     ffffffff8120969c <tsc_store_and_check_tsc_adjust.cold>
+ffffffff813d3205:	48 8b 73 08          	mov    0x8(%rbx),%rsi
+ffffffff813d3209:	4c 39 ee             	cmp    %r13,%rsi
+ffffffff813d320c:	74 a3                	je     ffffffff813d31b1 <tsc_store_and_check_tsc_adjust+0xf1>
+ffffffff813d320e:	49 89 b6 88 f8 cb 84 	mov    %rsi,-0x7b340778(%r14)
+ffffffff813d3215:	bf 3b 00 00 00       	mov    $0x3b,%edi
+ffffffff813d321a:	ff 15 d0 85 a7 02    	call   *0x2a785d0(%rip)        # ffffffff83e4b7f0 <pv_ops+0xb0>
+ffffffff813d3220:	eb 8f                	jmp    ffffffff813d31b1 <tsc_store_and_check_tsc_adjust+0xf1>
+ffffffff813d3222:	80 7c 24 07 00       	cmpb   $0x0,0x7(%rsp)
+ffffffff813d3227:	0f 84 7b ff ff ff    	je     ffffffff813d31a8 <tsc_store_and_check_tsc_adjust+0xe8>
+ffffffff813d322d:	e9 82 64 e3 ff       	jmp    ffffffff812096b4 <tsc_store_and_check_tsc_adjust.cold+0x18>
+ffffffff813d3232:	4c 89 e6             	mov    %r12,%rsi
+ffffffff813d3235:	48 c7 c7 80 70 e4 83 	mov    $0xffffffff83e47080,%rdi
+ffffffff813d323c:	e8 7f 44 cd 00       	call   ffffffff820a76c0 <__ubsan_handle_out_of_bounds>
+ffffffff813d3241:	eb a8                	jmp    ffffffff813d31eb <tsc_store_and_check_tsc_adjust+0x12b>
+ffffffff813d3243:	48 89 c6             	mov    %rax,%rsi
+ffffffff813d3246:	48 c7 c7 a0 70 e4 83 	mov    $0xffffffff83e470a0,%rdi
+ffffffff813d324d:	48 89 44 24 08       	mov    %rax,0x8(%rsp)
+ffffffff813d3252:	e8 69 44 cd 00       	call   ffffffff820a76c0 <__ubsan_handle_out_of_bounds>
+ffffffff813d3257:	48 8b 44 24 08       	mov    0x8(%rsp),%rax
+ffffffff813d325c:	e9 0e ff ff ff       	jmp    ffffffff813d316f <tsc_store_and_check_tsc_adjust+0xaf>
+
+Disassembly of section .data:
+
+Disassembly of section .init.text:
+
+Disassembly of section .altinstr_aux:
+
+Disassembly of section .altinstr_replacement:
+
+Disassembly of section .exit.text:

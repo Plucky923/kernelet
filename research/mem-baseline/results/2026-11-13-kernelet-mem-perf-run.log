@@ -1,0 +1,508 @@
+mkdir -p /mnt/data/projects/kernelet/prototype/.build/mem
+rm -f /mnt/data/projects/kernelet/prototype/.build/mem/perf-*.log
+make[1]: Entering directory '/mnt/data/projects/kernelet/prototype'
+mkdir -p /mnt/data/projects/kernelet/prototype/.build/mem
+make KLET_KERNEL=mem linux
+make[2]: Entering directory '/mnt/data/projects/kernelet/prototype'
+make -C /mnt/data/projects/kernelet/prototype/.build/linux-6.12 ARCH=x86_64 -j16 bzImage
+make[3]: Entering directory '/mnt/data/projects/kernelet/prototype/.build/linux-6.12'
+mkdir -p /mnt/data/projects/kernelet/prototype/.build/linux-6.12/tools/objtool && make O=/mnt/data/projects/kernelet/prototype/.build/linux-6.12 subdir=tools/objtool --no-print-directory -C objtool 
+  CALL    scripts/checksyscalls.sh
+  INSTALL libsubcmd_headers
+Kernel: arch/x86/boot/bzImage is ready  (#1)
+make[3]: Leaving directory '/mnt/data/projects/kernelet/prototype/.build/linux-6.12'
+make -C /mnt/data/projects/kernelet/prototype/.build/linux-6.12 ARCH=x86_64 -j16 modules modules_prepare
+make[3]: Entering directory '/mnt/data/projects/kernelet/prototype/.build/linux-6.12'
+mkdir -p /mnt/data/projects/kernelet/prototype/.build/linux-6.12/tools/objtool && make O=/mnt/data/projects/kernelet/prototype/.build/linux-6.12 subdir=tools/objtool --no-print-directory -C objtool 
+  CALL    scripts/checksyscalls.sh
+  INSTALL libsubcmd_headers
+make[4]: Nothing to be done for 'modules_prepare'.
+make[3]: Leaving directory '/mnt/data/projects/kernelet/prototype/.build/linux-6.12'
+-rw-r--r-- 1 plucky plucky 2323456 Nov 13 20:07 /mnt/data/projects/kernelet/prototype/.build/linux-6.12/arch/x86/boot/bzImage
+make[2]: Leaving directory '/mnt/data/projects/kernelet/prototype'
+make KLET_KERNEL=mem stage-mem initramfs
+make[2]: Entering directory '/mnt/data/projects/kernelet/prototype'
+make module DIR=linux/endovisor
+make[3]: Entering directory '/mnt/data/projects/kernelet/prototype'
+make -C /mnt/data/projects/kernelet/prototype/.build/linux-6.12 ARCH=x86_64 -j16 M=/mnt/data/projects/kernelet/prototype/linux/endovisor modules
+make[4]: Entering directory '/mnt/data/projects/kernelet/prototype/.build/linux-6.12'
+make[4]: Leaving directory '/mnt/data/projects/kernelet/prototype/.build/linux-6.12'
+make[3]: Leaving directory '/mnt/data/projects/kernelet/prototype'
+endovisor.ko built; it carries no kernelet image
+cd /mnt/data/projects/kernelet/prototype && CARGO_TARGET_DIR=/mnt/data/projects/kernelet/prototype/.build/cargo RUSTFLAGS="-C relocation-model=pic -C code-model=small -C no-redzone=y -C panic=abort -C force-unwind-tables=no" \
+  OSTD_TASK_STACK_SIZE_IN_PAGES=64 \
+  cargo build --offline --release -p mem \
+    --target x86_64-unknown-none -Zbuild-std=core,alloc,compiler_builtins -Zbuild-std-features=compiler-builtins-mem || \
+  { echo "image: the build failed; it is --offline, so if a crate is missing, run make crates (once, with a network)"; exit 1; }
+    Finished `release` profile [optimized] target(s) in 0.06s
+ld -pie --no-dynamic-linker --no-undefined --gc-sections --exclude-libs ALL \
+  --build-id=none -z text -z noexecstack -z max-page-size=0x1000 \
+  -T linux/endovisor/kernelet.lds -u kernelet_entry_table -o /mnt/data/projects/kernelet/prototype/.build/mem.image \
+  --whole-archive /mnt/data/projects/kernelet/prototype/.build/cargo/x86_64-unknown-none/release/libmem.a --no-whole-archive
+python3 tools/check-image.py /mnt/data/projects/kernelet/prototype/.build/mem.image
+image: /mnt/data/projects/kernelet/prototype/.build/mem.image: ET_DYN, 3 load segments, 666 RELATIVE relocations, 285008 bytes
+gcc -static -O2 -Wall -Wextra -I linux/endovisor/uapi -o /mnt/data/projects/kernelet/prototype/.build/holder host/runtime/holder.c host/runtime/sandbox.c
+gcc -static -O2 -Wall -Wextra -I linux/endovisor/uapi -o /mnt/data/projects/kernelet/prototype/.build/run-test host/runtime/run-test.c
+gcc -static -O2 -Wall -Wextra -I linux/endovisor/uapi -o /mnt/data/projects/kernelet/prototype/.build/yield-rival host/runtime/yield-rival.c
+gcc -static -O2 -Wall -Wextra -I linux/endovisor/uapi -o /mnt/data/projects/kernelet/prototype/.build/uapi-check host/runtime/uapi-check.c host/runtime/sandbox.c
+gcc -static -O2 -Wall -Wextra -I linux/endovisor/uapi -o /mnt/data/projects/kernelet/prototype/.build/run-pie host/runtime/run-pie.c host/runtime/sandbox.c
+gcc -static -O2 -Wall -Wextra -I linux/endovisor/uapi -o /mnt/data/projects/kernelet/prototype/.build/run-sched host/runtime/run-sched.c host/runtime/sandbox.c -lpthread
+gcc -static -O2 -Wall -Wextra -I linux/endovisor/uapi -o /mnt/data/projects/kernelet/prototype/.build/run-mem host/runtime/run-mem.c host/runtime/sandbox.c
+host/runtime/run-mem.c: In function ‘preempt_with_competitor’:
+host/runtime/run-mem.c:229:40: warning: variable ‘x’ set but not used [-Wunused-but-set-variable=]
+  229 |                 volatile unsigned long x = 0;
+      |                                        ^
+mkdir -p /mnt/data/projects/kernelet/prototype/.build/stage/modules /mnt/data/projects/kernelet/prototype/.build/stage/tests
+rm -f /mnt/data/projects/kernelet/prototype/.build/stage/tests/* /mnt/data/projects/kernelet/prototype/.build/stage/*.klet /mnt/data/projects/kernelet/prototype/.build/stage/*.image /mnt/data/projects/kernelet/prototype/.build/stage/*.console /mnt/data/projects/kernelet/prototype/.build/stage/*.log
+rm -f /mnt/data/projects/kernelet/prototype/.build/stage/holder /mnt/data/projects/kernelet/prototype/.build/stage/yield-rival /mnt/data/projects/kernelet/prototype/.build/stage/uapi-check
+cp /mnt/data/projects/kernelet/prototype/linux/endovisor/endovisor.ko /mnt/data/projects/kernelet/prototype/.build/stage/modules/
+printf 'endovisor.ko \n' > /mnt/data/projects/kernelet/prototype/.build/stage/modules/order
+cp /mnt/data/projects/kernelet/prototype/.build/mem.image /mnt/data/projects/kernelet/prototype/.build/stage/mem.image
+cp /mnt/data/projects/kernelet/prototype/.build/holder /mnt/data/projects/kernelet/prototype/.build/stage/holder
+cp /mnt/data/projects/kernelet/prototype/.build/run-mem /mnt/data/projects/kernelet/prototype/.build/stage/tests/10-mem
+chmod +x /mnt/data/projects/kernelet/prototype/.build/stage/tests/10-mem
+printf '%s\n%s\n%s\n' 'plain' '1' 'mode=perf rounds=8 rounds9=3' > /mnt/data/projects/kernelet/prototype/.build/stage/tests/10-mem.arg
+staged: endovisor.ko , /mem.image mode=perf rounds=8 rounds9=3
+gcc -static -O2 -Wall -Wextra -o /mnt/data/projects/kernelet/prototype/.build/init host/initramfs/init.c
+mkdir -p /mnt/data/projects/kernelet/prototype/.build/stage/dev /mnt/data/projects/kernelet/prototype/.build/stage/proc /mnt/data/projects/kernelet/prototype/.build/stage/sys /mnt/data/projects/kernelet/prototype/.build/stage/modules /mnt/data/projects/kernelet/prototype/.build/stage/tests
+rm -f /mnt/data/projects/kernelet/prototype/.build/stage/dev/console
+cp /mnt/data/projects/kernelet/prototype/.build/init /mnt/data/projects/kernelet/prototype/.build/stage/init
+cd /mnt/data/projects/kernelet/prototype/.build/stage && { \
+  find . -mindepth 1 -type d -printf 'dir /%P %m 0 0\n'; \
+  echo 'nod /dev/console 0600 0 0 c 5 1'; \
+  find . -type f -printf 'file /%P /mnt/data/projects/kernelet/prototype/.build/stage/%P %m 0 0\n'; \
+} > /mnt/data/projects/kernelet/prototype/.build/initramfs.list
+/mnt/data/projects/kernelet/prototype/.build/linux-6.12/usr/gen_init_cpio /mnt/data/projects/kernelet/prototype/.build/initramfs.list | gzip -9 > /mnt/data/projects/kernelet/prototype/.build/initramfs.cpio.gz
+-rw-r--r-- 1 plucky plucky 1377211 Nov 13 23:52 /mnt/data/projects/kernelet/prototype/.build/initramfs.cpio.gz
+make[2]: Leaving directory '/mnt/data/projects/kernelet/prototype'
+make run TIMEOUT=300
+make[2]: Entering directory '/mnt/data/projects/kernelet/prototype'
+gcc -static -O2 -Wall -Wextra -o /mnt/data/projects/kernelet/prototype/.build/init host/initramfs/init.c
+mkdir -p /mnt/data/projects/kernelet/prototype/.build/stage/dev /mnt/data/projects/kernelet/prototype/.build/stage/proc /mnt/data/projects/kernelet/prototype/.build/stage/sys /mnt/data/projects/kernelet/prototype/.build/stage/modules /mnt/data/projects/kernelet/prototype/.build/stage/tests
+rm -f /mnt/data/projects/kernelet/prototype/.build/stage/dev/console
+cp /mnt/data/projects/kernelet/prototype/.build/init /mnt/data/projects/kernelet/prototype/.build/stage/init
+cd /mnt/data/projects/kernelet/prototype/.build/stage && { \
+  find . -mindepth 1 -type d -printf 'dir /%P %m 0 0\n'; \
+  echo 'nod /dev/console 0600 0 0 c 5 1'; \
+  find . -type f -printf 'file /%P /mnt/data/projects/kernelet/prototype/.build/stage/%P %m 0 0\n'; \
+} > /mnt/data/projects/kernelet/prototype/.build/initramfs.list
+/mnt/data/projects/kernelet/prototype/.build/linux-6.12/usr/gen_init_cpio /mnt/data/projects/kernelet/prototype/.build/initramfs.list | gzip -9 > /mnt/data/projects/kernelet/prototype/.build/initramfs.cpio.gz
+-rw-r--r-- 1 plucky plucky 1377212 Nov 13 23:52 /mnt/data/projects/kernelet/prototype/.build/initramfs.cpio.gz
+rm -f /mnt/data/projects/kernelet/prototype/.build/serial.log
+booting with qemu-system-x86_64: QEMU emulator version 11.1.3
+booting (timeout 300s), serial -> /mnt/data/projects/kernelet/prototype/.build/serial.log
+qemu exit status: 0
+make[2]: Leaving directory '/mnt/data/projects/kernelet/prototype'
+cp /mnt/data/projects/kernelet/prototype/.build/serial.log /mnt/data/projects/kernelet/prototype/.build/mem/perf-1.log
+make[1]: Leaving directory '/mnt/data/projects/kernelet/prototype'
+  boot perf-1 done
+make[1]: Entering directory '/mnt/data/projects/kernelet/prototype'
+mkdir -p /mnt/data/projects/kernelet/prototype/.build/mem
+make KLET_KERNEL=mem linux
+make[2]: Entering directory '/mnt/data/projects/kernelet/prototype'
+make -C /mnt/data/projects/kernelet/prototype/.build/linux-6.12 ARCH=x86_64 -j16 bzImage
+make[3]: Entering directory '/mnt/data/projects/kernelet/prototype/.build/linux-6.12'
+mkdir -p /mnt/data/projects/kernelet/prototype/.build/linux-6.12/tools/objtool && make O=/mnt/data/projects/kernelet/prototype/.build/linux-6.12 subdir=tools/objtool --no-print-directory -C objtool 
+  CALL    scripts/checksyscalls.sh
+  INSTALL libsubcmd_headers
+Kernel: arch/x86/boot/bzImage is ready  (#1)
+make[3]: Leaving directory '/mnt/data/projects/kernelet/prototype/.build/linux-6.12'
+make -C /mnt/data/projects/kernelet/prototype/.build/linux-6.12 ARCH=x86_64 -j16 modules modules_prepare
+make[3]: Entering directory '/mnt/data/projects/kernelet/prototype/.build/linux-6.12'
+mkdir -p /mnt/data/projects/kernelet/prototype/.build/linux-6.12/tools/objtool && make O=/mnt/data/projects/kernelet/prototype/.build/linux-6.12 subdir=tools/objtool --no-print-directory -C objtool 
+  CALL    scripts/checksyscalls.sh
+  INSTALL libsubcmd_headers
+make[4]: Nothing to be done for 'modules_prepare'.
+make[3]: Leaving directory '/mnt/data/projects/kernelet/prototype/.build/linux-6.12'
+-rw-r--r-- 1 plucky plucky 2323456 Nov 13 20:07 /mnt/data/projects/kernelet/prototype/.build/linux-6.12/arch/x86/boot/bzImage
+make[2]: Leaving directory '/mnt/data/projects/kernelet/prototype'
+make KLET_KERNEL=mem stage-mem initramfs
+make[2]: Entering directory '/mnt/data/projects/kernelet/prototype'
+make module DIR=linux/endovisor
+make[3]: Entering directory '/mnt/data/projects/kernelet/prototype'
+make -C /mnt/data/projects/kernelet/prototype/.build/linux-6.12 ARCH=x86_64 -j16 M=/mnt/data/projects/kernelet/prototype/linux/endovisor modules
+make[4]: Entering directory '/mnt/data/projects/kernelet/prototype/.build/linux-6.12'
+make[4]: Leaving directory '/mnt/data/projects/kernelet/prototype/.build/linux-6.12'
+make[3]: Leaving directory '/mnt/data/projects/kernelet/prototype'
+endovisor.ko built; it carries no kernelet image
+cd /mnt/data/projects/kernelet/prototype && CARGO_TARGET_DIR=/mnt/data/projects/kernelet/prototype/.build/cargo RUSTFLAGS="-C relocation-model=pic -C code-model=small -C no-redzone=y -C panic=abort -C force-unwind-tables=no" \
+  OSTD_TASK_STACK_SIZE_IN_PAGES=64 \
+  cargo build --offline --release -p mem \
+    --target x86_64-unknown-none -Zbuild-std=core,alloc,compiler_builtins -Zbuild-std-features=compiler-builtins-mem || \
+  { echo "image: the build failed; it is --offline, so if a crate is missing, run make crates (once, with a network)"; exit 1; }
+    Finished `release` profile [optimized] target(s) in 0.07s
+ld -pie --no-dynamic-linker --no-undefined --gc-sections --exclude-libs ALL \
+  --build-id=none -z text -z noexecstack -z max-page-size=0x1000 \
+  -T linux/endovisor/kernelet.lds -u kernelet_entry_table -o /mnt/data/projects/kernelet/prototype/.build/mem.image \
+  --whole-archive /mnt/data/projects/kernelet/prototype/.build/cargo/x86_64-unknown-none/release/libmem.a --no-whole-archive
+python3 tools/check-image.py /mnt/data/projects/kernelet/prototype/.build/mem.image
+image: /mnt/data/projects/kernelet/prototype/.build/mem.image: ET_DYN, 3 load segments, 666 RELATIVE relocations, 285008 bytes
+gcc -static -O2 -Wall -Wextra -I linux/endovisor/uapi -o /mnt/data/projects/kernelet/prototype/.build/holder host/runtime/holder.c host/runtime/sandbox.c
+gcc -static -O2 -Wall -Wextra -I linux/endovisor/uapi -o /mnt/data/projects/kernelet/prototype/.build/run-test host/runtime/run-test.c
+gcc -static -O2 -Wall -Wextra -I linux/endovisor/uapi -o /mnt/data/projects/kernelet/prototype/.build/yield-rival host/runtime/yield-rival.c
+gcc -static -O2 -Wall -Wextra -I linux/endovisor/uapi -o /mnt/data/projects/kernelet/prototype/.build/uapi-check host/runtime/uapi-check.c host/runtime/sandbox.c
+gcc -static -O2 -Wall -Wextra -I linux/endovisor/uapi -o /mnt/data/projects/kernelet/prototype/.build/run-pie host/runtime/run-pie.c host/runtime/sandbox.c
+gcc -static -O2 -Wall -Wextra -I linux/endovisor/uapi -o /mnt/data/projects/kernelet/prototype/.build/run-sched host/runtime/run-sched.c host/runtime/sandbox.c -lpthread
+gcc -static -O2 -Wall -Wextra -I linux/endovisor/uapi -o /mnt/data/projects/kernelet/prototype/.build/run-mem host/runtime/run-mem.c host/runtime/sandbox.c
+host/runtime/run-mem.c: In function ‘preempt_with_competitor’:
+host/runtime/run-mem.c:229:40: warning: variable ‘x’ set but not used [-Wunused-but-set-variable=]
+  229 |                 volatile unsigned long x = 0;
+      |                                        ^
+mkdir -p /mnt/data/projects/kernelet/prototype/.build/stage/modules /mnt/data/projects/kernelet/prototype/.build/stage/tests
+rm -f /mnt/data/projects/kernelet/prototype/.build/stage/tests/* /mnt/data/projects/kernelet/prototype/.build/stage/*.klet /mnt/data/projects/kernelet/prototype/.build/stage/*.image /mnt/data/projects/kernelet/prototype/.build/stage/*.console /mnt/data/projects/kernelet/prototype/.build/stage/*.log
+rm -f /mnt/data/projects/kernelet/prototype/.build/stage/holder /mnt/data/projects/kernelet/prototype/.build/stage/yield-rival /mnt/data/projects/kernelet/prototype/.build/stage/uapi-check
+cp /mnt/data/projects/kernelet/prototype/linux/endovisor/endovisor.ko /mnt/data/projects/kernelet/prototype/.build/stage/modules/
+printf 'endovisor.ko \n' > /mnt/data/projects/kernelet/prototype/.build/stage/modules/order
+cp /mnt/data/projects/kernelet/prototype/.build/mem.image /mnt/data/projects/kernelet/prototype/.build/stage/mem.image
+cp /mnt/data/projects/kernelet/prototype/.build/holder /mnt/data/projects/kernelet/prototype/.build/stage/holder
+cp /mnt/data/projects/kernelet/prototype/.build/run-mem /mnt/data/projects/kernelet/prototype/.build/stage/tests/10-mem
+chmod +x /mnt/data/projects/kernelet/prototype/.build/stage/tests/10-mem
+printf '%s\n%s\n%s\n' 'plain' '1' 'mode=perf rounds=8 rounds9=3' > /mnt/data/projects/kernelet/prototype/.build/stage/tests/10-mem.arg
+staged: endovisor.ko , /mem.image mode=perf rounds=8 rounds9=3
+gcc -static -O2 -Wall -Wextra -o /mnt/data/projects/kernelet/prototype/.build/init host/initramfs/init.c
+mkdir -p /mnt/data/projects/kernelet/prototype/.build/stage/dev /mnt/data/projects/kernelet/prototype/.build/stage/proc /mnt/data/projects/kernelet/prototype/.build/stage/sys /mnt/data/projects/kernelet/prototype/.build/stage/modules /mnt/data/projects/kernelet/prototype/.build/stage/tests
+rm -f /mnt/data/projects/kernelet/prototype/.build/stage/dev/console
+cp /mnt/data/projects/kernelet/prototype/.build/init /mnt/data/projects/kernelet/prototype/.build/stage/init
+cd /mnt/data/projects/kernelet/prototype/.build/stage && { \
+  find . -mindepth 1 -type d -printf 'dir /%P %m 0 0\n'; \
+  echo 'nod /dev/console 0600 0 0 c 5 1'; \
+  find . -type f -printf 'file /%P /mnt/data/projects/kernelet/prototype/.build/stage/%P %m 0 0\n'; \
+} > /mnt/data/projects/kernelet/prototype/.build/initramfs.list
+/mnt/data/projects/kernelet/prototype/.build/linux-6.12/usr/gen_init_cpio /mnt/data/projects/kernelet/prototype/.build/initramfs.list | gzip -9 > /mnt/data/projects/kernelet/prototype/.build/initramfs.cpio.gz
+-rw-r--r-- 1 plucky plucky 1377209 Nov 13 23:52 /mnt/data/projects/kernelet/prototype/.build/initramfs.cpio.gz
+make[2]: Leaving directory '/mnt/data/projects/kernelet/prototype'
+make run TIMEOUT=300
+make[2]: Entering directory '/mnt/data/projects/kernelet/prototype'
+gcc -static -O2 -Wall -Wextra -o /mnt/data/projects/kernelet/prototype/.build/init host/initramfs/init.c
+mkdir -p /mnt/data/projects/kernelet/prototype/.build/stage/dev /mnt/data/projects/kernelet/prototype/.build/stage/proc /mnt/data/projects/kernelet/prototype/.build/stage/sys /mnt/data/projects/kernelet/prototype/.build/stage/modules /mnt/data/projects/kernelet/prototype/.build/stage/tests
+rm -f /mnt/data/projects/kernelet/prototype/.build/stage/dev/console
+cp /mnt/data/projects/kernelet/prototype/.build/init /mnt/data/projects/kernelet/prototype/.build/stage/init
+cd /mnt/data/projects/kernelet/prototype/.build/stage && { \
+  find . -mindepth 1 -type d -printf 'dir /%P %m 0 0\n'; \
+  echo 'nod /dev/console 0600 0 0 c 5 1'; \
+  find . -type f -printf 'file /%P /mnt/data/projects/kernelet/prototype/.build/stage/%P %m 0 0\n'; \
+} > /mnt/data/projects/kernelet/prototype/.build/initramfs.list
+/mnt/data/projects/kernelet/prototype/.build/linux-6.12/usr/gen_init_cpio /mnt/data/projects/kernelet/prototype/.build/initramfs.list | gzip -9 > /mnt/data/projects/kernelet/prototype/.build/initramfs.cpio.gz
+-rw-r--r-- 1 plucky plucky 1377199 Nov 13 23:52 /mnt/data/projects/kernelet/prototype/.build/initramfs.cpio.gz
+rm -f /mnt/data/projects/kernelet/prototype/.build/serial.log
+booting with qemu-system-x86_64: QEMU emulator version 11.1.3
+booting (timeout 300s), serial -> /mnt/data/projects/kernelet/prototype/.build/serial.log
+qemu exit status: 0
+make[2]: Leaving directory '/mnt/data/projects/kernelet/prototype'
+cp /mnt/data/projects/kernelet/prototype/.build/serial.log /mnt/data/projects/kernelet/prototype/.build/mem/perf-2.log
+make[1]: Leaving directory '/mnt/data/projects/kernelet/prototype'
+  boot perf-2 done
+make[1]: Entering directory '/mnt/data/projects/kernelet/prototype'
+mkdir -p /mnt/data/projects/kernelet/prototype/.build/mem
+make KLET_KERNEL=mem linux
+make[2]: Entering directory '/mnt/data/projects/kernelet/prototype'
+make -C /mnt/data/projects/kernelet/prototype/.build/linux-6.12 ARCH=x86_64 -j16 bzImage
+make[3]: Entering directory '/mnt/data/projects/kernelet/prototype/.build/linux-6.12'
+mkdir -p /mnt/data/projects/kernelet/prototype/.build/linux-6.12/tools/objtool && make O=/mnt/data/projects/kernelet/prototype/.build/linux-6.12 subdir=tools/objtool --no-print-directory -C objtool 
+  CALL    scripts/checksyscalls.sh
+  INSTALL libsubcmd_headers
+Kernel: arch/x86/boot/bzImage is ready  (#1)
+make[3]: Leaving directory '/mnt/data/projects/kernelet/prototype/.build/linux-6.12'
+make -C /mnt/data/projects/kernelet/prototype/.build/linux-6.12 ARCH=x86_64 -j16 modules modules_prepare
+make[3]: Entering directory '/mnt/data/projects/kernelet/prototype/.build/linux-6.12'
+mkdir -p /mnt/data/projects/kernelet/prototype/.build/linux-6.12/tools/objtool && make O=/mnt/data/projects/kernelet/prototype/.build/linux-6.12 subdir=tools/objtool --no-print-directory -C objtool 
+  CALL    scripts/checksyscalls.sh
+  INSTALL libsubcmd_headers
+make[4]: Nothing to be done for 'modules_prepare'.
+make[3]: Leaving directory '/mnt/data/projects/kernelet/prototype/.build/linux-6.12'
+-rw-r--r-- 1 plucky plucky 2323456 Nov 13 20:07 /mnt/data/projects/kernelet/prototype/.build/linux-6.12/arch/x86/boot/bzImage
+make[2]: Leaving directory '/mnt/data/projects/kernelet/prototype'
+make KLET_KERNEL=mem stage-mem initramfs
+make[2]: Entering directory '/mnt/data/projects/kernelet/prototype'
+make module DIR=linux/endovisor
+make[3]: Entering directory '/mnt/data/projects/kernelet/prototype'
+make -C /mnt/data/projects/kernelet/prototype/.build/linux-6.12 ARCH=x86_64 -j16 M=/mnt/data/projects/kernelet/prototype/linux/endovisor modules
+make[4]: Entering directory '/mnt/data/projects/kernelet/prototype/.build/linux-6.12'
+make[4]: Leaving directory '/mnt/data/projects/kernelet/prototype/.build/linux-6.12'
+make[3]: Leaving directory '/mnt/data/projects/kernelet/prototype'
+endovisor.ko built; it carries no kernelet image
+cd /mnt/data/projects/kernelet/prototype && CARGO_TARGET_DIR=/mnt/data/projects/kernelet/prototype/.build/cargo RUSTFLAGS="-C relocation-model=pic -C code-model=small -C no-redzone=y -C panic=abort -C force-unwind-tables=no" \
+  OSTD_TASK_STACK_SIZE_IN_PAGES=64 \
+  cargo build --offline --release -p mem \
+    --target x86_64-unknown-none -Zbuild-std=core,alloc,compiler_builtins -Zbuild-std-features=compiler-builtins-mem || \
+  { echo "image: the build failed; it is --offline, so if a crate is missing, run make crates (once, with a network)"; exit 1; }
+    Finished `release` profile [optimized] target(s) in 0.04s
+ld -pie --no-dynamic-linker --no-undefined --gc-sections --exclude-libs ALL \
+  --build-id=none -z text -z noexecstack -z max-page-size=0x1000 \
+  -T linux/endovisor/kernelet.lds -u kernelet_entry_table -o /mnt/data/projects/kernelet/prototype/.build/mem.image \
+  --whole-archive /mnt/data/projects/kernelet/prototype/.build/cargo/x86_64-unknown-none/release/libmem.a --no-whole-archive
+python3 tools/check-image.py /mnt/data/projects/kernelet/prototype/.build/mem.image
+image: /mnt/data/projects/kernelet/prototype/.build/mem.image: ET_DYN, 3 load segments, 666 RELATIVE relocations, 285008 bytes
+gcc -static -O2 -Wall -Wextra -I linux/endovisor/uapi -o /mnt/data/projects/kernelet/prototype/.build/holder host/runtime/holder.c host/runtime/sandbox.c
+gcc -static -O2 -Wall -Wextra -I linux/endovisor/uapi -o /mnt/data/projects/kernelet/prototype/.build/run-test host/runtime/run-test.c
+gcc -static -O2 -Wall -Wextra -I linux/endovisor/uapi -o /mnt/data/projects/kernelet/prototype/.build/yield-rival host/runtime/yield-rival.c
+gcc -static -O2 -Wall -Wextra -I linux/endovisor/uapi -o /mnt/data/projects/kernelet/prototype/.build/uapi-check host/runtime/uapi-check.c host/runtime/sandbox.c
+gcc -static -O2 -Wall -Wextra -I linux/endovisor/uapi -o /mnt/data/projects/kernelet/prototype/.build/run-pie host/runtime/run-pie.c host/runtime/sandbox.c
+gcc -static -O2 -Wall -Wextra -I linux/endovisor/uapi -o /mnt/data/projects/kernelet/prototype/.build/run-sched host/runtime/run-sched.c host/runtime/sandbox.c -lpthread
+gcc -static -O2 -Wall -Wextra -I linux/endovisor/uapi -o /mnt/data/projects/kernelet/prototype/.build/run-mem host/runtime/run-mem.c host/runtime/sandbox.c
+host/runtime/run-mem.c: In function ‘preempt_with_competitor’:
+host/runtime/run-mem.c:229:40: warning: variable ‘x’ set but not used [-Wunused-but-set-variable=]
+  229 |                 volatile unsigned long x = 0;
+      |                                        ^
+mkdir -p /mnt/data/projects/kernelet/prototype/.build/stage/modules /mnt/data/projects/kernelet/prototype/.build/stage/tests
+rm -f /mnt/data/projects/kernelet/prototype/.build/stage/tests/* /mnt/data/projects/kernelet/prototype/.build/stage/*.klet /mnt/data/projects/kernelet/prototype/.build/stage/*.image /mnt/data/projects/kernelet/prototype/.build/stage/*.console /mnt/data/projects/kernelet/prototype/.build/stage/*.log
+rm -f /mnt/data/projects/kernelet/prototype/.build/stage/holder /mnt/data/projects/kernelet/prototype/.build/stage/yield-rival /mnt/data/projects/kernelet/prototype/.build/stage/uapi-check
+cp /mnt/data/projects/kernelet/prototype/linux/endovisor/endovisor.ko /mnt/data/projects/kernelet/prototype/.build/stage/modules/
+printf 'endovisor.ko \n' > /mnt/data/projects/kernelet/prototype/.build/stage/modules/order
+cp /mnt/data/projects/kernelet/prototype/.build/mem.image /mnt/data/projects/kernelet/prototype/.build/stage/mem.image
+cp /mnt/data/projects/kernelet/prototype/.build/holder /mnt/data/projects/kernelet/prototype/.build/stage/holder
+cp /mnt/data/projects/kernelet/prototype/.build/run-mem /mnt/data/projects/kernelet/prototype/.build/stage/tests/10-mem
+chmod +x /mnt/data/projects/kernelet/prototype/.build/stage/tests/10-mem
+printf '%s\n%s\n%s\n' 'plain' '1' 'mode=perf rounds=8 rounds9=3' > /mnt/data/projects/kernelet/prototype/.build/stage/tests/10-mem.arg
+staged: endovisor.ko , /mem.image mode=perf rounds=8 rounds9=3
+gcc -static -O2 -Wall -Wextra -o /mnt/data/projects/kernelet/prototype/.build/init host/initramfs/init.c
+mkdir -p /mnt/data/projects/kernelet/prototype/.build/stage/dev /mnt/data/projects/kernelet/prototype/.build/stage/proc /mnt/data/projects/kernelet/prototype/.build/stage/sys /mnt/data/projects/kernelet/prototype/.build/stage/modules /mnt/data/projects/kernelet/prototype/.build/stage/tests
+rm -f /mnt/data/projects/kernelet/prototype/.build/stage/dev/console
+cp /mnt/data/projects/kernelet/prototype/.build/init /mnt/data/projects/kernelet/prototype/.build/stage/init
+cd /mnt/data/projects/kernelet/prototype/.build/stage && { \
+  find . -mindepth 1 -type d -printf 'dir /%P %m 0 0\n'; \
+  echo 'nod /dev/console 0600 0 0 c 5 1'; \
+  find . -type f -printf 'file /%P /mnt/data/projects/kernelet/prototype/.build/stage/%P %m 0 0\n'; \
+} > /mnt/data/projects/kernelet/prototype/.build/initramfs.list
+/mnt/data/projects/kernelet/prototype/.build/linux-6.12/usr/gen_init_cpio /mnt/data/projects/kernelet/prototype/.build/initramfs.list | gzip -9 > /mnt/data/projects/kernelet/prototype/.build/initramfs.cpio.gz
+-rw-r--r-- 1 plucky plucky 1377210 Nov 13 23:52 /mnt/data/projects/kernelet/prototype/.build/initramfs.cpio.gz
+make[2]: Leaving directory '/mnt/data/projects/kernelet/prototype'
+make run TIMEOUT=300
+make[2]: Entering directory '/mnt/data/projects/kernelet/prototype'
+gcc -static -O2 -Wall -Wextra -o /mnt/data/projects/kernelet/prototype/.build/init host/initramfs/init.c
+mkdir -p /mnt/data/projects/kernelet/prototype/.build/stage/dev /mnt/data/projects/kernelet/prototype/.build/stage/proc /mnt/data/projects/kernelet/prototype/.build/stage/sys /mnt/data/projects/kernelet/prototype/.build/stage/modules /mnt/data/projects/kernelet/prototype/.build/stage/tests
+rm -f /mnt/data/projects/kernelet/prototype/.build/stage/dev/console
+cp /mnt/data/projects/kernelet/prototype/.build/init /mnt/data/projects/kernelet/prototype/.build/stage/init
+cd /mnt/data/projects/kernelet/prototype/.build/stage && { \
+  find . -mindepth 1 -type d -printf 'dir /%P %m 0 0\n'; \
+  echo 'nod /dev/console 0600 0 0 c 5 1'; \
+  find . -type f -printf 'file /%P /mnt/data/projects/kernelet/prototype/.build/stage/%P %m 0 0\n'; \
+} > /mnt/data/projects/kernelet/prototype/.build/initramfs.list
+/mnt/data/projects/kernelet/prototype/.build/linux-6.12/usr/gen_init_cpio /mnt/data/projects/kernelet/prototype/.build/initramfs.list | gzip -9 > /mnt/data/projects/kernelet/prototype/.build/initramfs.cpio.gz
+-rw-r--r-- 1 plucky plucky 1377212 Nov 13 23:52 /mnt/data/projects/kernelet/prototype/.build/initramfs.cpio.gz
+rm -f /mnt/data/projects/kernelet/prototype/.build/serial.log
+booting with qemu-system-x86_64: QEMU emulator version 11.1.3
+booting (timeout 300s), serial -> /mnt/data/projects/kernelet/prototype/.build/serial.log
+qemu exit status: 0
+make[2]: Leaving directory '/mnt/data/projects/kernelet/prototype'
+cp /mnt/data/projects/kernelet/prototype/.build/serial.log /mnt/data/projects/kernelet/prototype/.build/mem/perf-3.log
+make[1]: Leaving directory '/mnt/data/projects/kernelet/prototype'
+  boot perf-3 done
+make[1]: Entering directory '/mnt/data/projects/kernelet/prototype'
+mkdir -p /mnt/data/projects/kernelet/prototype/.build/mem
+make KLET_KERNEL=mem linux
+make[2]: Entering directory '/mnt/data/projects/kernelet/prototype'
+make -C /mnt/data/projects/kernelet/prototype/.build/linux-6.12 ARCH=x86_64 -j16 bzImage
+make[3]: Entering directory '/mnt/data/projects/kernelet/prototype/.build/linux-6.12'
+mkdir -p /mnt/data/projects/kernelet/prototype/.build/linux-6.12/tools/objtool && make O=/mnt/data/projects/kernelet/prototype/.build/linux-6.12 subdir=tools/objtool --no-print-directory -C objtool 
+  CALL    scripts/checksyscalls.sh
+  INSTALL libsubcmd_headers
+Kernel: arch/x86/boot/bzImage is ready  (#1)
+make[3]: Leaving directory '/mnt/data/projects/kernelet/prototype/.build/linux-6.12'
+make -C /mnt/data/projects/kernelet/prototype/.build/linux-6.12 ARCH=x86_64 -j16 modules modules_prepare
+make[3]: Entering directory '/mnt/data/projects/kernelet/prototype/.build/linux-6.12'
+mkdir -p /mnt/data/projects/kernelet/prototype/.build/linux-6.12/tools/objtool && make O=/mnt/data/projects/kernelet/prototype/.build/linux-6.12 subdir=tools/objtool --no-print-directory -C objtool 
+  CALL    scripts/checksyscalls.sh
+  INSTALL libsubcmd_headers
+make[4]: Nothing to be done for 'modules_prepare'.
+make[3]: Leaving directory '/mnt/data/projects/kernelet/prototype/.build/linux-6.12'
+-rw-r--r-- 1 plucky plucky 2323456 Nov 13 20:07 /mnt/data/projects/kernelet/prototype/.build/linux-6.12/arch/x86/boot/bzImage
+make[2]: Leaving directory '/mnt/data/projects/kernelet/prototype'
+make KLET_KERNEL=mem stage-mem initramfs
+make[2]: Entering directory '/mnt/data/projects/kernelet/prototype'
+make module DIR=linux/endovisor
+make[3]: Entering directory '/mnt/data/projects/kernelet/prototype'
+make -C /mnt/data/projects/kernelet/prototype/.build/linux-6.12 ARCH=x86_64 -j16 M=/mnt/data/projects/kernelet/prototype/linux/endovisor modules
+make[4]: Entering directory '/mnt/data/projects/kernelet/prototype/.build/linux-6.12'
+make[4]: Leaving directory '/mnt/data/projects/kernelet/prototype/.build/linux-6.12'
+make[3]: Leaving directory '/mnt/data/projects/kernelet/prototype'
+endovisor.ko built; it carries no kernelet image
+cd /mnt/data/projects/kernelet/prototype && CARGO_TARGET_DIR=/mnt/data/projects/kernelet/prototype/.build/cargo RUSTFLAGS="-C relocation-model=pic -C code-model=small -C no-redzone=y -C panic=abort -C force-unwind-tables=no" \
+  OSTD_TASK_STACK_SIZE_IN_PAGES=64 \
+  cargo build --offline --release -p mem \
+    --target x86_64-unknown-none -Zbuild-std=core,alloc,compiler_builtins -Zbuild-std-features=compiler-builtins-mem || \
+  { echo "image: the build failed; it is --offline, so if a crate is missing, run make crates (once, with a network)"; exit 1; }
+    Finished `release` profile [optimized] target(s) in 0.04s
+ld -pie --no-dynamic-linker --no-undefined --gc-sections --exclude-libs ALL \
+  --build-id=none -z text -z noexecstack -z max-page-size=0x1000 \
+  -T linux/endovisor/kernelet.lds -u kernelet_entry_table -o /mnt/data/projects/kernelet/prototype/.build/mem.image \
+  --whole-archive /mnt/data/projects/kernelet/prototype/.build/cargo/x86_64-unknown-none/release/libmem.a --no-whole-archive
+python3 tools/check-image.py /mnt/data/projects/kernelet/prototype/.build/mem.image
+image: /mnt/data/projects/kernelet/prototype/.build/mem.image: ET_DYN, 3 load segments, 666 RELATIVE relocations, 285008 bytes
+gcc -static -O2 -Wall -Wextra -I linux/endovisor/uapi -o /mnt/data/projects/kernelet/prototype/.build/holder host/runtime/holder.c host/runtime/sandbox.c
+gcc -static -O2 -Wall -Wextra -I linux/endovisor/uapi -o /mnt/data/projects/kernelet/prototype/.build/run-test host/runtime/run-test.c
+gcc -static -O2 -Wall -Wextra -I linux/endovisor/uapi -o /mnt/data/projects/kernelet/prototype/.build/yield-rival host/runtime/yield-rival.c
+gcc -static -O2 -Wall -Wextra -I linux/endovisor/uapi -o /mnt/data/projects/kernelet/prototype/.build/uapi-check host/runtime/uapi-check.c host/runtime/sandbox.c
+gcc -static -O2 -Wall -Wextra -I linux/endovisor/uapi -o /mnt/data/projects/kernelet/prototype/.build/run-pie host/runtime/run-pie.c host/runtime/sandbox.c
+gcc -static -O2 -Wall -Wextra -I linux/endovisor/uapi -o /mnt/data/projects/kernelet/prototype/.build/run-sched host/runtime/run-sched.c host/runtime/sandbox.c -lpthread
+gcc -static -O2 -Wall -Wextra -I linux/endovisor/uapi -o /mnt/data/projects/kernelet/prototype/.build/run-mem host/runtime/run-mem.c host/runtime/sandbox.c
+host/runtime/run-mem.c: In function ‘preempt_with_competitor’:
+host/runtime/run-mem.c:229:40: warning: variable ‘x’ set but not used [-Wunused-but-set-variable=]
+  229 |                 volatile unsigned long x = 0;
+      |                                        ^
+mkdir -p /mnt/data/projects/kernelet/prototype/.build/stage/modules /mnt/data/projects/kernelet/prototype/.build/stage/tests
+rm -f /mnt/data/projects/kernelet/prototype/.build/stage/tests/* /mnt/data/projects/kernelet/prototype/.build/stage/*.klet /mnt/data/projects/kernelet/prototype/.build/stage/*.image /mnt/data/projects/kernelet/prototype/.build/stage/*.console /mnt/data/projects/kernelet/prototype/.build/stage/*.log
+rm -f /mnt/data/projects/kernelet/prototype/.build/stage/holder /mnt/data/projects/kernelet/prototype/.build/stage/yield-rival /mnt/data/projects/kernelet/prototype/.build/stage/uapi-check
+cp /mnt/data/projects/kernelet/prototype/linux/endovisor/endovisor.ko /mnt/data/projects/kernelet/prototype/.build/stage/modules/
+printf 'endovisor.ko \n' > /mnt/data/projects/kernelet/prototype/.build/stage/modules/order
+cp /mnt/data/projects/kernelet/prototype/.build/mem.image /mnt/data/projects/kernelet/prototype/.build/stage/mem.image
+cp /mnt/data/projects/kernelet/prototype/.build/holder /mnt/data/projects/kernelet/prototype/.build/stage/holder
+cp /mnt/data/projects/kernelet/prototype/.build/run-mem /mnt/data/projects/kernelet/prototype/.build/stage/tests/10-mem
+chmod +x /mnt/data/projects/kernelet/prototype/.build/stage/tests/10-mem
+printf '%s\n%s\n%s\n' 'plain' '1' 'mode=perf rounds=8 rounds9=3' > /mnt/data/projects/kernelet/prototype/.build/stage/tests/10-mem.arg
+staged: endovisor.ko , /mem.image mode=perf rounds=8 rounds9=3
+gcc -static -O2 -Wall -Wextra -o /mnt/data/projects/kernelet/prototype/.build/init host/initramfs/init.c
+mkdir -p /mnt/data/projects/kernelet/prototype/.build/stage/dev /mnt/data/projects/kernelet/prototype/.build/stage/proc /mnt/data/projects/kernelet/prototype/.build/stage/sys /mnt/data/projects/kernelet/prototype/.build/stage/modules /mnt/data/projects/kernelet/prototype/.build/stage/tests
+rm -f /mnt/data/projects/kernelet/prototype/.build/stage/dev/console
+cp /mnt/data/projects/kernelet/prototype/.build/init /mnt/data/projects/kernelet/prototype/.build/stage/init
+cd /mnt/data/projects/kernelet/prototype/.build/stage && { \
+  find . -mindepth 1 -type d -printf 'dir /%P %m 0 0\n'; \
+  echo 'nod /dev/console 0600 0 0 c 5 1'; \
+  find . -type f -printf 'file /%P /mnt/data/projects/kernelet/prototype/.build/stage/%P %m 0 0\n'; \
+} > /mnt/data/projects/kernelet/prototype/.build/initramfs.list
+/mnt/data/projects/kernelet/prototype/.build/linux-6.12/usr/gen_init_cpio /mnt/data/projects/kernelet/prototype/.build/initramfs.list | gzip -9 > /mnt/data/projects/kernelet/prototype/.build/initramfs.cpio.gz
+-rw-r--r-- 1 plucky plucky 1377211 Nov 13 23:52 /mnt/data/projects/kernelet/prototype/.build/initramfs.cpio.gz
+make[2]: Leaving directory '/mnt/data/projects/kernelet/prototype'
+make run TIMEOUT=300
+make[2]: Entering directory '/mnt/data/projects/kernelet/prototype'
+gcc -static -O2 -Wall -Wextra -o /mnt/data/projects/kernelet/prototype/.build/init host/initramfs/init.c
+mkdir -p /mnt/data/projects/kernelet/prototype/.build/stage/dev /mnt/data/projects/kernelet/prototype/.build/stage/proc /mnt/data/projects/kernelet/prototype/.build/stage/sys /mnt/data/projects/kernelet/prototype/.build/stage/modules /mnt/data/projects/kernelet/prototype/.build/stage/tests
+rm -f /mnt/data/projects/kernelet/prototype/.build/stage/dev/console
+cp /mnt/data/projects/kernelet/prototype/.build/init /mnt/data/projects/kernelet/prototype/.build/stage/init
+cd /mnt/data/projects/kernelet/prototype/.build/stage && { \
+  find . -mindepth 1 -type d -printf 'dir /%P %m 0 0\n'; \
+  echo 'nod /dev/console 0600 0 0 c 5 1'; \
+  find . -type f -printf 'file /%P /mnt/data/projects/kernelet/prototype/.build/stage/%P %m 0 0\n'; \
+} > /mnt/data/projects/kernelet/prototype/.build/initramfs.list
+/mnt/data/projects/kernelet/prototype/.build/linux-6.12/usr/gen_init_cpio /mnt/data/projects/kernelet/prototype/.build/initramfs.list | gzip -9 > /mnt/data/projects/kernelet/prototype/.build/initramfs.cpio.gz
+-rw-r--r-- 1 plucky plucky 1377211 Nov 13 23:52 /mnt/data/projects/kernelet/prototype/.build/initramfs.cpio.gz
+rm -f /mnt/data/projects/kernelet/prototype/.build/serial.log
+booting with qemu-system-x86_64: QEMU emulator version 11.1.3
+booting (timeout 300s), serial -> /mnt/data/projects/kernelet/prototype/.build/serial.log
+qemu exit status: 0
+make[2]: Leaving directory '/mnt/data/projects/kernelet/prototype'
+cp /mnt/data/projects/kernelet/prototype/.build/serial.log /mnt/data/projects/kernelet/prototype/.build/mem/perf-4.log
+make[1]: Leaving directory '/mnt/data/projects/kernelet/prototype'
+  boot perf-4 done
+make[1]: Entering directory '/mnt/data/projects/kernelet/prototype'
+mkdir -p /mnt/data/projects/kernelet/prototype/.build/mem
+make KLET_KERNEL=mem linux
+make[2]: Entering directory '/mnt/data/projects/kernelet/prototype'
+make -C /mnt/data/projects/kernelet/prototype/.build/linux-6.12 ARCH=x86_64 -j16 bzImage
+make[3]: Entering directory '/mnt/data/projects/kernelet/prototype/.build/linux-6.12'
+mkdir -p /mnt/data/projects/kernelet/prototype/.build/linux-6.12/tools/objtool && make O=/mnt/data/projects/kernelet/prototype/.build/linux-6.12 subdir=tools/objtool --no-print-directory -C objtool 
+  CALL    scripts/checksyscalls.sh
+  INSTALL libsubcmd_headers
+Kernel: arch/x86/boot/bzImage is ready  (#1)
+make[3]: Leaving directory '/mnt/data/projects/kernelet/prototype/.build/linux-6.12'
+make -C /mnt/data/projects/kernelet/prototype/.build/linux-6.12 ARCH=x86_64 -j16 modules modules_prepare
+make[3]: Entering directory '/mnt/data/projects/kernelet/prototype/.build/linux-6.12'
+mkdir -p /mnt/data/projects/kernelet/prototype/.build/linux-6.12/tools/objtool && make O=/mnt/data/projects/kernelet/prototype/.build/linux-6.12 subdir=tools/objtool --no-print-directory -C objtool 
+  CALL    scripts/checksyscalls.sh
+  INSTALL libsubcmd_headers
+make[4]: Nothing to be done for 'modules_prepare'.
+make[3]: Leaving directory '/mnt/data/projects/kernelet/prototype/.build/linux-6.12'
+-rw-r--r-- 1 plucky plucky 2323456 Nov 13 20:07 /mnt/data/projects/kernelet/prototype/.build/linux-6.12/arch/x86/boot/bzImage
+make[2]: Leaving directory '/mnt/data/projects/kernelet/prototype'
+make KLET_KERNEL=mem stage-mem initramfs
+make[2]: Entering directory '/mnt/data/projects/kernelet/prototype'
+make module DIR=linux/endovisor
+make[3]: Entering directory '/mnt/data/projects/kernelet/prototype'
+make -C /mnt/data/projects/kernelet/prototype/.build/linux-6.12 ARCH=x86_64 -j16 M=/mnt/data/projects/kernelet/prototype/linux/endovisor modules
+make[4]: Entering directory '/mnt/data/projects/kernelet/prototype/.build/linux-6.12'
+make[4]: Leaving directory '/mnt/data/projects/kernelet/prototype/.build/linux-6.12'
+make[3]: Leaving directory '/mnt/data/projects/kernelet/prototype'
+endovisor.ko built; it carries no kernelet image
+cd /mnt/data/projects/kernelet/prototype && CARGO_TARGET_DIR=/mnt/data/projects/kernelet/prototype/.build/cargo RUSTFLAGS="-C relocation-model=pic -C code-model=small -C no-redzone=y -C panic=abort -C force-unwind-tables=no" \
+  OSTD_TASK_STACK_SIZE_IN_PAGES=64 \
+  cargo build --offline --release -p mem \
+    --target x86_64-unknown-none -Zbuild-std=core,alloc,compiler_builtins -Zbuild-std-features=compiler-builtins-mem || \
+  { echo "image: the build failed; it is --offline, so if a crate is missing, run make crates (once, with a network)"; exit 1; }
+    Finished `release` profile [optimized] target(s) in 0.04s
+ld -pie --no-dynamic-linker --no-undefined --gc-sections --exclude-libs ALL \
+  --build-id=none -z text -z noexecstack -z max-page-size=0x1000 \
+  -T linux/endovisor/kernelet.lds -u kernelet_entry_table -o /mnt/data/projects/kernelet/prototype/.build/mem.image \
+  --whole-archive /mnt/data/projects/kernelet/prototype/.build/cargo/x86_64-unknown-none/release/libmem.a --no-whole-archive
+python3 tools/check-image.py /mnt/data/projects/kernelet/prototype/.build/mem.image
+image: /mnt/data/projects/kernelet/prototype/.build/mem.image: ET_DYN, 3 load segments, 666 RELATIVE relocations, 285008 bytes
+gcc -static -O2 -Wall -Wextra -I linux/endovisor/uapi -o /mnt/data/projects/kernelet/prototype/.build/holder host/runtime/holder.c host/runtime/sandbox.c
+gcc -static -O2 -Wall -Wextra -I linux/endovisor/uapi -o /mnt/data/projects/kernelet/prototype/.build/run-test host/runtime/run-test.c
+gcc -static -O2 -Wall -Wextra -I linux/endovisor/uapi -o /mnt/data/projects/kernelet/prototype/.build/yield-rival host/runtime/yield-rival.c
+gcc -static -O2 -Wall -Wextra -I linux/endovisor/uapi -o /mnt/data/projects/kernelet/prototype/.build/uapi-check host/runtime/uapi-check.c host/runtime/sandbox.c
+gcc -static -O2 -Wall -Wextra -I linux/endovisor/uapi -o /mnt/data/projects/kernelet/prototype/.build/run-pie host/runtime/run-pie.c host/runtime/sandbox.c
+gcc -static -O2 -Wall -Wextra -I linux/endovisor/uapi -o /mnt/data/projects/kernelet/prototype/.build/run-sched host/runtime/run-sched.c host/runtime/sandbox.c -lpthread
+gcc -static -O2 -Wall -Wextra -I linux/endovisor/uapi -o /mnt/data/projects/kernelet/prototype/.build/run-mem host/runtime/run-mem.c host/runtime/sandbox.c
+host/runtime/run-mem.c: In function ‘preempt_with_competitor’:
+host/runtime/run-mem.c:229:40: warning: variable ‘x’ set but not used [-Wunused-but-set-variable=]
+  229 |                 volatile unsigned long x = 0;
+      |                                        ^
+mkdir -p /mnt/data/projects/kernelet/prototype/.build/stage/modules /mnt/data/projects/kernelet/prototype/.build/stage/tests
+rm -f /mnt/data/projects/kernelet/prototype/.build/stage/tests/* /mnt/data/projects/kernelet/prototype/.build/stage/*.klet /mnt/data/projects/kernelet/prototype/.build/stage/*.image /mnt/data/projects/kernelet/prototype/.build/stage/*.console /mnt/data/projects/kernelet/prototype/.build/stage/*.log
+rm -f /mnt/data/projects/kernelet/prototype/.build/stage/holder /mnt/data/projects/kernelet/prototype/.build/stage/yield-rival /mnt/data/projects/kernelet/prototype/.build/stage/uapi-check
+cp /mnt/data/projects/kernelet/prototype/linux/endovisor/endovisor.ko /mnt/data/projects/kernelet/prototype/.build/stage/modules/
+printf 'endovisor.ko \n' > /mnt/data/projects/kernelet/prototype/.build/stage/modules/order
+cp /mnt/data/projects/kernelet/prototype/.build/mem.image /mnt/data/projects/kernelet/prototype/.build/stage/mem.image
+cp /mnt/data/projects/kernelet/prototype/.build/holder /mnt/data/projects/kernelet/prototype/.build/stage/holder
+cp /mnt/data/projects/kernelet/prototype/.build/run-mem /mnt/data/projects/kernelet/prototype/.build/stage/tests/10-mem
+chmod +x /mnt/data/projects/kernelet/prototype/.build/stage/tests/10-mem
+printf '%s\n%s\n%s\n' 'plain' '1' 'mode=perf rounds=8 rounds9=3' > /mnt/data/projects/kernelet/prototype/.build/stage/tests/10-mem.arg
+staged: endovisor.ko , /mem.image mode=perf rounds=8 rounds9=3
+gcc -static -O2 -Wall -Wextra -o /mnt/data/projects/kernelet/prototype/.build/init host/initramfs/init.c
+mkdir -p /mnt/data/projects/kernelet/prototype/.build/stage/dev /mnt/data/projects/kernelet/prototype/.build/stage/proc /mnt/data/projects/kernelet/prototype/.build/stage/sys /mnt/data/projects/kernelet/prototype/.build/stage/modules /mnt/data/projects/kernelet/prototype/.build/stage/tests
+rm -f /mnt/data/projects/kernelet/prototype/.build/stage/dev/console
+cp /mnt/data/projects/kernelet/prototype/.build/init /mnt/data/projects/kernelet/prototype/.build/stage/init
+cd /mnt/data/projects/kernelet/prototype/.build/stage && { \
+  find . -mindepth 1 -type d -printf 'dir /%P %m 0 0\n'; \
+  echo 'nod /dev/console 0600 0 0 c 5 1'; \
+  find . -type f -printf 'file /%P /mnt/data/projects/kernelet/prototype/.build/stage/%P %m 0 0\n'; \
+} > /mnt/data/projects/kernelet/prototype/.build/initramfs.list
+/mnt/data/projects/kernelet/prototype/.build/linux-6.12/usr/gen_init_cpio /mnt/data/projects/kernelet/prototype/.build/initramfs.list | gzip -9 > /mnt/data/projects/kernelet/prototype/.build/initramfs.cpio.gz
+-rw-r--r-- 1 plucky plucky 1377209 Nov 13 23:53 /mnt/data/projects/kernelet/prototype/.build/initramfs.cpio.gz
+make[2]: Leaving directory '/mnt/data/projects/kernelet/prototype'
+make run TIMEOUT=300
+make[2]: Entering directory '/mnt/data/projects/kernelet/prototype'
+gcc -static -O2 -Wall -Wextra -o /mnt/data/projects/kernelet/prototype/.build/init host/initramfs/init.c
+mkdir -p /mnt/data/projects/kernelet/prototype/.build/stage/dev /mnt/data/projects/kernelet/prototype/.build/stage/proc /mnt/data/projects/kernelet/prototype/.build/stage/sys /mnt/data/projects/kernelet/prototype/.build/stage/modules /mnt/data/projects/kernelet/prototype/.build/stage/tests
+rm -f /mnt/data/projects/kernelet/prototype/.build/stage/dev/console
+cp /mnt/data/projects/kernelet/prototype/.build/init /mnt/data/projects/kernelet/prototype/.build/stage/init
+cd /mnt/data/projects/kernelet/prototype/.build/stage && { \
+  find . -mindepth 1 -type d -printf 'dir /%P %m 0 0\n'; \
+  echo 'nod /dev/console 0600 0 0 c 5 1'; \
+  find . -type f -printf 'file /%P /mnt/data/projects/kernelet/prototype/.build/stage/%P %m 0 0\n'; \
+} > /mnt/data/projects/kernelet/prototype/.build/initramfs.list
+/mnt/data/projects/kernelet/prototype/.build/linux-6.12/usr/gen_init_cpio /mnt/data/projects/kernelet/prototype/.build/initramfs.list | gzip -9 > /mnt/data/projects/kernelet/prototype/.build/initramfs.cpio.gz
+-rw-r--r-- 1 plucky plucky 1377205 Nov 13 23:53 /mnt/data/projects/kernelet/prototype/.build/initramfs.cpio.gz
+rm -f /mnt/data/projects/kernelet/prototype/.build/serial.log
+booting with qemu-system-x86_64: QEMU emulator version 11.1.3
+booting (timeout 300s), serial -> /mnt/data/projects/kernelet/prototype/.build/serial.log
+qemu exit status: 0
+make[2]: Leaving directory '/mnt/data/projects/kernelet/prototype'
+cp /mnt/data/projects/kernelet/prototype/.build/serial.log /mnt/data/projects/kernelet/prototype/.build/mem/perf-5.log
+make[1]: Leaving directory '/mnt/data/projects/kernelet/prototype'
+  boot perf-5 done
+  ok      boot perf-1
+  ok      boot perf-2
+  ok      boot perf-3
+  ok      boot perf-4
+  ok      boot perf-5
+TSC 3194216 kHz; 5 boot(s)
+
+| measurement | boots | median (cycles) | p99 median | p99 worst | median (ns) | p99 worst (ns) |
+|---|---:|---:|---:|---:|---:|---:|
+| first touch of a mapped page (per page) | 5 | 64 | 96 | 480 | 20 | 150 |
+| map, one page per call (per call) | 5 | 447 | 479 | 1184 | 140 | 371 |
+| map, 512 pages under one cursor (per page) | 5 | 472 | 605 | 1701 | 148 | 533 |
+| protect 2 MiB read-only + flush (per 512 pages) | 5 | 243808 | 289632 | 522848 | 76,328 | 163,686 |
+| read after protect (per page) | 5 | 64 | 64 | 128 | 20 | 40 |
+| copy 64 B out of tenant memory | 5 | 128 | 160 | 640 | 40 | 200 |
+| copy 4 KiB out of tenant memory | 5 | 3520 | 3616 | 7744 | 1,102 | 2,424 |
+| fork, 64 MiB mapped | 5 | 25069413 | 25580564 | 45221835 | 7,848,378 | 14,157,413 |
+| the child reads all 64 MiB | 5 | 1786240 | 1817152 | 2326848 | 559,211 | 728,457 |
+| fork + the child's reads | 5 | 26816901 | 27397716 | 47548683 | 8,395,456 | 14,885,870 |
+| the parent re-reads all 64 MiB after fork | 5 | 1777952 | 1854944 | 2362048 | 556,616 | 739,477 |
+| munmap of the 64 MiB | 5 | 872480 | 1049690 | 1672640 | 273,144 | 523,646 |
+
+  e6-first-touch: faults [0], pages [4096]
+  e6-protect: faults_on_reads [0], pages [4096]
+  e9: copied [16388], fork_maps [16388], fork_protects [16384, 16386], fork_flush_alls [1], child_read_faults [0], parent_reread_faults [0], munmapped [16384]
+make mem-perf: PASS

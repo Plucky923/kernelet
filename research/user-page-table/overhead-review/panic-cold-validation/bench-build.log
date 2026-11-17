@@ -1,0 +1,6 @@
+make: Entering directory '/mnt/data/projects/kernelet/poc/linux/bench'
+cc -O2 -Wall -Wextra -static -pthread -o /mnt/data/projects/kernelet/.panic-cold-validation-work/bench/bench_syscall_fpu bench_syscall_fpu.c
+cc -O2 -Wall -Wextra -static -pthread -o /mnt/data/projects/kernelet/.panic-cold-validation-work/bench/bench_mm bench_mm.c
+cc -O2 -Wall -Wextra -static -pthread -o /mnt/data/projects/kernelet/.panic-cold-validation-work/bench/test_mm_safety test_mm_safety.c
+cc -O2 -Wall -Wextra -static -pthread -o /mnt/data/projects/kernelet/.panic-cold-validation-work/bench/host_init host_init.c
+make: Leaving directory '/mnt/data/projects/kernelet/poc/linux/bench'

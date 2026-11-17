@@ -1,0 +1,783 @@
+diff --git i/book/src/SUMMARY.md w/book/src/SUMMARY.md
+index 83ad8bc..873ae06 100644
+--- i/book/src/SUMMARY.md
++++ w/book/src/SUMMARY.md
+@@ -25,3 +25,6 @@
+ - [Contributing a design proposal](design-proposals/README.md)
+ - [Design proposal template](design-proposals/template.md)
+ - [2026-11-08 TypedIO](design-proposals/2026-11-08-typed-io.md)
++- [2026-11-13 Direct page-table updates in vOSTD](design-proposals/2026-11-13-direct-page-table-updates-in-vostd.md)
++- [2026-11-16 Allocate the kernelet heap from the grant](design-proposals/2026-11-16-allocate-the-kernelet-heap-from-the-grant.md)
++- [2026-11-16 Principles of API virtualization](design-proposals/2026-11-16-principles-of-api-virtualization.md)
+diff --git i/prototype/linux/patches/0001-carrier-hooks.patch w/prototype/linux/patches/0001-carrier-hooks.patch
+index e46e8c9..5812579 100644
+--- i/prototype/linux/patches/0001-carrier-hooks.patch
++++ w/prototype/linux/patches/0001-carrier-hooks.patch
+@@ -1,24 +1,22 @@
+-kernelet: two carrier hooks in the generic entry layer, a task_struct pointer,
+-a syscall-work bit, a helper for changing a user task's address space, one for
+-allocating a tenant process's address space, and the two exports an endovisor
+-module needs that Linux does not already make: kernel_clone, and
+-flush_tlb_mm_range for the synchronous flush of vm_flush.
++kernelet: carrier entry/exception/fault hooks, per-CPU slot, user-return, FPU, and exports
+ 
+-And four exports for the endovisor's own image loader and its registration
+-of an image: set_memory_ro and set_memory_rox protect the shared PIE mappings,
+-set_memory_rw makes private data writable and restores direct-map permissions
+-before backing pages are freed, and modules_disabled is checked at registration.
++Adds carrier_event_hooks (on_syscall, on_resume, on_exception, on_kernel_fault, on_exit),
++task_struct->carrier_hooks, SYSCALL_WORK_KERNELET, kernelet_switch_mm,
++kernelet_attach_mm, kernelet_mm_alloc, kernelet_cpu_slot + kernelet_cpu_slot_gs_offset,
++kernelet_return_to_user, kernelet_fpu_{restore_carrier,sched_in,reset_carrier},
++and GPL symbol exports required by the endovisor (kernel_clone,
++flush_tlb_mm_range, set_memory_ro/rox/rw, modules_disabled, get_vm_area,
++vm_area_map_pages, vm_area_unmap_pages).
+ 
+ Signed-off-by: kernelet-in-Linux prototype <none@example.com>
+ ---
+ --- /dev/null
+ +++ b/include/linux/kernelet.h
+-@@ -0,0 +1,64 @@
++@@ -0,0 +1,114 @@
+ +/* SPDX-License-Identifier: GPL-2.0 */
+ +/*
+-+ * Carrier event hooks: the two places where a Linux task that carries a
+-+ * kernelet's virtual CPU (a "carrier") diverts out of the generic entry
+-+ * layer and into the endovisor.
+++ * Carrier event hooks divert entry handling and task exit to the endovisor
+++ * for a Linux task carrying a kernelet's virtual CPU (a "carrier").
+ + *
+ + * A carrier has a non-NULL current->carrier_hooks.  The pointer is
+ + * inherited by dup_task_struct() like every other task_struct field, so a
+@@ -28,7 +26,13 @@ Signed-off-by: kernelet-in-Linux prototype <none@example.com>
+ +#ifndef _LINUX_KERNELET_H
+ +#define _LINUX_KERNELET_H
+ +
+++#include <linux/compiler_attributes.h>
+++#include <linux/percpu.h>
+++#include <linux/types.h>
+++
+++struct mm_struct;
+ +struct pt_regs;
+++struct task_struct;
+ +
+ +struct carrier_event_hooks {
+ +	/*
+@@ -58,8 +62,50 @@ Signed-off-by: kernelet-in-Linux prototype <none@example.com>
+ +	 * them alone when it has nothing to do.
+ +	 */
+ +	void (*on_resume)(struct pt_regs *regs);
+++
+++	// Optional hook invoked on forwarded user-mode exceptions (`#DE`, `#DB`, `#BP`, `#OF`, `#UD`, `#SS`, `#GP`, `#PF`, `#MF`, `#AC`, `#XM`).
+++	//
+++	// Returns `true` if the kernelet consumed the exception, or `false` to fall back to Linux's normal trap/signal delivery.
+++	bool (*on_exception)(struct pt_regs *regs, unsigned int trapnr,
+++			     unsigned long error_code, unsigned long addr);
+++
+++	// Optional hook invoked on unrecovered kernel-mode `#PF` or `#GP` faults after `fixup_exception()` fails.
+++	//
+++	// Returns `true` if the kernelet fixed up `regs` (for example via its own `ex_table`), or `false` to proceed with Linux oops/die handling.
+++	bool (*on_kernel_fault)(struct pt_regs *regs, unsigned int trapnr,
+++				unsigned long error_code, unsigned long addr);
+++
+++	// Detaches carrier callbacks in the exiting task before its files close.
+++	// `current->mm` has already been released; this hook must not switch address spaces.
+++	void (*on_exit)(void);
+ +};
+ +
+++// Per-CPU identity slot for fast `%gs:`-relative lookup of the active kernelet and vCPU.
+++struct kernelet_cpu_slot {
+++	u16 kernelet;
+++	u16 vcpu;
+++	u32 generation;
+++	u64 _reserved;
+++};
+++
+++DECLARE_PER_CPU_ALIGNED(struct kernelet_cpu_slot, kernelet_cpu_slot);
+++
+++u32 kernelet_cpu_slot_gs_offset(void);
+++
+++// Completes Linux exit-to-user-mode work for `regs` and returns to Ring 3 via `SYSRET` or `IRET`.
+++void kernelet_return_to_user(struct pt_regs *regs, bool from_syscall) __noreturn;
+++
+++// Restores a carrier task's lazy FPU register state if `TIF_NEED_FPU_LOAD` is set.
+++void kernelet_fpu_restore_carrier(void);
+++
+++// Restores a carrier task's FPU registers inside a preempt-notifier `sched_in` callback with IRQs off.
+++void kernelet_fpu_sched_in(void);
+++
+++// Reinitializes hardware FPU registers and marks `current->thread.fpu` active after a `#GP` fixup.
+++void kernelet_fpu_reset_carrier(void);
+++
+++extern void mmput_async(struct mm_struct *mm);
+++
+ +/*
+ + * Makes the current *user* task run in `mm`.  A carrier carries a virtual CPU
+ + * and runs many tenant threads, so its address space is not its own: it is the
+@@ -67,14 +113,17 @@ Signed-off-by: kernelet-in-Linux prototype <none@example.com>
+ + * virtual CPU, and it changes.  Consumes one mm_users reference on `mm` and
+ + * returns the mm the task was in, whose reference the caller must drop.
+ + */
+-+struct mm_struct;
+ +struct mm_struct *kernelet_switch_mm(struct mm_struct *mm);
+ +
+++// Commits a direct carrier attach, releasing registrations tied to its old userspace.
+++// The caller must finish all fallible preparation before calling this helper.
+++// Consumes the new `mm` reference and returns the old reference as `kernelet_switch_mm` does.
+++struct mm_struct *kernelet_attach_mm(struct mm_struct *mm);
+++
+ +/*
+ + * kernelet_mm_alloc - mm_alloc() with @owner as its owner, added once to the
+ + * memory cgroup's multi-generational LRU list; a tenant process's mm.
+ + */
+-+struct task_struct;
+ +struct mm_struct *kernelet_mm_alloc(struct task_struct *owner);
+ +
+ +#endif /* _LINUX_KERNELET_H */
+@@ -120,7 +169,15 @@ Signed-off-by: kernelet-in-Linux prototype <none@example.com>
+  #include <asm/thread_info.h>
+ --- a/include/linux/entry-common.h
+ +++ b/include/linux/entry-common.h
+-@@ -41,12 +41,19 @@
++@@ -12,6 +12,7 @@
++ #include <linux/resume_user_mode.h>
++ #include <linux/tick.h>
++ #include <linux/kmsan.h>
+++#include <linux/kernelet.h>
++ 
++ #include <asm/entry-common.h>
++ 
++@@ -41,12 +42,19 @@
+  # define ARCH_SYSCALL_WORK_EXIT		(0)
+  #endif
+  
+@@ -140,6 +197,27 @@ Signed-off-by: kernelet-in-Linux prototype <none@example.com>
+  				 ARCH_SYSCALL_WORK_ENTER)
+  #define SYSCALL_WORK_EXIT	(SYSCALL_WORK_SYSCALL_TRACEPOINT |	\
+  				 SYSCALL_WORK_SYSCALL_TRACE |		\
++@@ -164,8 +172,19 @@
++ {
++ 	unsigned long work = READ_ONCE(current_thread_info()->syscall_work);
++ 
++-	if (work & SYSCALL_WORK_ENTER)
+++	if (work & SYSCALL_WORK_ENTER) {
+++#ifdef CONFIG_KERNELET
+++		// Fast path when only `SYSCALL_WORK_KERNELET` is set (no seccomp, ptrace, or audit).
+++		if (work == SYSCALL_WORK_KERNELET) {
+++			if (current->carrier_hooks &&
+++			    current->carrier_hooks->on_syscall &&
+++			    current->carrier_hooks->on_syscall(regs))
+++				return -1L;
+++			return syscall;
+++		}
+++#endif
++ 		syscall = syscall_trace_enter(regs, syscall, work);
+++	}
++ 
++ 	return syscall;
++ }
+ --- a/kernel/entry/common.c
+ +++ b/kernel/entry/common.c
+ @@ -9,6 +9,7 @@
+@@ -150,7 +228,7 @@ Signed-off-by: kernelet-in-Linux prototype <none@example.com>
+  
+  #include "common.h"
+  
+-@@ -54,6 +55,19 @@
++@@ -54,6 +55,21 @@
+  			return ret;
+  	}
+  
+@@ -162,7 +240,9 @@ Signed-off-by: kernelet-in-Linux prototype <none@example.com>
+ +	 * call never becomes a Linux system call at all.
+ +	 */
+ +	if (work & SYSCALL_WORK_KERNELET) {
+-+		if (current->carrier_hooks->on_syscall(regs))
+++		if (current->carrier_hooks &&
+++		    current->carrier_hooks->on_syscall &&
+++		    current->carrier_hooks->on_syscall(regs))
+ +			return -1L;
+ +	}
+ +#endif
+@@ -170,7 +250,7 @@ Signed-off-by: kernelet-in-Linux prototype <none@example.com>
+  	/* Either of the above might have changed the syscall number */
+  	syscall = syscall_get_nr(current, regs);
+  
+-@@ -98,6 +112,30 @@
++@@ -98,6 +114,31 @@
+  
+  		local_irq_enable_exit_to_user(ti_work);
+  
+@@ -194,7 +274,8 @@ Signed-off-by: kernelet-in-Linux prototype <none@example.com>
+ +				resume_user_mode_work(regs);
+ +				ti_work &= ~_TIF_NOTIFY_RESUME;
+ +			}
+-+			current->carrier_hooks->on_resume(regs);
+++			if (current->carrier_hooks->on_resume)
+++				current->carrier_hooks->on_resume(regs);
+ +		}
+ +#endif
+ +
+@@ -298,7 +379,44 @@ Signed-off-by: kernelet-in-Linux prototype <none@example.com>
+  static inline void __mmput(struct mm_struct *mm)
+  {
+  	VM_BUG_ON(atomic_read(&mm->mm_users));
+-@@ -2892,6 +2973,10 @@
++@@ -1646,6 +1727,36 @@
++ 	futex_exec_release(tsk);
++ 	mm_release(tsk, mm);
++ }
+++
+++#ifdef CONFIG_KERNELET
+++// Releases old userspace registrations once, before direct carrier execution.
+++// This is the attach commit point; failures after it must terminate the task.
+++struct mm_struct *kernelet_attach_mm(struct mm_struct *mm)
+++{
+++	struct task_struct *tsk = current;
+++	struct mm_struct *old_mm;
+++
+++	io_uring_task_cancel();
+++#ifdef CONFIG_POSIX_TIMERS
+++	spin_lock_irq(&tsk->sighand->siglock);
+++	posix_cpu_timers_exit(tsk);
+++	spin_unlock_irq(&tsk->sighand->siglock);
+++	exit_itimers(tsk);
+++	flush_itimer_signals();
+++#endif
+++	user_events_execve(tsk);
+++	exec_mm_release(tsk, tsk->mm);
+++	clear_syscall_work_syscall_user_dispatch(tsk);
+++	sas_ss_reset(tsk);
+++	rseq_execve(tsk);
+++	flush_thread();
+++	old_mm = kernelet_switch_mm(mm);
+++	if (old_mm)
+++		mm_update_next_owner(old_mm);
+++	return old_mm;
+++}
+++EXPORT_SYMBOL_GPL(kernelet_attach_mm);
+++#endif
++ 
++ /**
++  * dup_mm() - duplicates an existing mm structure
++@@ -2892,6 +3003,10 @@
+  }
+  #endif
+  
+@@ -309,6 +427,406 @@ Signed-off-by: kernelet-in-Linux prototype <none@example.com>
+  #ifdef __ARCH_WANT_SYS_CLONE
+  #ifdef CONFIG_CLONE_BACKWARDS
+  SYSCALL_DEFINE5(clone, unsigned long, clone_flags, unsigned long, newsp,
++--- a/arch/x86/entry/common.c
+++++ b/arch/x86/entry/common.c
++@@ -20,6 +20,7 @@
++ #include <linux/syscalls.h>
++ #include <linux/uaccess.h>
++ #include <linux/init.h>
+++#include <linux/kernelet.h>
++ 
++ #ifdef CONFIG_XEN_PV
++ #include <xen/xen-ops.h>
++@@ -72,28 +73,13 @@
++ 	return false;
++ }
++ 
++-/* Returns true to return using SYSRET, or false to use IRET */
++-__visible noinstr bool do_syscall_64(struct pt_regs *regs, int nr)
+++/*
+++ * Check that the register state is valid for using SYSRET to exit
+++ * to userspace.  Otherwise use the slower but fully capable IRET
+++ * exit path.
+++ */
+++static __always_inline bool can_return_via_sysret(struct pt_regs *regs)
++ {
++-	add_random_kstack_offset();
++-	nr = syscall_enter_from_user_mode(regs, nr);
++-
++-	instrumentation_begin();
++-
++-	if (!do_syscall_x64(regs, nr) && !do_syscall_x32(regs, nr) && nr != -1) {
++-		/* Invalid system call, but still a system call. */
++-		regs->ax = __x64_sys_ni_syscall(regs);
++-	}
++-
++-	instrumentation_end();
++-	syscall_exit_to_user_mode(regs);
++-
++-	/*
++-	 * Check that the register state is valid for using SYSRET to exit
++-	 * to userspace.  Otherwise use the slower but fully capable IRET
++-	 * exit path.
++-	 */
++-
++ 	/* XEN PV guests always use the IRET path */
++ 	if (cpu_feature_enabled(X86_FEATURE_XENPV))
++ 		return false;
++@@ -128,6 +114,46 @@
++ 	/* Use SYSRET to exit to userspace */
++ 	return true;
++ }
+++
+++/* Returns true to return using SYSRET, or false to use IRET */
+++__visible noinstr bool do_syscall_64(struct pt_regs *regs, int nr)
+++{
+++	add_random_kstack_offset();
+++	nr = syscall_enter_from_user_mode(regs, nr);
+++
+++	instrumentation_begin();
+++
+++	if (!do_syscall_x64(regs, nr) && !do_syscall_x32(regs, nr) && nr != -1) {
+++		/* Invalid system call, but still a system call. */
+++		regs->ax = __x64_sys_ni_syscall(regs);
+++	}
+++
+++	instrumentation_end();
+++	syscall_exit_to_user_mode(regs);
+++
+++	return can_return_via_sysret(regs);
+++}
+++
+++#ifdef CONFIG_KERNELET
+++// Completes Linux exit-to-user-mode preparation for `regs` and reports whether `SYSRET` is valid.
+++//
+++// `from_syscall` selects `syscall_exit_to_user_mode()` (with IRQs enabled on entry);
+++// otherwise IRQs are disabled via `local_irq_disable_exit_to_user()` before `irqentry_exit_to_user_mode()`.
+++__visible noinstr bool kernelet_do_return_to_user(struct pt_regs *regs,
+++						    bool from_syscall)
+++{
+++	if (from_syscall) {
+++		syscall_exit_to_user_mode(regs);
+++	} else {
+++		instrumentation_begin();
+++		local_irq_disable_exit_to_user();
+++		instrumentation_end();
+++		irqentry_exit_to_user_mode(regs);
+++	}
+++
+++	return can_return_via_sysret(regs);
+++}
+++#endif
++ #endif
++ 
++ #if defined(CONFIG_X86_32) || defined(CONFIG_IA32_EMULATION)
++--- a/arch/x86/entry/entry_64.S
+++++ b/arch/x86/entry/entry_64.S
++@@ -134,7 +134,7 @@
++ 	 * We win! This label is here just for ease of understanding
++ 	 * perf profiles. Nothing jumps here.
++ 	 */
++-syscall_return_via_sysret:
+++SYM_INNER_LABEL(syscall_return_via_sysret, SYM_L_GLOBAL)
++ 	IBRS_EXIT
++ 	POP_REGS pop_rdi=0
++ 
++@@ -1552,3 +1552,21 @@
++ SYM_FUNC_END(clear_bhb_loop)
++ EXPORT_SYMBOL_GPL(clear_bhb_loop)
++ STACK_FRAME_NON_STANDARD(clear_bhb_loop)
+++
+++#ifdef CONFIG_KERNELET
+++.pushsection .text, "ax"
+++SYM_FUNC_START(kernelet_return_to_user)
+++	UNWIND_HINT_FUNC
+++	movq	%rdi, %rsp
+++	UNWIND_HINT_REGS
+++	movzbl	%sil, %esi
+++	call	kernelet_do_return_to_user
+++
+++	ALTERNATIVE "testb %al, %al; jz swapgs_restore_regs_and_return_to_usermode", \
+++		"jmp swapgs_restore_regs_and_return_to_usermode", X86_FEATURE_XENPV
+++
+++	jmp	syscall_return_via_sysret
+++SYM_FUNC_END(kernelet_return_to_user)
+++EXPORT_SYMBOL_GPL(kernelet_return_to_user)
+++.popsection
+++#endif
++--- a/arch/x86/kernel/cpu/common.c
+++++ b/arch/x86/kernel/cpu/common.c
++@@ -26,6 +26,7 @@
++ #include <linux/pgtable.h>
++ #include <linux/stackprotector.h>
++ #include <linux/utsname.h>
+++#include <linux/kernelet.h>
++ 
++ #include <asm/alternative.h>
++ #include <asm/cmdline.h>
++@@ -2017,6 +2018,23 @@
++ EXPORT_PER_CPU_SYMBOL(pcpu_hot);
++ EXPORT_PER_CPU_SYMBOL(const_pcpu_hot);
++ 
+++#ifdef CONFIG_KERNELET
+++// Per-CPU identity slot written by the endovisor on carrier entry/exit and read via `%gs:`.
+++DEFINE_PER_CPU_ALIGNED(struct kernelet_cpu_slot, kernelet_cpu_slot) = {
+++	.kernelet = U16_MAX,
+++	.vcpu = U16_MAX,
+++};
+++EXPORT_PER_CPU_SYMBOL_GPL(kernelet_cpu_slot);
+++
+++// Returns the `%gs:`-relative offset of `kernelet_cpu_slot`.
+++u32 kernelet_cpu_slot_gs_offset(void)
+++{
+++	return (u32)((unsigned long)&kernelet_cpu_slot -
+++		     (unsigned long)__per_cpu_start);
+++}
+++EXPORT_SYMBOL_GPL(kernelet_cpu_slot_gs_offset);
+++#endif
+++
++ #ifdef CONFIG_X86_64
++ DEFINE_PER_CPU_FIRST(struct fixed_percpu_data,
++ 		     fixed_percpu_data) __aligned(PAGE_SIZE) __visible;
++--- a/arch/x86/kernel/fpu/core.c
+++++ b/arch/x86/kernel/fpu/core.c
++@@ -19,6 +19,7 @@
++ #include <linux/hardirq.h>
++ #include <linux/pkeys.h>
++ #include <linux/vmalloc.h>
+++#include <linux/kernelet.h>
++ 
++ #include "context.h"
++ #include "internal.h"
++@@ -915,3 +916,53 @@
++ 		__this_cpu_write(fpu_fpregs_owner_ctx, NULL);
++ 	}
++ }
+++
+++#ifdef CONFIG_KERNELET
+++// Restores a carrier task's lazy FPU register state if `TIF_NEED_FPU_LOAD` is set.
+++void kernelet_fpu_restore_carrier(void)
+++{
+++	unsigned long flags;
+++
+++	if (!static_cpu_has(X86_FEATURE_FPU))
+++		return;
+++
+++	local_irq_save(flags);
+++	if (test_thread_flag(TIF_NEED_FPU_LOAD))
+++		fpregs_restore_userregs();
+++	local_irq_restore(flags);
+++}
+++EXPORT_SYMBOL_GPL(kernelet_fpu_restore_carrier);
+++
+++// Restores a carrier task's FPU registers inside a preempt-notifier `sched_in` callback.
+++//
+++// Assumes IRQs are already disabled by the scheduler context switch path.
+++void kernelet_fpu_sched_in(void)
+++{
+++	if (!static_cpu_has(X86_FEATURE_FPU))
+++		return;
+++
+++	if (test_thread_flag(TIF_NEED_FPU_LOAD))
+++		fpregs_restore_userregs();
+++}
+++EXPORT_SYMBOL_GPL(kernelet_fpu_sched_in);
+++
+++// Reinitializes hardware FPU registers and activates `current->thread.fpu` after a `#GP` fixup.
+++void kernelet_fpu_reset_carrier(void)
+++{
+++	struct fpu *fpu = &current->thread.fpu;
+++	unsigned long flags;
+++
+++	if (!static_cpu_has(X86_FEATURE_FPU))
+++		return;
+++
+++	local_irq_save(flags);
+++	if (xfeatures_mask_supervisor() &&
+++	    !fpregs_state_valid(fpu, smp_processor_id()))
+++		os_xrstor_supervisor(fpu->fpstate);
+++	fpstate_init_user(fpu->fpstate);
+++	restore_fpregs_from_init_fpstate(XFEATURE_MASK_USER_RESTORE);
+++	fpregs_mark_activate();
+++	local_irq_restore(flags);
+++}
+++EXPORT_SYMBOL_GPL(kernelet_fpu_reset_carrier);
+++#endif
++--- a/arch/x86/kernel/traps.c
+++++ b/arch/x86/kernel/traps.c
++@@ -43,6 +43,7 @@
++ #include <linux/atomic.h>
++ #include <linux/iommu.h>
++ #include <linux/ubsan.h>
+++#include <linux/kernelet.h>
++ 
++ #include <asm/stacktrace.h>
++ #include <asm/processor.h>
++@@ -206,6 +207,20 @@
++ }
++ NOKPROBE_SYMBOL(do_trap);
++ 
+++static __always_inline bool
+++kernelet_forward_user_exception(struct pt_regs *regs, unsigned int trapnr,
+++				unsigned long error_code, unsigned long addr)
+++{
+++#ifdef CONFIG_KERNELET
+++	if (unlikely(user_mode(regs) && current->carrier_hooks &&
+++		     current->carrier_hooks->on_exception &&
+++		     current->carrier_hooks->on_exception(regs, trapnr,
+++							  error_code, addr)))
+++		return true;
+++#endif
+++	return false;
+++}
+++
++ static void do_error_trap(struct pt_regs *regs, long error_code, char *str,
++ 	unsigned long trapnr, int signr, int sicode, void __user *addr)
++ {
++@@ -214,6 +229,12 @@
++ 	if (notify_die(DIE_TRAP, str, regs, error_code, trapnr, signr) !=
++ 			NOTIFY_STOP) {
++ 		cond_local_irq_enable(regs);
+++		if ((trapnr == X86_TRAP_DE || trapnr == X86_TRAP_OF ||
+++		     trapnr == X86_TRAP_UD || trapnr == X86_TRAP_SS) &&
+++		    kernelet_forward_user_exception(regs, trapnr, error_code, 0)) {
+++			cond_local_irq_disable(regs);
+++			return;
+++		}
++ 		do_trap(trapnr, signr, str, regs, error_code, sicode, addr);
++ 		cond_local_irq_disable(regs);
++ 	}
++@@ -355,6 +376,9 @@
++ 	if (handle_user_split_lock(regs, error_code))
++ 		goto out;
++ 
+++	if (kernelet_forward_user_exception(regs, X86_TRAP_AC, error_code, 0))
+++		goto out;
+++
++ 	do_trap(X86_TRAP_AC, SIGBUS, "alignment check", regs,
++ 		error_code, BUS_ADRALN, NULL);
++ 
++@@ -720,6 +744,10 @@
++ 		if (fixup_vdso_exception(regs, X86_TRAP_GP, error_code, 0))
++ 			goto exit;
++ 
+++		if (kernelet_forward_user_exception(regs, X86_TRAP_GP,
+++						    error_code, 0))
+++			goto exit;
+++
++ 		gp_user_force_sig_segv(regs, X86_TRAP_GP, error_code, desc);
++ 		goto exit;
++ 	}
++@@ -727,6 +755,15 @@
++ 	if (gp_try_fixup_and_notify(regs, X86_TRAP_GP, error_code, desc, 0))
++ 		goto exit;
++ 
+++#ifdef CONFIG_KERNELET
+++	// Forward unrecovered kernel `#GP` faults on carrier tasks to the kernelet `ex_table` handler before dying.
+++	if (unlikely(current->carrier_hooks &&
+++		     current->carrier_hooks->on_kernel_fault &&
+++		     current->carrier_hooks->on_kernel_fault(regs, X86_TRAP_GP,
+++							     error_code, 0)))
+++		goto exit;
+++#endif
+++
++ 	if (error_code)
++ 		snprintf(desc, sizeof(desc), "segment-related " GPFSTR);
++ 	else
++@@ -777,6 +814,10 @@
++ 		return;
++ 
++ 	cond_local_irq_enable(regs);
+++	if (kernelet_forward_user_exception(regs, X86_TRAP_BP, 0, 0)) {
+++		cond_local_irq_disable(regs);
+++		return;
+++	}
++ 	do_trap(X86_TRAP_BP, SIGTRAP, "int3", regs, 0, 0, NULL);
++ 	cond_local_irq_disable(regs);
++ }
++@@ -1124,6 +1165,9 @@
++ 	if (dr6 & DR_BUS_LOCK)
++ 		handle_bus_lock(regs);
++ 
+++	if (kernelet_forward_user_exception(regs, X86_TRAP_DB, 0, 0))
+++		goto out_irq;
+++
++ 	/* Add the virtual_dr6 bits for signals. */
++ 	dr6 |= current->thread.virtual_dr6;
++ 	if (dr6 & (DR_STEP | DR_TRAP_BITS) || icebp)
++@@ -1217,6 +1261,10 @@
++ 		goto exit;
++ 	}
++ 
+++	if ((trapnr == X86_TRAP_MF || trapnr == X86_TRAP_XF) &&
+++	    kernelet_forward_user_exception(regs, trapnr, 0, 0))
+++		goto exit;
+++
++ 	/*
++ 	 * Synchronize the FPU register state to the memory register state
++ 	 * if necessary. This allows the exception handler to inspect it.
++--- a/arch/x86/mm/fault.c
+++++ b/arch/x86/mm/fault.c
++@@ -21,6 +21,7 @@
++ #include <linux/mm_types.h>
++ #include <linux/mm.h>			/* find_and_lock_vma() */
++ #include <linux/vmalloc.h>
+++#include <linux/kernelet.h>
++ 
++ #include <asm/cpufeature.h>		/* boot_cpu_has, ...		*/
++ #include <asm/traps.h>			/* dotraplinkage, ...		*/
++@@ -728,6 +729,15 @@
++ 	if (fixup_exception(regs, X86_TRAP_PF, error_code, address))
++ 		return;
++ 
+++#ifdef CONFIG_KERNELET
+++	// Forward unrecovered kernel `#PF` faults on carrier tasks to the kernelet `ex_table` handler before oopsing.
+++	if (unlikely(current->carrier_hooks &&
+++		     current->carrier_hooks->on_kernel_fault &&
+++		     current->carrier_hooks->on_kernel_fault(regs, X86_TRAP_PF,
+++							     error_code, address)))
+++		return;
+++#endif
+++
++ 	/*
++ 	 * AMD erratum #91 manifests as a spurious page fault on a PREFETCH
++ 	 * instruction.
++@@ -1145,6 +1155,22 @@
++ 	 */
++ 	WARN_ON_ONCE(hw_error_code & X86_PF_PK);
++ 
+++#ifdef CONFIG_KERNELET
+++	if (unlikely(user_mode(regs) && current->carrier_hooks &&
+++		     current->carrier_hooks->on_exception)) {
+++		unsigned long error_code = hw_error_code;
+++		bool handled;
+++
+++		sanitize_error_code(address, &error_code);
+++		cond_local_irq_enable(regs);
+++		handled = current->carrier_hooks->on_exception(regs, X86_TRAP_PF,
+++								 error_code, address);
+++		cond_local_irq_disable(regs);
+++		if (handled)
+++			return;
+++	}
+++#endif
+++
++ #ifdef CONFIG_X86_32
++ 	/*
++ 	 * We can fault-in kernel-space virtual memory on-demand. The
++@@ -1284,6 +1310,14 @@
++ 
++ 	perf_sw_event(PERF_COUNT_SW_PAGE_FAULTS, 1, regs, address);
++ 
+++#ifdef CONFIG_KERNELET
+++	if (unlikely(user_mode(regs) && tsk->carrier_hooks &&
+++		     tsk->carrier_hooks->on_exception &&
+++		     tsk->carrier_hooks->on_exception(regs, X86_TRAP_PF,
+++						      error_code, address)))
+++		return;
+++#endif
+++
++ 	/*
++ 	 * Read-only permissions can not be expressed in shadow stack PTEs.
++ 	 * Treat all shadow stack accesses as WRITE faults. This ensures
+ --- a/arch/x86/mm/tlb.c
+ +++ b/arch/x86/mm/tlb.c
+ @@ -1033,6 +1033,9 @@
+@@ -321,6 +839,30 @@ Signed-off-by: kernelet-in-Linux prototype <none@example.com>
+  
+  
+  static void do_flush_tlb_all(void *info)
++--- a/arch/x86/mm/pat/set_memory.c
+++++ b/arch/x86/mm/pat/set_memory.c
++@@ -2114,6 +2114,7 @@
++ {
++ 	return change_page_attr_clear(&addr, numpages, __pgprot(_PAGE_RW | _PAGE_DIRTY), 0);
++ }
+++EXPORT_SYMBOL_GPL(set_memory_ro);
++ 
++ int set_memory_rox(unsigned long addr, int numpages)
++ {
++@@ -2124,11 +2125,13 @@
++ 
++ 	return change_page_attr_clear(&addr, numpages, clr, 0);
++ }
+++EXPORT_SYMBOL_GPL(set_memory_rox);
++ 
++ int set_memory_rw(unsigned long addr, int numpages)
++ {
++ 	return change_page_attr_set(&addr, numpages, __pgprot(_PAGE_RW), 0);
++ }
+++EXPORT_SYMBOL_GPL(set_memory_rw);
++ 
++ int set_memory_np(unsigned long addr, int numpages)
++ {
+ --- a/init/Kconfig
+ +++ b/init/Kconfig
+ @@ -1992,6 +1992,20 @@
+@@ -344,20 +886,6 @@ Signed-off-by: kernelet-in-Linux prototype <none@example.com>
+  endmenu		# General setup
+  
+  source "arch/Kconfig"
+---- a/arch/x86/mm/pat/set_memory.c
+-+++ b/arch/x86/mm/pat/set_memory.c
+-@@ -2116,0 +2117 @@
+-+EXPORT_SYMBOL_GPL(set_memory_ro);
+-@@ -2124,6 +2125,7 @@
+- 
+- 	return change_page_attr_clear(&addr, numpages, clr, 0);
+- }
+-+EXPORT_SYMBOL_GPL(set_memory_rox);
+- 
+- int set_memory_rw(unsigned long addr, int numpages)
+- {
+-@@ -2131,0 +2134 @@
+-+EXPORT_SYMBOL_GPL(set_memory_rw);
+ --- a/kernel/module/main.c
+ +++ b/kernel/module/main.c
+ @@ -128,6 +128,7 @@
+@@ -368,3 +896,57 @@ Signed-off-by: kernelet-in-Linux prototype <none@example.com>
+  
+  /* Waiting for a module to finish initializing? */
+  static DECLARE_WAIT_QUEUE_HEAD(module_wq);
++--- a/mm/vmalloc.c
+++++ b/mm/vmalloc.c
++@@ -699,6 +699,9 @@
++ 
++ 	return vmap_pages_range(start, end, PAGE_KERNEL, pages, PAGE_SHIFT);
++ }
+++#ifdef CONFIG_KERNELET
+++EXPORT_SYMBOL_GPL(vm_area_map_pages);
+++#endif
++ 
++ /**
++  * vm_area_unmap_pages - unmap pages inside given sparse vm_area
++@@ -714,6 +717,9 @@
++ 
++ 	vunmap_range(start, end);
++ }
+++#ifdef CONFIG_KERNELET
+++EXPORT_SYMBOL_GPL(vm_area_unmap_pages);
+++#endif
++ 
++ int is_vmalloc_or_module_addr(const void *x)
++ {
++@@ -3160,6 +3166,9 @@
++ 				  NUMA_NO_NODE, GFP_KERNEL,
++ 				  __builtin_return_address(0));
++ }
+++#ifdef CONFIG_KERNELET
+++EXPORT_SYMBOL_GPL(get_vm_area);
+++#endif
++ 
++ struct vm_struct *get_vm_area_caller(unsigned long size, unsigned long flags,
++ 				const void *caller)
++--- a/kernel/exit.c
+++++ b/kernel/exit.c
++@@ -15,6 +15,7 @@
++ #include <linux/sched/cputime.h>
++ #include <linux/interrupt.h>
++ #include <linux/module.h>
+++#include <linux/kernelet.h>
++ #include <linux/capability.h>
++ #include <linux/completion.h>
++ #include <linux/personality.h>
++@@ -924,6 +925,11 @@
++ 	taskstats_exit(tsk, group_dead);
++ 
++ 	exit_mm();
++ 
+++#ifdef CONFIG_KERNELET
+++	if (current->carrier_hooks && current->carrier_hooks->on_exit)
+++		current->carrier_hooks->on_exit();
+++#endif
+++
++ 	if (group_dead)
++ 		acct_process();

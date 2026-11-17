@@ -1,0 +1,38 @@
+{
+  "started_utc": "2026-11-17T08:00:50.374637+00:00",
+  "command": [
+    "qemu-system-x86_64",
+    "-enable-kvm",
+    "-cpu",
+    "host",
+    "-smp",
+    "2",
+    "-m",
+    "1024M",
+    "-kernel",
+    "/mnt/data/projects/kernelet/prototype/.build/linux-6.12/arch/x86/boot/bzImage",
+    "-initrd",
+    "/mnt/data/projects/kernelet/.panic-cold-validation-work/host-release.cpio.gz",
+    "-append",
+    "console=ttyS0 panic=-1 nokaslr mitigations=off poc_mode=poc-syscall poc_pt_mode=direct poc_vcpus=2 poc_grant_mb=256 poc_kill_ms=100",
+    "-display",
+    "none",
+    "-serial",
+    "stdio",
+    "-monitor",
+    "none",
+    "-no-reboot",
+    "-nic",
+    "none"
+  ],
+  "memlock_soft": 0,
+  "qemu_exit_code": 0,
+  "checks": {
+    "qemu_exit_zero": true,
+    "host_completed": true,
+    "guest_results": true,
+    "carrier_exit": true
+  },
+  "results": {},
+  "carrier_exit": "RUN_POC exit_kind=killed exit_code=9 grant_create_us=27059 exit_\u001b[38;2;33;54;245m|\u001b[0m \u001b[38;2;37;64;245m'\u001b[0m \u001b[38;2;41;74;245m/\u001b[0m\u001b[38;2;44;79;245m/\u001b[0m \u001b[38;2;48;90;246m_\u001b[0m \u001b[38;2;53;100;246m\\\u001b[0m \u001b[38;2;57;110;247m'\u001b[0m\u001b[38;2;59;116;247m_\u001b[0m\u001b[38;2;61;121;247m_\u001b[0m\u001b[38;2;64;126;247m|\u001b[0m \u001b[38;2;68;136;248m'\u001b[0m\u001b"
+}

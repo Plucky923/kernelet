@@ -1,0 +1,40 @@
+[workspace]
+
+[package]
+name = "asterinas-osdk-bin"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies.asterinas]
+path = "/mnt/data/projects/kernelet/poc/kernel"
+default-features = false
+
+[dependencies.osdk-frame-allocator]
+path = "/mnt/data/projects/kernelet/poc/osdk/deps/frame-allocator"
+
+[dependencies.osdk-heap-allocator]
+path = "/mnt/data/projects/kernelet/poc/osdk/deps/heap-allocator"
+
+[dependencies.ostd]
+path = "/mnt/data/projects/kernelet/poc/osdk/../ostd"
+
+[profile.dev]
+panic = "unwind"
+
+[profile.release]
+lto = "thin"
+panic = "unwind"
+
+[profile.release-lto]
+inherits = "release"
+lto = true
+panic = "abort"
+codegen-units = 1
+
+[features]
+coverage = ["asterinas/coverage"]
+cvm_guest = ["asterinas/cvm_guest"]
+default = ["cvm_guest"]
+kernelet = ["asterinas/kernelet"]
+pvh_boot = ["asterinas/pvh_boot"]
+riscv_sv39_mode = ["asterinas/riscv_sv39_mode"]

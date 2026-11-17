@@ -1,0 +1,352 @@
+Linux version 6.12.0 (plucky@plucky) (gcc (GCC) 16.2.1 20260810, GNU ld (GNU Binutils) 2.47) #7 SMP PREEMPT_DYNAMIC Tue Nov 17 01:53:05 PST 2026
+Command line: console=ttyS0 panic=-1 nokaslr mitigations=off kernelet_mode=kernelet-syscall kernelet_pt_mode=direct kernelet_vcpus=2 kernelet_grant_mb=256 kernelet_attach=exec kernelet_suite=syscall kernelet_guest_cmd=kernelet_suite=syscall
+BIOS-provided physical RAM map:
+BIOS-e820: [mem 0x0000000000000000-0x000000000009fbff] usable
+BIOS-e820: [mem 0x000000000009fc00-0x000000000009ffff] reserved
+BIOS-e820: [mem 0x00000000000f0000-0x00000000000fffff] reserved
+BIOS-e820: [mem 0x0000000000100000-0x000000003ffdefff] usable
+BIOS-e820: [mem 0x000000003ffdf000-0x000000003fffffff] reserved
+BIOS-e820: [mem 0x00000000b0000000-0x00000000bfffffff] reserved
+BIOS-e820: [mem 0x00000000fed1c000-0x00000000fed1ffff] reserved
+BIOS-e820: [mem 0x00000000feffc000-0x00000000feffffff] reserved
+BIOS-e820: [mem 0x00000000fffc0000-0x00000000ffffffff] reserved
+BIOS-e820: [mem 0x000000fd00000000-0x000000ffffffffff] reserved
+Kernel compiled without mitigations, ignoring 'mitigations'; system may still be vulnerable
+NX (Execute Disable) protection: active
+APIC: Static calls initialized
+Hypervisor detected: KVM
+kvm-clock: Using msrs 4b564d01 and 4b564d00
+kvm-clock: using sched offset of 360688056 cycles
+clocksource: kvm-clock: mask: 0xffffffffffffffff max_cycles: 0x1cd42e4dffb, max_idle_ns: 881590591483 ns
+tsc: Detected 3194.216 MHz processor
+last_pfn = 0x3ffdf max_arch_pfn = 0x400000000
+x86/PAT: PAT support disabled because CONFIG_X86_PAT is disabled in the kernel.
+x86/PAT: Configuration [0-7]: WB  WT  UC- UC  WB  WT  UC- UC  
+found SMP MP-table at [mem 0x000f66c0-0x000f66cf]
+Using GB pages for direct mapping
+RAMDISK: [mem 0x3f86c000-0x3ffcffff]
+ACPI: Early table checksum verification disabled
+ACPI: RSDP 0x00000000000F6500 000014 (v00 BOCHS )
+ACPI: RSDT 0x000000003FFE238F 000038 (v01 BOCHS  BXPC     00000001 BXPC 00000001)
+ACPI: FACP 0x000000003FFE217F 0000F4 (v03 BOCHS  BXPC     00000001 BXPC 00000001)
+ACPI: DSDT 0x000000003FFE0040 00213F (v01 BOCHS  BXPC     00000001 BXPC 00000001)
+ACPI: FACS 0x000000003FFE0000 000040
+ACPI: APIC 0x000000003FFE2273 000080 (v03 BOCHS  BXPC     00000001 BXPC 00000001)
+ACPI: HPET 0x000000003FFE22F3 000038 (v01 BOCHS  BXPC     00000001 BXPC 00000001)
+ACPI: MCFG 0x000000003FFE232B 00003C (v01 BOCHS  BXPC     00000001 BXPC 00000001)
+ACPI: WAET 0x000000003FFE2367 000028 (v01 BOCHS  BXPC     00000001 BXPC 00000001)
+ACPI: Reserving FACP table memory at [mem 0x3ffe217f-0x3ffe2272]
+ACPI: Reserving DSDT table memory at [mem 0x3ffe0040-0x3ffe217e]
+ACPI: Reserving FACS table memory at [mem 0x3ffe0000-0x3ffe003f]
+ACPI: Reserving APIC table memory at [mem 0x3ffe2273-0x3ffe22f2]
+ACPI: Reserving HPET table memory at [mem 0x3ffe22f3-0x3ffe232a]
+ACPI: Reserving MCFG table memory at [mem 0x3ffe232b-0x3ffe2366]
+ACPI: Reserving WAET table memory at [mem 0x3ffe2367-0x3ffe238e]
+Zone ranges:
+  DMA32    [mem 0x0000000000001000-0x000000003ffdefff]
+  Normal   empty
+Movable zone start for each node
+Early memory node ranges
+  node   0: [mem 0x0000000000001000-0x000000000009efff]
+  node   0: [mem 0x0000000000100000-0x000000003ffdefff]
+Initmem setup node 0 [mem 0x0000000000001000-0x000000003ffdefff]
+On node 0, zone DMA32: 1 pages in unavailable ranges
+On node 0, zone DMA32: 97 pages in unavailable ranges
+On node 0, zone DMA32: 33 pages in unavailable ranges
+ACPI: PM-Timer IO Port: 0x608
+ACPI: LAPIC_NMI (acpi_id[0xff] dfl dfl lint[0x1])
+IOAPIC[0]: apic_id 0, version 32, address 0xfec00000, GSI 0-23
+ACPI: INT_SRC_OVR (bus 0 bus_irq 0 global_irq 2 dfl dfl)
+ACPI: INT_SRC_OVR (bus 0 bus_irq 5 global_irq 5 high level)
+ACPI: INT_SRC_OVR (bus 0 bus_irq 9 global_irq 9 high level)
+ACPI: INT_SRC_OVR (bus 0 bus_irq 10 global_irq 10 high level)
+ACPI: INT_SRC_OVR (bus 0 bus_irq 11 global_irq 11 high level)
+ACPI: Using ACPI (MADT) for SMP configuration information
+ACPI: HPET id: 0x8086a201 base: 0xfed00000
+TSC deadline timer available
+CPU topo: Max. logical packages:   1
+CPU topo: Max. logical dies:       1
+CPU topo: Max. dies per package:   1
+CPU topo: Max. threads per core:   1
+CPU topo: Num. cores per package:     2
+CPU topo: Num. threads per package:   2
+CPU topo: Allowing 2 present CPUs plus 0 hotplug CPUs
+kvm-guest: APIC: eoi() replaced with kvm_guest_apic_eoi_write()
+kvm-guest: KVM setup pv remote TLB flush
+kvm-guest: setup PV sched yield
+[mem 0x40000000-0xafffffff] available for PCI devices
+Booting paravirtualized kernel on KVM
+clocksource: refined-jiffies: mask: 0xffffffff max_cycles: 0xffffffff, max_idle_ns: 7645519600211568 ns
+setup_percpu: NR_CPUS:8 nr_cpumask_bits:2 nr_cpu_ids:2 nr_node_ids:1
+percpu: Embedded 43 pages/cpu s138688 r8192 d29248 u1048576
+Kernel command line: console=ttyS0 panic=-1 nokaslr mitigations=off kernelet_mode=kernelet-syscall kernelet_pt_mode=direct kernelet_vcpus=2 kernelet_grant_mb=256 kernelet_attach=exec kernelet_suite=syscall kernelet_guest_cmd=kernelet_suite=syscall
+Unknown kernel command line parameters "nokaslr kernelet_mode=kernelet-syscall kernelet_pt_mode=direct kernelet_vcpus=2 kernelet_grant_mb=256 kernelet_attach=exec kernelet_suite=syscall kernelet_guest_cmd=kernelet_suite=syscall", will be passed to user space.
+random: crng init done
+Dentry cache hash table entries: 131072 (order: 8, 1048576 bytes, linear)
+Inode-cache hash table entries: 65536 (order: 7, 524288 bytes, linear)
+Built 1 zonelists, mobility grouping on.  Total pages: 262013
+mem auto-init: stack:all(zero), heap alloc:off, heap free:off
+SLUB: HWalign=64, Order=0-1, MinObjects=0, CPUs=2, Nodes=1
+Dynamic Preempt: full
+rcu: Preemptible hierarchical RCU implementation.
+rcu: 	RCU restricting CPUs from NR_CPUS=8 to nr_cpu_ids=2.
+rcu: RCU calculated value of scheduler-enlistment delay is 25 jiffies.
+rcu: Adjusting geometry for rcu_fanout_leaf=16, nr_cpu_ids=2
+NR_IRQS: 4352, nr_irqs: 56, preallocated irqs: 16
+rcu: srcu_init: Setting srcu_struct sizes based on contention.
+Console: colour VGA+ 80x25
+printk: legacy console [ttyS0] enabled
+ACPI: Core revision 20240827
+clocksource: hpet: mask: 0xffffffff max_cycles: 0xffffffff, max_idle_ns: 19112604467 ns
+APIC: Switch to symmetric I/O mode setup
+kvm-guest: APIC: send_IPI_mask() replaced with kvm_send_ipi_mask()
+kvm-guest: APIC: send_IPI_mask_allbutself() replaced with kvm_send_ipi_mask_allbutself()
+kvm-guest: setup PV IPIs
+..TIMER: vector=0x30 apic1=0 pin1=2 apic2=-1 pin2=-1
+clocksource: tsc-early: mask: 0xffffffffffffffff max_cycles: 0x2e0af1c0398, max_idle_ns: 440795225912 ns
+Calibrating delay loop (skipped) preset value.. 6388.43 BogoMIPS (lpj=12776864)
+Last level iTLB entries: 4KB 512, 2MB 255, 4MB 127
+Last level dTLB entries: 4KB 512, 2MB 255, 4MB 127, 1GB 0
+Spectre V2 : User space: Vulnerable
+Speculative Store Bypass: Vulnerable
+x86/fpu: Supporting XSAVE feature 0x001: 'x87 floating point registers'
+x86/fpu: Supporting XSAVE feature 0x002: 'SSE registers'
+x86/fpu: Supporting XSAVE feature 0x004: 'AVX registers'
+x86/fpu: Supporting XSAVE feature 0x800: 'Control-flow User registers'
+x86/fpu: xstate_offset[2]:  576, xstate_sizes[2]:  256
+x86/fpu: xstate_offset[11]:  832, xstate_sizes[11]:   16
+x86/fpu: Enabled xstate features 0x807, context size is 848 bytes, using 'compacted' format.
+Freeing SMP alternatives memory: 12K
+pid_max: default: 32768 minimum: 301
+Mount-cache hash table entries: 2048 (order: 2, 16384 bytes, linear)
+Mountpoint-cache hash table entries: 2048 (order: 2, 16384 bytes, linear)
+smpboot: CPU0: AMD Ryzen 7 5800H with Radeon Graphics (family: 0x19, model: 0x50, stepping: 0x0)
+Performance Events: Fam17h+ core perfctr, AMD PMU driver.
+... version:                0
+... bit width:              48
+... generic registers:      6
+... value mask:             0000ffffffffffff
+... max period:             00007fffffffffff
+... fixed-purpose events:   0
+... event mask:             000000000000003f
+signal: max sigframe size: 1360
+rcu: Hierarchical SRCU implementation.
+rcu: 	Max phase no-delay instances is 1000.
+smp: Bringing up secondary CPUs ...
+smpboot: x86: Booting SMP configuration:
+.... node  #0, CPUs:      #1
+smp: Brought up 1 node, 2 CPUs
+smpboot: Total of 2 processors activated (12776.86 BogoMIPS)
+Memory: 1009624K/1048052K available (6144K kernel code, 839K rwdata, 1632K rodata, 776K init, 376K bss, 36780K reserved, 0K cma-reserved)
+devtmpfs: initialized
+clocksource: jiffies: mask: 0xffffffff max_cycles: 0xffffffff, max_idle_ns: 7645041785100000 ns
+futex hash table entries: 512 (order: 3, 32768 bytes, linear)
+NET: Registered PF_NETLINK/PF_ROUTE protocol family
+thermal_sys: Registered thermal governor 'step_wise'
+thermal_sys: Registered thermal governor 'user_space'
+cpuidle: using governor ladder
+PCI: ECAM [mem 0xb0000000-0xbfffffff] (base 0xb0000000) for domain 0000 [bus 00-ff]
+PCI: ECAM [mem 0xb0000000-0xbfffffff] reserved as E820 entry
+PCI: Using configuration type 1 for base access
+ACPI: Added _OSI(Module Device)
+ACPI: Added _OSI(Processor Device)
+ACPI: Added _OSI(3.0 _SCP Extensions)
+ACPI: Added _OSI(Processor Aggregator Device)
+ACPI: 1 ACPI AML tables successfully acquired and loaded
+ACPI: Interpreter enabled
+ACPI: PM: (supports S0 S5)
+ACPI: Using IOAPIC for interrupt routing
+PCI: Using host bridge windows from ACPI; if necessary, use "pci=nocrs" and report a bug
+PCI: Using E820 reservations for host bridge windows
+ACPI: Enabled 2 GPEs in block 00 to 3F
+ACPI: PCI Root Bridge [PCI0] (domain 0000 [bus 00-ff])
+acpi PNP0A08:00: _OSC: OS supports [ExtendedConfig ASPM ClockPM Segments HPX-Type3]
+acpi PNP0A08:00: PCIe port services disabled; not requesting _OSC control
+PCI host bridge to bus 0000:00
+pci_bus 0000:00: root bus resource [io  0x0000-0x0cf7 window]
+pci_bus 0000:00: root bus resource [io  0x0d00-0xffff window]
+pci_bus 0000:00: root bus resource [mem 0x000a0000-0x000bffff window]
+pci_bus 0000:00: root bus resource [mem 0x40000000-0xafffffff window]
+pci_bus 0000:00: root bus resource [mem 0xc0000000-0xfebfffff window]
+pci_bus 0000:00: root bus resource [mem 0x100000000-0x8ffffffff window]
+pci_bus 0000:00: root bus resource [bus 00-ff]
+pci 0000:00:00.0: [8086:29c0] type 00 class 0x060000 conventional PCI endpoint
+pci 0000:00:01.0: [1234:1111] type 00 class 0x030000 conventional PCI endpoint
+pci 0000:00:01.0: BAR 0 [mem 0xfd000000-0xfdffffff pref]
+pci 0000:00:01.0: BAR 2 [mem 0xfebf0000-0xfebf0fff]
+pci 0000:00:01.0: ROM [mem 0xfebe0000-0xfebeffff pref]
+pci 0000:00:01.0: Video device with shadowed ROM at [mem 0x000c0000-0x000dffff]
+pci 0000:00:1f.0: [8086:2918] type 00 class 0x060100 conventional PCI endpoint
+pci 0000:00:1f.0: quirk: [io  0x0600-0x067f] claimed by ICH6 ACPI/GPIO/TCO
+pci 0000:00:1f.2: [8086:2922] type 00 class 0x010601 conventional PCI endpoint
+pci 0000:00:1f.2: BAR 4 [io  0xc040-0xc05f]
+pci 0000:00:1f.2: BAR 5 [mem 0xfebf1000-0xfebf1fff]
+pci 0000:00:1f.3: [8086:2930] type 00 class 0x0c0500 conventional PCI endpoint
+pci 0000:00:1f.3: BAR 4 [io  0x0700-0x073f]
+ACPI: PCI: Interrupt link LNKA configured for IRQ 10
+ACPI: PCI: Interrupt link LNKB configured for IRQ 10
+ACPI: PCI: Interrupt link LNKC configured for IRQ 11
+ACPI: PCI: Interrupt link LNKD configured for IRQ 11
+ACPI: PCI: Interrupt link LNKE configured for IRQ 10
+ACPI: PCI: Interrupt link LNKF configured for IRQ 10
+ACPI: PCI: Interrupt link LNKG configured for IRQ 11
+ACPI: PCI: Interrupt link LNKH configured for IRQ 11
+ACPI: PCI: Interrupt link GSIA configured for IRQ 16
+ACPI: PCI: Interrupt link GSIB configured for IRQ 17
+ACPI: PCI: Interrupt link GSIC configured for IRQ 18
+ACPI: PCI: Interrupt link GSID configured for IRQ 19
+ACPI: PCI: Interrupt link GSIE configured for IRQ 20
+ACPI: PCI: Interrupt link GSIF configured for IRQ 21
+ACPI: PCI: Interrupt link GSIG configured for IRQ 22
+ACPI: PCI: Interrupt link GSIH configured for IRQ 23
+PCI: Using ACPI for IRQ routing
+pci 0000:00:01.0: vgaarb: setting as boot VGA device
+pci 0000:00:01.0: vgaarb: bridge control possible
+pci 0000:00:01.0: vgaarb: VGA device added: decodes=io+mem,owns=io+mem,locks=none
+vgaarb: loaded
+clocksource: Switched to clocksource kvm-clock
+pnp: PnP ACPI init
+ACPI: IRQ 4 override to edge(!), high(!)
+system 00:05: [mem 0xb0000000-0xbfffffff window] has been reserved
+pnp: PnP ACPI: found 6 devices
+clocksource: acpi_pm: mask: 0xffffff max_cycles: 0xffffff, max_idle_ns: 2085701024 ns
+pci_bus 0000:00: resource 4 [io  0x0000-0x0cf7 window]
+pci_bus 0000:00: resource 5 [io  0x0d00-0xffff window]
+pci_bus 0000:00: resource 6 [mem 0x000a0000-0x000bffff window]
+pci_bus 0000:00: resource 7 [mem 0x40000000-0xafffffff window]
+pci_bus 0000:00: resource 8 [mem 0xc0000000-0xfebfffff window]
+pci_bus 0000:00: resource 9 [mem 0x100000000-0x8ffffffff window]
+PCI: CLS 0 bytes, default 64
+clocksource: tsc: mask: 0xffffffffffffffff max_cycles: 0x2e0af1c0398, max_idle_ns: 440795225912 ns
+Unpacking initramfs...
+workingset: timestamp_bits=46 max_order=18 bucket_order=0
+io scheduler mq-deadline registered
+io scheduler kyber registered
+input: Power Button as /devices/LNXSYSTM:00/LNXPWRBN:00/input/input0
+ACPI: button: Power Button [PWRF]
+Serial: 8250/16550 driver, 4 ports, IRQ sharing disabled
+00:03: ttyS0 at I/O 0x3f8 (irq = 4, base_baud = 115200) is a 16550A
+i8042: PNP: PS/2 Controller [PNP0303:KBD,PNP0f13:MOU] at 0x60,0x64 irq 1,12
+serio: i8042 KBD port at 0x60,0x64 irq 1
+serio: i8042 AUX port at 0x60,0x64 irq 12
+amd_pstate: The CPPC feature is supported but currently disabled by the BIOS.
+Please enable it if your BIOS has the CPPC option.
+amd_pstate: the _CPC object is not present in SBIOS or ACPI disabled
+IPI shorthand broadcast: enabled
+input: AT Translated Set 2 keyboard as /devices/platform/i8042/serio0/input/input1
+input: ImExPS/2 Generic Explorer Mouse as /devices/platform/i8042/serio1/input/input3
+Freeing initrd memory: 7568K
+Freeing unused kernel image (initmem) memory: 776K
+Write protecting the kernel read-only data: 8192k
+Freeing unused kernel image (rodata/data gap) memory: 416K
+Run /init as init process
+
+========================================
+INIT: Kernelet host init
+========================================
+HOST_STATE /sys/devices/system/clocksource/clocksource0/current_clocksource kvm-clock
+HOST_STATE /sys/devices/system/cpu/vulnerabilities/spectre_v2 Vulnerable; IBPB: disabled; STIBP: disabled; PBRSB-eIBRS: Not affected; BHI: Not affected
+HOST_STATE /sys/devices/system/cpu/vulnerabilities/itlb_multihit Not affected
+HOST_STATE /sys/devices/system/cpu/vulnerabilities/mmio_stale_data Not affected
+HOST_STATE /sys/devices/system/cpu/vulnerabilities/mds Not affected
+HOST_STATE /sys/devices/system/cpu/vulnerabilities/reg_file_data_sampling Not affected
+HOST_STATE /sys/devices/system/cpu/vulnerabilities/l1tf Not affected
+HOST_STATE /sys/devices/system/cpu/vulnerabilities/spec_store_bypass Vulnerable
+HOST_STATE /sys/devices/system/cpu/vulnerabilities/tsx_async_abort Not affected
+HOST_STATE /sys/devices/system/cpu/vulnerabilities/spectre_v1 Vulnerable: __user pointer sanitization and usercopy barriers only; no swapgs barriers
+HOST_STATE /sys/devices/system/cpu/vulnerabilities/gather_data_sampling Not affected
+HOST_STATE /sys/devices/system/cpu/vulnerabilities/retbleed Not affected
+HOST_STATE /sys/devices/system/cpu/vulnerabilities/spec_rstack_overflow Vulnerable
+HOST_STATE /sys/devices/system/cpu/vulnerabilities/srbds Not affected
+HOST_STATE /sys/devices/system/cpu/vulnerabilities/meltdown Not affected
+INIT: loading endovisor.ko 
+endovisor: loading out-of-tree module taints kernel.
+endovisor: loaded (cpu_slot gs_offset=0x1fac0, watch=1, audit=0, profile_hz=0)
+INIT: exec /bin/run-kernelet
+endovisor: PIE image loaded: span 10739712 B, shared 9310208 B, private 253952 B, 13553 relocs
+endovisor: sandbox 0: grant 256 MiB (128 grains, 128 runs, 3 meta blocks), pt_mode=0
+klet[0/0 log]: Detected ISA extensions: X2APIC | TSC_DEADLINE | XSAVE | AVX | RDRAND | XAPIC | FSGSBASE
+klet[0/1 log]: Detected ISA extensions: X2APIC | TSC_DEADLINE | XSAVE | AVX | RDRAND | XAPIC | FSGSBASE
+OSTD initialized. Preparing components.
+klet[0/0 log]: Exists components that are not initialized
+klet[0/0 log]: Components initializing in Bootstrap stage...
+klet[0/0 log]: Component initializing: ComponentInfo { name: "aster-systree", path: "/mnt/data/projects/kernelet/poc/target/osdk-inputs/2d05cd75fc7c1a3279134b21c3ffed60e04ec2a79cc7d34543464081dab95f9f/fs/mnt/data/projects/kernelet/poc/kernel/core/comps/systree", priority: 0 }
+klet[0/0 log]: Component initialize complete
+klet[0/0 log]: Component initializing: ComponentInfo { name: "aster-softirq", path: "/mnt/data/projects/kernelet/poc/target/osdk-inputs/2d05cd75fc7c1a3279134b21c3ffed60e04ec2a79cc7d34543464081dab95f9f/fs/mnt/data/projects/kernelet/poc/kernel/core/comps/softirq", priority: 0 }
+klet[0/0 log]: Component initialize complete
+klet[0/0 log]: Component initializing: ComponentInfo { name: "aster-input", path: "/mnt/data/projects/kernelet/poc/target/osdk-inputs/2d05cd75fc7c1a3279134b21c3ffed60e04ec2a79cc7d34543464081dab95f9f/fs/mnt/data/projects/kernelet/poc/kernel/core/comps/input", priority: 0 }
+klet[0/0 log]: Component initialize complete
+klet[0/0 log]: Component initializing: ComponentInfo { name: "aster-framebuffer", path: "/mnt/data/projects/kernelet/poc/target/osdk-inputs/2d05cd75fc7c1a3279134b21c3ffed60e04ec2a79cc7d34543464081dab95f9f/fs/mnt/data/projects/kernelet/poc/kernel/core/comps/framebuffer", priority: 0 }
+klet[0/0 framebuffer: ]: Framebuffer not found
+klet[0/0 log]: Component initialize complete
+klet[0/0 log]: Component initializing: ComponentInfo { name: "aster-console", path: "/mnt/data/projects/kernelet/poc/target/osdk-inputs/2d05cd75fc7c1a3279134b21c3ffed60e04ec2a79cc7d34543464081dab95f9f/fs/mnt/data/projects/kernelet/poc/kernel/core/comps/console", priority: 0 }
+klet[0/0 log]: Component initialize complete
+klet[0/0 log]: Component initializing: ComponentInfo { name: "aster-cmdline", path: "/mnt/data/projects/kernelet/poc/target/osdk-inputs/2d05cd75fc7c1a3279134b21c3ffed60e04ec2a79cc7d34543464081dab95f9f/fs/mnt/data/projects/kernelet/poc/kernel/core/comps/cmdline", priority: 0 }
+klet[0/0 log]: Component initialize complete
+klet[0/0 log]: Component initializing: ComponentInfo { name: "aster-block", path: "/mnt/data/projects/kernelet/poc/target/osdk-inputs/2d05cd75fc7c1a3279134b21c3ffed60e04ec2a79cc7d34543464081dab95f9f/fs/mnt/data/projects/kernelet/poc/kernel/core/comps/block", priority: 0 }
+klet[0/0 log]: Component initialize complete
+klet[0/0 log]: Component initializing: ComponentInfo { name: "aster-nvme", path: "/mnt/data/projects/kernelet/poc/target/osdk-inputs/2d05cd75fc7c1a3279134b21c3ffed60e04ec2a79cc7d34543464081dab95f9f/fs/mnt/data/projects/kernelet/poc/kernel/core/comps/nvme", priority: 1 }
+klet[0/0 log]: Component initialize complete
+klet[0/0 log]: Component initializing: ComponentInfo { name: "aster-network", path: "/mnt/data/projects/kernelet/poc/target/osdk-inputs/2d05cd75fc7c1a3279134b21c3ffed60e04ec2a79cc7d34543464081dab95f9f/fs/mnt/data/projects/kernelet/poc/kernel/core/comps/network", priority: 1 }
+klet[0/0 log]: Component initialize complete
+klet[0/0 log]: Component initializing: ComponentInfo { name: "aster-logger", path: "/mnt/data/projects/kernelet/poc/target/osdk-inputs/2d05cd75fc7c1a3279134b21c3ffed60e04ec2a79cc7d34543464081dab95f9f/fs/mnt/data/projects/kernelet/poc/kernel/core/comps/logger", priority: 1 }
+klet[0/0 log]: Component initialize complete
+klet[0/0 log]: Component initializing: ComponentInfo { name: "aster-device", path: "/mnt/data/projects/kernelet/poc/target/osdk-inputs/2d05cd75fc7c1a3279134b21c3ffed60e04ec2a79cc7d34543464081dab95f9f/fs/mnt/data/projects/kernelet/poc/kernel/core/comps/device", priority: 1 }
+klet[0/0 log]: Component initialize complete
+klet[0/0 log]: Component initializing: ComponentInfo { name: "aster-virtio", path: "/mnt/data/projects/kernelet/poc/target/osdk-inputs/2d05cd75fc7c1a3279134b21c3ffed60e04ec2a79cc7d34543464081dab95f9f/fs/mnt/data/projects/kernelet/poc/kernel/core/comps/virtio", priority: 2 }
+klet[0/0 log]: Component initialize complete
+klet[0/0 log]: All components initialization in Bootstrap stage completed
+klet[0/0 log]: use randomness generated by hardware
+klet[0/0 log]: [kernel] LSM module enabled: capability
+klet[0/0 log]: [kernel] LSM module enabled: yama
+klet[0/0 log]: Idle thread for CPU #0 started
+klet[0/1 log]: Idle thread for CPU #1 started
+Spawn the first kernel thread
+klet[0/0 log]: Exists components that are not initialized
+klet[0/0 log]: Components initializing in Kthread stage...
+klet[0/0 log]: All components initialization in Kthread stage completed
+[kernel] unpacking initramfs.cpio to rootfs ...
+[kernel] initramfs is ready
+klet[0/0 input: ]: registered handler class evdev
+klet[0/0 log]: Evdev device support initialized
+
+ [38;2;35;59;245m_[0m  [38;2;41;74;245m_[0m[38;2;44;79;245m_[0m                    [38;2;90;188;250m_[0m      [38;2;106;224;251m_[0m
+[38;2;33;54;245m|[0m [38;2;37;64;245m|[0m[38;2;39;69;245m/[0m [38;2;44;79;245m/[0m[38;2;46;85;246m_[0m[38;2;48;90;246m_[0m[38;2;50;95;246m_[0m [38;2;55;105;246m_[0m [38;2;59;116;247m_[0m[38;2;61;121;247m_[0m [38;2;66;131;247m_[0m [38;2;70;141;248m_[0m[38;2;73;147;248m_[0m   [38;2;81;167;249m_[0m[38;2;84;172;249m_[0m[38;2;86;178;249m_[0m[38;2;88;183;249m|[0m [38;2;93;193;250m|[0m [38;2;97;203;250m_[0m[38;2;99;209;250m_[0m[38;2;101;214;251m_[0m[38;2;104;219;251m|[0m [38;2;108;229;251m|[0m[38;2;110;234;251m_[0m
+[38;2;33;54;245m|[0m [38;2;37;64;245m'[0m [38;2;41;74;245m/[0m[38;2;44;79;245m/[0m [38;2;48;90;246m_[0m [38;2;53;100;246m\[0m [38;2;57;110;247m'[0m[38;2;59;116;247m_[0m[38;2;61;121;247m_[0m[38;2;64;126;247m|[0m [38;2;68;136;248m'[0m[38;2;70;141;248m_[0m [38;2;75;152;248m\[0m [38;2;79;162;249m/[0m [38;2;84;172;249m_[0m [38;2;88;183;249m\[0m [38;2;93;193;250m|[0m[38;2;95;198;250m/[0m [38;2;99;209;250m_[0m [38;2;104;219;251m\[0m [38;2;108;229;251m_[0m[38;2;110;234;251m_[0m[38;2;113;240;252m|[0m
+[38;2;33;54;245m|[0m [38;2;37;64;245m.[0m [38;2;41;74;245m\[0m  [38;2;48;90;246m_[0m[38;2;50;95;246m_[0m[38;2;53;100;246m/[0m [38;2;57;110;247m|[0m  [38;2;64;126;247m|[0m [38;2;68;136;248m|[0m [38;2;73;147;248m|[0m [38;2;77;157;248m|[0m  [38;2;84;172;249m_[0m[38;2;86;178;249m_[0m[38;2;88;183;249m/[0m [38;2;93;193;250m|[0m  [38;2;99;209;250m_[0m[38;2;101;214;251m_[0m[38;2;104;219;251m/[0m [38;2;108;229;251m|[0m[38;2;110;234;251m_[0m
+[38;2;33;54;245m|[0m[38;2;35;59;245m_[0m[38;2;37;64;245m|[0m[38;2;39;69;245m\[0m[38;2;41;74;245m_[0m[38;2;44;79;245m\[0m[38;2;46;85;246m_[0m[38;2;48;90;246m_[0m[38;2;50;95;246m_[0m[38;2;53;100;246m|[0m[38;2;55;105;246m_[0m[38;2;57;110;247m|[0m  [38;2;64;126;247m|[0m[38;2;66;131;247m_[0m[38;2;68;136;248m|[0m [38;2;73;147;248m|[0m[38;2;75;152;248m_[0m[38;2;77;157;248m|[0m[38;2;79;162;249m\[0m[38;2;81;167;249m_[0m[38;2;84;172;249m_[0m[38;2;86;178;249m_[0m[38;2;88;183;249m|[0m[38;2;90;188;250m_[0m[38;2;93;193;250m|[0m[38;2;95;198;250m\[0m[38;2;97;203;250m_[0m[38;2;99;209;250m_[0m[38;2;101;214;251m_[0m[38;2;104;219;251m|[0m[38;2;106;224;251m\[0m[38;2;108;229;251m_[0m[38;2;110;234;251m_[0m[38;2;113;240;252m|[0m
+
+[kernel] running /init as the init process
+klet[0/0 log]: Exists components that are not initialized
+klet[0/0 log]: Components initializing in Process stage...
+klet[0/0 log]: Component initializing: ComponentInfo { name: "aster-simpledrm", path: "/mnt/data/projects/kernelet/poc/target/osdk-inputs/2d05cd75fc7c1a3279134b21c3ffed60e04ec2a79cc7d34543464081dab95f9f/fs/mnt/data/projects/kernelet/poc/kernel/comps/simpledrm", priority: 4 }
+klet[0/0 simpledrm: ]: Failed to init: boot framebuffer is unavailable
+klet[0/0 log]: Component initialize complete
+klet[0/0 log]: All components initialization in Process stage completed
+klet[0/0 input: ]: registered handler class vt_keyboard
+klet[0/0 log]: Unimplemented syscall number: 334
+BENCH_INFO suite=syscall pid=1 nproc=2 avx=1
+SYSCALL_SAMPLE {"sample":0,"iterations":1000000,"elapsed_ns":98752866,"tsc_ticks":315435520,"cpu":0,"pid":1,"valid":true}
+SYSCALL_SAMPLE {"sample":1,"iterations":1000000,"elapsed_ns":98888204,"tsc_ticks":315868076,"cpu":0,"pid":1,"valid":true}
+SYSCALL_SAMPLE {"sample":2,"iterations":1000000,"elapsed_ns":99164451,"tsc_ticks":316750500,"cpu":0,"pid":1,"valid":true}
+SYSCALL_SAMPLE {"sample":3,"iterations":1000000,"elapsed_ns":99223587,"tsc_ticks":316939009,"cpu":0,"pid":1,"valid":true}
+SYSCALL_SAMPLE {"sample":4,"iterations":1000000,"elapsed_ns":99168183,"tsc_ticks":316760181,"cpu":0,"pid":1,"valid":true}
+SYSCALL_SAMPLE {"sample":5,"iterations":1000000,"elapsed_ns":98919819,"tsc_ticks":315968768,"cpu":0,"pid":1,"valid":true}
+SYSCALL_SAMPLE {"sample":6,"iterations":1000000,"elapsed_ns":98956138,"tsc_ticks":316086575,"cpu":0,"pid":1,"valid":true}
+SYSCALL_SAMPLE {"sample":7,"iterations":1000000,"elapsed_ns":98988885,"tsc_ticks":316189608,"cpu":0,"pid":1,"valid":true}
+SYSCALL_SAMPLE {"sample":8,"iterations":1000000,"elapsed_ns":100294737,"tsc_ticks":320352334,"cpu":0,"pid":1,"valid":true}
+RESULT getpid_ns 98.99 ns
+RESULT reg_preserve_getpid 1 bool
+RESULT reg_preserve_nanosleep 1 bool
+RESULT suite_done 1 bool
+RUN_KERNELET exit_kind=exit exit_code=0 grant_create_us=19731 exit_msg=""
+STATS_JSON {"pt_mode":0,"vcpus":2,"grant_mb":256,"exit_kind":0,"exit_kind_name":"exit","exit_code":0,"exit_msg":"","non_sysret_precheck":0,"syscalls":0,"fpu_saves":997,"fpu_restores":999,"vm_creates":1,"vm_destroys":1,"vm_flushes":9,"vm_maps":0,"vm_protects":0,"vm_unmaps":0,"exceptions":30,"page_faults":30,"virqs":213,"forced_yields":0,"bench_vm_apply_cycles":0,"grant_grains_allocated":128,"grant_grains_freed":128,"image_load_base":"0x0"}
+STATS_CSV_HDR pt_mode,vcpus,grant_mb,exit_kind,exit_code,fpu_saves,fpu_restores,vm_creates,vm_destroys,vm_flushes,vm_maps,vm_protects,vm_unmaps,exceptions,page_faults,virqs,forced_yields,non_sysret_precheck,bench_vm_apply_cycles,syscalls,grant_grains_allocated,grant_grains_freed,image_load_base
+STATS_CSV 0,2,256,0,0,997,999,1,1,9,0,0,0,30,30,213,0,0,0,0,128,128,0x0
+INIT: /bin/run-kernelet exited 0
+INIT: unloading endovisor
+endovisor: unloaded
+INIT: result=0
+INIT: done
+ACPI: PM: Preparing to enter system sleep state S5
+reboot: Power down

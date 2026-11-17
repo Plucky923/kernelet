@@ -1,0 +1,11 @@
+usage: kernelet-eval [-h] {check-config,run,perf-sym,profile} ...
+
+positional arguments:
+  {check-config,run,perf-sym,profile}
+    check-config        Validate Linux .config against perf guard
+    run                 Run shuffled multi-round evaluation across L/A/K
+    perf-sym            Synthesize combined guestkallsyms for perf kvm
+    profile             Synthesize guestkallsyms and run host perf kvm record
+
+options:
+  -h, --help            show this help message and exit

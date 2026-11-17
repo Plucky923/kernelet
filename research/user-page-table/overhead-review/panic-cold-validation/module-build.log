@@ -1,0 +1,14 @@
+make: Entering directory '/mnt/data/projects/kernelet/prototype/.build/linux-6.12'
+  CC [M]  /mnt/data/projects/kernelet/.panic-cold-validation-work/module/poc_main.o
+  CC [M]  /mnt/data/projects/kernelet/.panic-cold-validation-work/module/poc_image.o
+  CC [M]  /mnt/data/projects/kernelet/.panic-cold-validation-work/module/poc_grant.o
+  CC [M]  /mnt/data/projects/kernelet/.panic-cold-validation-work/module/poc_space.o
+  CC [M]  /mnt/data/projects/kernelet/.panic-cold-validation-work/module/poc_carrier.o
+  CC [M]  /mnt/data/projects/kernelet/.panic-cold-validation-work/module/poc_watch.o
+  AS [M]  /mnt/data/projects/kernelet/.panic-cold-validation-work/module/poc_switch.o
+  LD [M]  /mnt/data/projects/kernelet/.panic-cold-validation-work/module/poc_endovisor.o
+  MODPOST /mnt/data/projects/kernelet/.panic-cold-validation-work/module/Module.symvers
+  CC [M]  /mnt/data/projects/kernelet/.panic-cold-validation-work/module/poc_endovisor.mod.o
+  CC [M]  /mnt/data/projects/kernelet/.panic-cold-validation-work/module/.module-common.o
+  LD [M]  /mnt/data/projects/kernelet/.panic-cold-validation-work/module/poc_endovisor.ko
+make: Leaving directory '/mnt/data/projects/kernelet/prototype/.build/linux-6.12'

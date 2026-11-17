@@ -1,0 +1,24 @@
+{
+  "archived_run_files_verified": 23,
+  "final_source_files_verified": 27,
+  "owned_temporary_paths_removed": [
+    "standards-eval-live",
+    "standards-eval-compile",
+    "standards-eval-tests.log",
+    "standards-dependency-check.log",
+    "standards-eval-source-snapshot.tar.gz",
+    "standards-eval-inputs.json",
+    "standards-existing-log-check.json",
+    "standards-existing-log-check.log",
+    "standards-real-log-check.json",
+    "standards-real-log-check.log",
+    "standards-validate-existing.py",
+    "standards-run-live.py",
+    "standards-eval-live-console.log",
+    "standards-eval-memlock0-console.log",
+    "standards-eval-protocol-console.log",
+    "standards-memlock-gate.json",
+    "standards-memlock.json"
+  ],
+  "software_cache_preserved": true
+}

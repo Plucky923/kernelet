@@ -1,0 +1,17 @@
+make: Entering directory '/mnt/data/projects/kernelet/.direct-handler-validation-work/endovisor'
+make -C /mnt/data/projects/kernelet/prototype/.build/linux-6.12 ARCH=x86_64 -j8 M=/mnt/data/projects/kernelet/.direct-handler-validation-work/endovisor modules
+make[1]: Entering directory '/mnt/data/projects/kernelet/prototype/.build/linux-6.12'
+  CC [M]  /mnt/data/projects/kernelet/.direct-handler-validation-work/endovisor/poc_main.o
+  CC [M]  /mnt/data/projects/kernelet/.direct-handler-validation-work/endovisor/poc_image.o
+  CC [M]  /mnt/data/projects/kernelet/.direct-handler-validation-work/endovisor/poc_grant.o
+  CC [M]  /mnt/data/projects/kernelet/.direct-handler-validation-work/endovisor/poc_space.o
+  CC [M]  /mnt/data/projects/kernelet/.direct-handler-validation-work/endovisor/poc_carrier.o
+  CC [M]  /mnt/data/projects/kernelet/.direct-handler-validation-work/endovisor/poc_watch.o
+  AS [M]  /mnt/data/projects/kernelet/.direct-handler-validation-work/endovisor/poc_switch.o
+  LD [M]  /mnt/data/projects/kernelet/.direct-handler-validation-work/endovisor/poc_endovisor.o
+  MODPOST /mnt/data/projects/kernelet/.direct-handler-validation-work/endovisor/Module.symvers
+  CC [M]  /mnt/data/projects/kernelet/.direct-handler-validation-work/endovisor/poc_endovisor.mod.o
+  CC [M]  /mnt/data/projects/kernelet/.direct-handler-validation-work/endovisor/.module-common.o
+  LD [M]  /mnt/data/projects/kernelet/.direct-handler-validation-work/endovisor/poc_endovisor.ko
+make[1]: Leaving directory '/mnt/data/projects/kernelet/prototype/.build/linux-6.12'
+make: Leaving directory '/mnt/data/projects/kernelet/.direct-handler-validation-work/endovisor'

@@ -1,0 +1,403 @@
+{
+  "validated_at_utc": "2026-11-17T08:02:36.708809+00:00",
+  "environment": "host pinned toolchain and QEMU/KVM; Docker access unavailable",
+  "rustc": "rustc 1.99.0-nightly (87e5904f5 2026-07-20)\nbinary: rustc\ncommit-hash: 87e5904f5eb6398af6b22eac2802c78934260c48\ncommit-date: 2026-07-20\nhost: x86_64-unknown-linux-gnu\nrelease: 1.99.0-nightly\nLLVM version: 22.1.8",
+  "qemu_version": "QEMU emulator version 11.1.3",
+  "git": {
+    "root_head": "a5ec4b875d0a17890321a362fbc3fd16859b7eb4",
+    "root_branch": "main",
+    "poc_head": "7f8476ab463f1dcdf901fd650ee4f127298d28ef",
+    "poc_branch": "kernelet"
+  },
+  "build_command": "cargo osdk build --release --kernelet --no-default-features --output <profile-output>",
+  "debug_assertions_extra": "--config profile.release.debug-assertions=true",
+  "profiles": {
+    "baseline": {
+      "snapshot_id": "2067b31a3c7ab7fed2c10cb15cf6f8f22400c11550ddd5399e9c1aef221ccca6",
+      "frozen_source_sha256": "a2c30a40895e8024638b8490e12406862810dffaae91afa0cd58ecc391713721",
+      "source_sha256": {
+        "poc/ostd/src/panic.rs": "ba23e7a0e18498f4ffd9f73b5bff32ec825b577b72f48f6bf0310d3f1cd1bc82",
+        "poc/ostd/libs/unwinding/src/panic.rs": "2e1b8f0785d91c8b730683aebfb287d73dee5751e51e3bd1d1512abfc4ea15d4",
+        "poc/ostd/libs/unwinding/src/panicking.rs": "95615fc63aacc0677103abaf29dc2f09e5e4f701aa04c6cfcccb26cd1de30d9d",
+        "poc/kernel/core/src/thread/oops.rs": "05d3beef43ce93a23d6228017cc2a13a5c991c1c50de53ccdeb21085186df182",
+        "poc/kernel/core/src/thread/task.rs": "00eeb85ac513ab1d17704084ce5a808b01d8aac5eda038f57628bed709077e76"
+      },
+      "image_sha256": "075d58902a5c7cd8e271dc18e701a2c17ba2135cf36f677e950b39b7a42e3be6"
+    },
+    "release": {
+      "snapshot_id": "79c1562ba6c709ee509e6635aeaa0020c5a7b14ca7e82ec1b37f983262162cfb",
+      "frozen_source_sha256": "63ffcce6c5da9e9e3a08445e8535a59c77ebf1f7acaeffcf14d534211a33577a",
+      "source_sha256": {
+        "poc/ostd/src/panic.rs": "848670fdf0f1a21eb7981c7f91119d2ecc3e532bcdc0c263e00cb923dc281389",
+        "poc/ostd/libs/unwinding/src/panic.rs": "0ff745baaa322b3dc85fa293d0e9e73ae27e2bf9b19fc9d9c0bf9f9d6171d3ee",
+        "poc/ostd/libs/unwinding/src/panicking.rs": "0d9770094a397ca553491fd7f3547a1e8889770d82b62937e665f900d41e4b2f",
+        "poc/kernel/core/src/thread/oops.rs": "98f9b8452dbbd67bb344961c311b7db20f1c881fee67707b3698fbd5d2c75384",
+        "poc/kernel/core/src/thread/task.rs": "442f3fb4e2ab492e8cc35d9e0ab8c8dec8cb879da6c5217f774994b54fcc25d0"
+      },
+      "image_sha256": "13b8f8c0193ea2843584d742f9fd604cb94d2ae8f7ca7ba598ac4d576af92fd5"
+    },
+    "debug_assertions": {
+      "snapshot_id": "79c1562ba6c709ee509e6635aeaa0020c5a7b14ca7e82ec1b37f983262162cfb",
+      "frozen_source_sha256": "63ffcce6c5da9e9e3a08445e8535a59c77ebf1f7acaeffcf14d534211a33577a",
+      "source_sha256": {
+        "poc/ostd/src/panic.rs": "848670fdf0f1a21eb7981c7f91119d2ecc3e532bcdc0c263e00cb923dc281389",
+        "poc/ostd/libs/unwinding/src/panic.rs": "0ff745baaa322b3dc85fa293d0e9e73ae27e2bf9b19fc9d9c0bf9f9d6171d3ee",
+        "poc/ostd/libs/unwinding/src/panicking.rs": "0d9770094a397ca553491fd7f3547a1e8889770d82b62937e665f900d41e4b2f",
+        "poc/kernel/core/src/thread/oops.rs": "98f9b8452dbbd67bb344961c311b7db20f1c881fee67707b3698fbd5d2c75384",
+        "poc/kernel/core/src/thread/task.rs": "442f3fb4e2ab492e8cc35d9e0ab8c8dec8cb879da6c5217f774994b54fcc25d0"
+      },
+      "image_sha256": "7e4776242eeac75f69a6a1966503154d222bae895ff0a8c5bd91b8a0485823dd"
+    }
+  },
+  "input_sha256": {
+    "linux_kernel": "63891070fcdc17736dbff1e94774f89d2bf6f8d96bc2b7256c95476f49f02ee0",
+    "module": "ebb6d466d1836fb751523f2b02150224eb78bed16269683c28a286994f48127a",
+    "runner": "27517f235ff1940820a9fd5d189e54c4ef883330ab738caaf2ce9ab5c78d7822",
+    "bench_syscall_fpu": "77d61453e85334b616877e0c987f8c6d785cd4c3e957bc98e11820cb2342c86e",
+    "test_mm_safety": "98d54f995e57928a9d068aa0b29e5a29ad38cb2375c485ba95a95c04546d7e2a",
+    "oops_input": "9dfe1be717c665cc1865d106c068ca8dec96be8386d8d956164e45b88ec0c6fc",
+    "oops_guest": "b22ee2b2e78c9087b316d125b2d4d6944bfb7b0656a9195250d94ecc1f1088fb",
+    "baseline_initramfs": "a6b03d85a33ae0ff85a3040de83e11fc8f9e92d1f94ee36400b8ca08fd30a740",
+    "release_initramfs": "ff7a44344d5350745825fe16038fa0a04ab60128022777b8b784fa5695444532",
+    "debug_assertions_initramfs": "165907359d46dc80967f9e33771cd97342fe45dabe5d966b7248f09e239e12a9",
+    "osdk_binary": "c44e2c7424d92a9586907c33a1b91b96983a5ab93f4ea9ccd082111cf890e212"
+  },
+  "linux_reference_sha256": {
+    "arch/x86/mm/fault.c": "d5121a731b0f2b6f6082bf46c7103494c5115d56d33bf830f4856c21ff00006d",
+    "include/linux/panic.h": "6356df8e593bc350af458c74195fdac46f707926ce939ac8a0d01f640365c0b5",
+    "include/linux/compiler_types.h": "8a3c9ffa750209298e1cd1092f5362033cd3c220e9dc57ddcd3dc4613c0c9ef9"
+  },
+  "qemu_runs": {
+    "baseline-oops": {
+      "started_utc": "2026-11-17T07:51:09.991358+00:00",
+      "command": [
+        "qemu-system-x86_64",
+        "-enable-kvm",
+        "-cpu",
+        "host",
+        "-smp",
+        "2",
+        "-m",
+        "1024M",
+        "-kernel",
+        "/mnt/data/projects/kernelet/prototype/.build/linux-6.12/arch/x86/boot/bzImage",
+        "-initrd",
+        "/mnt/data/projects/kernelet/.panic-cold-validation-work/host-baseline.cpio.gz",
+        "-append",
+        "console=ttyS0 panic=-1 nokaslr mitigations=off poc_mode=poc-syscall poc_pt_mode=direct poc_vcpus=2 poc_grant_mb=256 poc_initramfs=/guests/guest-oops.cpio",
+        "-display",
+        "none",
+        "-serial",
+        "stdio",
+        "-monitor",
+        "none",
+        "-no-reboot",
+        "-nic",
+        "none"
+      ],
+      "memlock_soft": 0,
+      "qemu_exit_code": 0,
+      "checks": {
+        "qemu_exit_zero": true,
+        "host_completed": true,
+        "guest_results": true,
+        "carrier_exit": true,
+        "real_panic_reports": true
+      },
+      "results": {
+        "oops_recovery": "1",
+        "oops_resource_release": "1",
+        "oops_parent_progress": "1",
+        "suite_done": "1"
+      },
+      "carrier_exit": "RUN_POC exit_kind=exit exit_code=0 grant_create_us=27476 exit_msg=\"\"",
+      "oops_reports": 4,
+      "module_unloaded": true
+    },
+    "release-syscall": {
+      "started_utc": "2026-11-17T08:00:45.937428+00:00",
+      "command": [
+        "qemu-system-x86_64",
+        "-enable-kvm",
+        "-cpu",
+        "host",
+        "-smp",
+        "2",
+        "-m",
+        "1024M",
+        "-kernel",
+        "/mnt/data/projects/kernelet/prototype/.build/linux-6.12/arch/x86/boot/bzImage",
+        "-initrd",
+        "/mnt/data/projects/kernelet/.panic-cold-validation-work/host-release.cpio.gz",
+        "-append",
+        "console=ttyS0 panic=-1 nokaslr mitigations=off poc_mode=poc-syscall poc_pt_mode=direct poc_vcpus=2 poc_grant_mb=256",
+        "-display",
+        "none",
+        "-serial",
+        "stdio",
+        "-monitor",
+        "none",
+        "-no-reboot",
+        "-nic",
+        "none"
+      ],
+      "memlock_soft": 0,
+      "qemu_exit_code": 0,
+      "checks": {
+        "qemu_exit_zero": true,
+        "host_completed": true,
+        "guest_results": true,
+        "carrier_exit": true
+      },
+      "results": {
+        "smp_check": "1",
+        "reg_preserve_getpid": "1",
+        "reg_preserve_nanosleep": "1",
+        "fpu_sse_getpid_ok": "1",
+        "fpu_avx_getpid_ok": "1",
+        "fpu_switch_sse_aba_ns_ok": "1",
+        "fpu_switch_avx_aba_ns_ok": "1",
+        "rt_sigreturn_valid": "1",
+        "rt_sigreturn_bad_mxcsr": "1",
+        "rt_sigreturn_bad_xcomp_bv": "1",
+        "suite_done": "1"
+      },
+      "carrier_exit": "RUN_POC exit_kind=exit exit_code=0 grant_create_us=26765 exit_msg=\"\"",
+      "oops_reports": 0,
+      "module_unloaded": true
+    },
+    "release-oops": {
+      "started_utc": "2026-11-17T08:00:47.851147+00:00",
+      "command": [
+        "qemu-system-x86_64",
+        "-enable-kvm",
+        "-cpu",
+        "host",
+        "-smp",
+        "2",
+        "-m",
+        "1024M",
+        "-kernel",
+        "/mnt/data/projects/kernelet/prototype/.build/linux-6.12/arch/x86/boot/bzImage",
+        "-initrd",
+        "/mnt/data/projects/kernelet/.panic-cold-validation-work/host-release.cpio.gz",
+        "-append",
+        "console=ttyS0 panic=-1 nokaslr mitigations=off poc_mode=poc-syscall poc_pt_mode=direct poc_vcpus=2 poc_grant_mb=256 poc_initramfs=/guests/guest-oops.cpio",
+        "-display",
+        "none",
+        "-serial",
+        "stdio",
+        "-monitor",
+        "none",
+        "-no-reboot",
+        "-nic",
+        "none"
+      ],
+      "memlock_soft": 0,
+      "qemu_exit_code": 0,
+      "checks": {
+        "qemu_exit_zero": true,
+        "host_completed": true,
+        "guest_results": true,
+        "carrier_exit": true,
+        "real_panic_reports": true
+      },
+      "results": {
+        "oops_recovery": "1",
+        "oops_resource_release": "1",
+        "oops_parent_progress": "1",
+        "suite_done": "1"
+      },
+      "carrier_exit": "RUN_POC exit_kind=exit exit_code=0 grant_create_us=25943 exit_msg=\"\"",
+      "oops_reports": 4,
+      "module_unloaded": true
+    },
+    "release-safety": {
+      "started_utc": "2026-11-17T08:00:49.062881+00:00",
+      "command": [
+        "qemu-system-x86_64",
+        "-enable-kvm",
+        "-cpu",
+        "host",
+        "-smp",
+        "2",
+        "-m",
+        "1024M",
+        "-kernel",
+        "/mnt/data/projects/kernelet/prototype/.build/linux-6.12/arch/x86/boot/bzImage",
+        "-initrd",
+        "/mnt/data/projects/kernelet/.panic-cold-validation-work/host-release.cpio.gz",
+        "-append",
+        "console=ttyS0 panic=-1 nokaslr mitigations=off poc_mode=poc-safety poc_pt_mode=direct poc_vcpus=2 poc_grant_mb=256",
+        "-display",
+        "none",
+        "-serial",
+        "stdio",
+        "-monitor",
+        "none",
+        "-no-reboot",
+        "-nic",
+        "none"
+      ],
+      "memlock_soft": 0,
+      "qemu_exit_code": 0,
+      "checks": {
+        "qemu_exit_zero": true,
+        "host_completed": true,
+        "guest_results": true,
+        "carrier_exit": true,
+        "safety_completed": true,
+        "safety_no_failure": true
+      },
+      "results": {},
+      "carrier_exit": "RUN_POC exit_kind=exit exit_code=0 grant_create_us=26376 exit_msg=\"\"",
+      "oops_reports": 0,
+      "module_unloaded": true
+    },
+    "release-kill": {
+      "started_utc": "2026-11-17T08:00:50.374637+00:00",
+      "command": [
+        "qemu-system-x86_64",
+        "-enable-kvm",
+        "-cpu",
+        "host",
+        "-smp",
+        "2",
+        "-m",
+        "1024M",
+        "-kernel",
+        "/mnt/data/projects/kernelet/prototype/.build/linux-6.12/arch/x86/boot/bzImage",
+        "-initrd",
+        "/mnt/data/projects/kernelet/.panic-cold-validation-work/host-release.cpio.gz",
+        "-append",
+        "console=ttyS0 panic=-1 nokaslr mitigations=off poc_mode=poc-syscall poc_pt_mode=direct poc_vcpus=2 poc_grant_mb=256 poc_kill_ms=100",
+        "-display",
+        "none",
+        "-serial",
+        "stdio",
+        "-monitor",
+        "none",
+        "-no-reboot",
+        "-nic",
+        "none"
+      ],
+      "memlock_soft": 0,
+      "qemu_exit_code": 0,
+      "checks": {
+        "qemu_exit_zero": true,
+        "host_completed": true,
+        "guest_results": true,
+        "carrier_exit": true
+      },
+      "results": {},
+      "carrier_exit": "RUN_POC exit_kind=killed exit_code=9 grant_create_us=27059 exit_\u001b[38;2;33;54;245m|\u001b[0m \u001b[38;2;37;64;245m'\u001b[0m \u001b[38;2;41;74;245m/\u001b[0m\u001b[38;2;44;79;245m/\u001b[0m \u001b[38;2;48;90;246m_\u001b[0m \u001b[38;2;53;100;246m\\\u001b[0m \u001b[38;2;57;110;247m'\u001b[0m\u001b[38;2;59;116;247m_\u001b[0m\u001b[38;2;61;121;247m_\u001b[0m\u001b[38;2;64;126;247m|\u001b[0m \u001b[38;2;68;136;248m'\u001b[0m\u001b",
+      "oops_reports": 0,
+      "module_unloaded": true
+    },
+    "debug-syscall": {
+      "started_utc": "2026-11-17T08:00:51.485297+00:00",
+      "command": [
+        "qemu-system-x86_64",
+        "-enable-kvm",
+        "-cpu",
+        "host",
+        "-smp",
+        "2",
+        "-m",
+        "1024M",
+        "-kernel",
+        "/mnt/data/projects/kernelet/prototype/.build/linux-6.12/arch/x86/boot/bzImage",
+        "-initrd",
+        "/mnt/data/projects/kernelet/.panic-cold-validation-work/host-debug-assertions.cpio.gz",
+        "-append",
+        "console=ttyS0 panic=-1 nokaslr mitigations=off poc_mode=poc-syscall poc_pt_mode=direct poc_vcpus=2 poc_grant_mb=256",
+        "-display",
+        "none",
+        "-serial",
+        "stdio",
+        "-monitor",
+        "none",
+        "-no-reboot",
+        "-nic",
+        "none"
+      ],
+      "memlock_soft": 0,
+      "qemu_exit_code": 0,
+      "checks": {
+        "qemu_exit_zero": true,
+        "host_completed": true,
+        "guest_results": true,
+        "carrier_exit": true
+      },
+      "results": {
+        "smp_check": "1",
+        "reg_preserve_getpid": "1",
+        "reg_preserve_nanosleep": "1",
+        "fpu_sse_getpid_ok": "1",
+        "fpu_avx_getpid_ok": "1",
+        "fpu_switch_sse_aba_ns_ok": "1",
+        "fpu_switch_avx_aba_ns_ok": "1",
+        "rt_sigreturn_valid": "1",
+        "rt_sigreturn_bad_mxcsr": "1",
+        "rt_sigreturn_bad_xcomp_bv": "1",
+        "suite_done": "1"
+      },
+      "carrier_exit": "RUN_POC exit_kind=exit exit_code=0 grant_create_us=27287 exit_msg=\"\"",
+      "oops_reports": 0,
+      "module_unloaded": true
+    },
+    "debug-oops": {
+      "started_utc": "2026-11-17T08:00:53.396757+00:00",
+      "command": [
+        "qemu-system-x86_64",
+        "-enable-kvm",
+        "-cpu",
+        "host",
+        "-smp",
+        "2",
+        "-m",
+        "1024M",
+        "-kernel",
+        "/mnt/data/projects/kernelet/prototype/.build/linux-6.12/arch/x86/boot/bzImage",
+        "-initrd",
+        "/mnt/data/projects/kernelet/.panic-cold-validation-work/host-debug-assertions.cpio.gz",
+        "-append",
+        "console=ttyS0 panic=-1 nokaslr mitigations=off poc_mode=poc-syscall poc_pt_mode=direct poc_vcpus=2 poc_grant_mb=256 poc_initramfs=/guests/guest-oops.cpio",
+        "-display",
+        "none",
+        "-serial",
+        "stdio",
+        "-monitor",
+        "none",
+        "-no-reboot",
+        "-nic",
+        "none"
+      ],
+      "memlock_soft": 0,
+      "qemu_exit_code": 0,
+      "checks": {
+        "qemu_exit_zero": true,
+        "host_completed": true,
+        "guest_results": true,
+        "carrier_exit": true,
+        "real_panic_reports": true
+      },
+      "results": {
+        "oops_recovery": "1",
+        "oops_resource_release": "1",
+        "oops_parent_progress": "1",
+        "suite_done": "1"
+      },
+      "carrier_exit": "RUN_POC exit_kind=exit exit_code=0 grant_create_us=26509 exit_msg=\"\"",
+      "oops_reports": 4,
+      "module_unloaded": true
+    }
+  },
+  "assembly_observations": {
+    "baseline_ostd_catch_local_reservation": 3096,
+    "candidate_handler_local_reservation": 168,
+    "candidate_catch_wrapper_symbols": 0,
+    "debug_assertions_catch_wrapper_symbols": 0
+  },
+  "standalone_latency_measured": false
+}

@@ -1,0 +1,18 @@
+make: Entering directory '/mnt/data/projects/kernelet/poc/linux/endovisor'
+make -C /mnt/data/projects/kernelet/prototype/.build/linux-6.12 ARCH=x86_64 -j8 M=/mnt/data/projects/kernelet/poc/linux/endovisor modules
+make[1]: Entering directory '/mnt/data/projects/kernelet/prototype/.build/linux-6.12'
+make[1]: warning: -j8 forced in submake: resetting jobserver mode.
+  CC [M]  /mnt/data/projects/kernelet/poc/linux/endovisor/main.o
+  CC [M]  /mnt/data/projects/kernelet/poc/linux/endovisor/image.o
+  CC [M]  /mnt/data/projects/kernelet/poc/linux/endovisor/space.o
+  CC [M]  /mnt/data/projects/kernelet/poc/linux/endovisor/carrier.o
+  CC [M]  /mnt/data/projects/kernelet/poc/linux/endovisor/grant.o
+  CC [M]  /mnt/data/projects/kernelet/poc/linux/endovisor/watch.o
+  AS [M]  /mnt/data/projects/kernelet/poc/linux/endovisor/switch.o
+  LD [M]  /mnt/data/projects/kernelet/poc/linux/endovisor/endovisor.o
+  MODPOST /mnt/data/projects/kernelet/poc/linux/endovisor/Module.symvers
+  CC [M]  /mnt/data/projects/kernelet/poc/linux/endovisor/endovisor.mod.o
+  CC [M]  /mnt/data/projects/kernelet/poc/linux/endovisor/.module-common.o
+  LD [M]  /mnt/data/projects/kernelet/poc/linux/endovisor/endovisor.ko
+make[1]: Leaving directory '/mnt/data/projects/kernelet/prototype/.build/linux-6.12'
+make: Leaving directory '/mnt/data/projects/kernelet/poc/linux/endovisor'

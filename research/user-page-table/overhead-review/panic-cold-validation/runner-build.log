@@ -1,0 +1,4 @@
+make: Entering directory '/mnt/data/projects/kernelet/poc/linux/runner'
+mkdir -p /mnt/data/projects/kernelet/.panic-cold-validation-work/bench/.tmp
+cc -O2 -Wall -Wextra -static -pthread -I../endovisor/uapi -o /mnt/data/projects/kernelet/.panic-cold-validation-work/bench/run-poc run-poc.c
+make: Leaving directory '/mnt/data/projects/kernelet/poc/linux/runner'

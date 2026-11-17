@@ -1,0 +1,14 @@
+make: Entering directory '/mnt/data/projects/kernelet/prototype/.build/linux-6.12'
+  CC [M]  /mnt/data/projects/kernelet/.syscall-overhead-work/module-baseline/poc_main.o
+  CC [M]  /mnt/data/projects/kernelet/.syscall-overhead-work/module-baseline/poc_image.o
+  CC [M]  /mnt/data/projects/kernelet/.syscall-overhead-work/module-baseline/poc_grant.o
+  CC [M]  /mnt/data/projects/kernelet/.syscall-overhead-work/module-baseline/poc_space.o
+  CC [M]  /mnt/data/projects/kernelet/.syscall-overhead-work/module-baseline/poc_carrier.o
+  CC [M]  /mnt/data/projects/kernelet/.syscall-overhead-work/module-baseline/poc_watch.o
+  AS [M]  /mnt/data/projects/kernelet/.syscall-overhead-work/module-baseline/poc_switch.o
+  LD [M]  /mnt/data/projects/kernelet/.syscall-overhead-work/module-baseline/poc_endovisor.o
+  MODPOST /mnt/data/projects/kernelet/.syscall-overhead-work/module-baseline/Module.symvers
+  CC [M]  /mnt/data/projects/kernelet/.syscall-overhead-work/module-baseline/poc_endovisor.mod.o
+  CC [M]  /mnt/data/projects/kernelet/.syscall-overhead-work/module-baseline/.module-common.o
+  LD [M]  /mnt/data/projects/kernelet/.syscall-overhead-work/module-baseline/poc_endovisor.ko
+make: Leaving directory '/mnt/data/projects/kernelet/prototype/.build/linux-6.12'

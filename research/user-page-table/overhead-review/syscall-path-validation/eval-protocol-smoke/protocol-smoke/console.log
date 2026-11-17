@@ -1,0 +1,2 @@
+INVALID [K R1 selfcheck.noop]: unexpected CPU migration outside allowed set; cpu_start=1 not in allowed (0,); cpu_end=1 not in allowed (0,)
+INVALID [K R1 sys.lm.null]: unexpected CPU migration outside allowed set; cpu_start=1 not in allowed (0,); cpu_end=1 not in allowed (0,); excess FPU saves: adjusted=2500 > max=0

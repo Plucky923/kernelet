@@ -1,0 +1,16 @@
+{
+  "component": "payload",
+  "input_sha256": "fb7ecf0f274a2ca36a0e0fdd06660bd8a05814ffae5bf09b62f358443945ecd2",
+  "toolchain": "native:gcc (GCC) 16.2.1 20260810",
+  "outputs_sha256": {
+    "eval_payload_cpio": "0dbd6836f65219fba66a3c63331e70e39d3c3b01c86122f2d1c8a9e96ea130e2",
+    "host_eval_initramfs": "34f29ea6f0758613bb504e1297d8f8c745d1e5e8279f9531bcbc12a318a2d517",
+    "host_eval_initramfs_pti": "4fd25331ffd1fe0d14ba3afa4efe3ad18d79c4bf212b453e55d67876c2a7ac83"
+  },
+  "outputs_rel": {
+    "eval_payload_cpio": "eval-payload.cpio",
+    "host_eval_initramfs": "host-eval-initramfs.cpio.gz",
+    "host_eval_initramfs_pti": "host-eval-initramfs-pti.cpio.gz"
+  },
+  "built_utc": "2026-11-17T12:14:50.891148+00:00"
+}

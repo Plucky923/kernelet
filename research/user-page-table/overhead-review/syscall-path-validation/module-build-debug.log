@@ -1,0 +1,6 @@
+make: Entering directory '/mnt/data/projects/kernelet/prototype/.build/linux-6.12'
+  CC [M]  /mnt/data/projects/kernelet/.syscall-overhead-work/module-debug/carrier.o
+  LD [M]  /mnt/data/projects/kernelet/.syscall-overhead-work/module-debug/endovisor.o
+  MODPOST /mnt/data/projects/kernelet/.syscall-overhead-work/module-debug/Module.symvers
+  LD [M]  /mnt/data/projects/kernelet/.syscall-overhead-work/module-debug/endovisor.ko
+make: Leaving directory '/mnt/data/projects/kernelet/prototype/.build/linux-6.12'

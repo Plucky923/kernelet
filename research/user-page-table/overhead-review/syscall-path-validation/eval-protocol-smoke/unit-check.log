@@ -1,0 +1,31 @@
+test_generate_and_write_archive (test_build_guard.BuildGuardTests.test_generate_and_write_archive) ... ok
+test_perf_pti_profile (test_build_guard.BuildGuardTests.test_perf_pti_profile) ... ok
+test_rejects_os_and_debug_atomic_sleep (test_build_guard.BuildGuardTests.test_rejects_os_and_debug_atomic_sleep) ... ok
+test_valid_perf_base (test_build_guard.BuildGuardTests.test_valid_perf_base) ... ok
+test_verify_shared_payload_embedded_and_fail_closed (test_build_guard.BuildGuardTests.test_verify_shared_payload_embedded_and_fail_closed) ... ok
+test_kernelet_stats_checks (test_invariants.InvariantsTests.test_kernelet_stats_checks) ... ok
+test_migration_fails (test_invariants.InvariantsTests.test_migration_fails) ... ok
+test_rejects_missing_thp_missing_k_stats_and_zero_metric (test_invariants.InvariantsTests.test_rejects_missing_thp_missing_k_stats_and_zero_metric) ... ok
+test_skipped_record_passes (test_invariants.InvariantsTests.test_skipped_record_passes) ... ok
+test_thp_violation_fails (test_invariants.InvariantsTests.test_thp_violation_fails) ... ok
+test_valid_record_passes (test_invariants.InvariantsTests.test_valid_record_passes) ... ok
+test_zero_faults_on_linux_fails (test_invariants.InvariantsTests.test_zero_faults_on_linux_fails) ... ok
+test_invalid_output_raises (test_parsers.ParserTests.test_invalid_output_raises) ... ok
+test_lmbench_bandwidth (test_parsers.ParserTests.test_lmbench_bandwidth) ... ok
+test_lmbench_lat_mmap (test_parsers.ParserTests.test_lmbench_lat_mmap) ... ok
+test_lmbench_latency_stderr (test_parsers.ParserTests.test_lmbench_latency_stderr) ... ok
+test_stress_ng_metrics_brief (test_parsers.ParserTests.test_stress_ng_metrics_brief) ... ok
+test_vdso_selfcheck (test_parsers.ParserTests.test_vdso_selfcheck) ... ok
+test_will_it_scale_average (test_parsers.ParserTests.test_will_it_scale_average) ... ok
+test_discover_distinct_physical_cores_respects_allowed (test_qemu_driver.QemuDriverTests.test_discover_distinct_physical_cores_respects_allowed) ... ok
+test_format_batch_and_runner_args (test_qemu_driver.QemuDriverTests.test_format_batch_and_runner_args) ... ok
+test_parse_serial_records_pairs_stats (test_qemu_driver.QemuDriverTests.test_parse_serial_records_pairs_stats) ... ok
+test_perf_sym_relocation_and_batch_completeness (test_report.ReportAndPerfSymTests.test_perf_sym_relocation_and_batch_completeness) ... ok
+test_render_markdown_and_csv (test_report.ReportAndPerfSymTests.test_render_markdown_and_csv) ... ok
+test_schedule_rounds_deterministic (test_report.ReportAndPerfSymTests.test_schedule_rounds_deterministic) ... ok
+test_load_repo_cases_toml (test_schema.SchemaTests.test_load_repo_cases_toml) ... ok
+
+----------------------------------------------------------------------
+Ran 26 tests in 0.095s
+
+OK

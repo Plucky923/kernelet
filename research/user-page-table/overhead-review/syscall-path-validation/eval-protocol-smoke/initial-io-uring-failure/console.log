@@ -1,0 +1,36 @@
+Traceback (most recent call last):
+  File "<frozen runpy>", line 203, in _run_module_as_main
+  File "<frozen runpy>", line 88, in _run_code
+  File "/mnt/data/projects/kernelet/poc/eval/host/cli.py", line 513, in <module>
+    raise SystemExit(main())
+                     ~~~~^^
+  File "/mnt/data/projects/kernelet/poc/eval/host/cli.py", line 509, in main
+    return int(args.func(args))
+               ~~~~~~~~~^^^^^^
+  File "/mnt/data/projects/kernelet/poc/eval/host/cli.py", line 315, in cmd_run
+    _run_target_batch(
+    ~~~~~~~~~~~~~~~~~^
+        target=t,
+        ^^^^^^^^^
+    ...<10 lines>...
+        log_dir=out_dir / "logs",
+        ^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+  File "/mnt/data/projects/kernelet/poc/eval/host/cli.py", line 203, in _run_target_batch
+    _, serial_text, _, _, _ = run_qemu_with_pinning(
+                              ~~~~~~~~~~~~~~~~~~~~~^
+        kernel_path=linux_bzimage,
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^
+    ...<9 lines>...
+        log_prefix=f"r{round_idx}_{target}",
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+  File "/mnt/data/projects/kernelet/poc/eval/host/qemu_driver.py", line 310, in run_qemu_with_pinning
+    qmp = QmpClient(qmp_sock, timeout_sec=15.0, proc=proc)
+  File "/mnt/data/projects/kernelet/poc/eval/host/qemu_driver.py", line 99, in __init__
+    raise RuntimeError(
+        f"QEMU exited before QMP ready (rc={proc.returncode}): {msg}"
+    )
+RuntimeError: QEMU exited before QMP ready (rc=1): qemu-system-x86_64: Failed to initialize io_uring: Cannot allocate memory

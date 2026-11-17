@@ -1,0 +1,71 @@
+{
+  "qemu_rc": 0,
+  "cmd": [
+    "qemu-system-x86_64",
+    "-enable-kvm",
+    "-cpu",
+    "host",
+    "-smp",
+    "2",
+    "-m",
+    "1024M",
+    "-mem-prealloc",
+    "-kernel",
+    "/mnt/data/projects/kernelet/research/user-page-table/results/syscall-2026-11-17/baseline/bzImage",
+    "-initrd",
+    "/mnt/data/projects/kernelet/research/user-page-table/results/syscall-2026-11-17/aligned-handoff/initrd.cpio.gz",
+    "-append",
+    "console=ttyS0 panic=-1 nokaslr mitigations=off kernelet_mode=kernelet-safety kernelet_pt_mode=vma kernelet_vcpus=2 kernelet_grant_mb=256 kernelet_attach=exec ",
+    "-display",
+    "none",
+    "-serial",
+    "stdio",
+    "-monitor",
+    "none",
+    "-no-reboot",
+    "-nic",
+    "none",
+    "-S",
+    "-qmp",
+    "unix:/mnt/data/projects/kernelet/research/user-page-table/.syscall-cost-work/q/qmp-6qp90ypb/qmp.sock,server,nowait"
+  ],
+  "vcpu_tids": {
+    "0": 4020525,
+    "1": 4020526
+  },
+  "pinned_vcpu_map": {
+    "0": 0,
+    "1": 2
+  },
+  "pinned_io_cpu": 4,
+  "serial_log_path": "/mnt/data/projects/kernelet/research/user-page-table/results/syscall-2026-11-17/validation/vma-safety.serial.log",
+  "stderr_log_path": "/mnt/data/projects/kernelet/research/user-page-table/results/syscall-2026-11-17/validation/vma-safety.stderr.log",
+  "label": "vma-safety",
+  "stats": [
+    {
+      "pt_mode": 1,
+      "vcpus": 2,
+      "grant_mb": 256,
+      "exit_kind": 0,
+      "exit_kind_name": "exit",
+      "exit_code": 0,
+      "exit_msg": "",
+      "fpu_saves": 1532,
+      "fpu_restores": 1534,
+      "vm_creates": 15,
+      "vm_destroys": 15,
+      "vm_flushes": 32,
+      "vm_maps": 6015,
+      "vm_protects": 78,
+      "vm_unmaps": 2164,
+      "exceptions": 2672,
+      "page_faults": 2655,
+      "virqs": 72,
+      "forced_yields": 0,
+      "bench_vm_apply_cycles": 0,
+      "grant_grains_allocated": 128,
+      "grant_grains_freed": 128,
+      "image_load_base": "0x0"
+    }
+  ]
+}

@@ -1,0 +1,2 @@
+case_id,group,suite,target,unit,higher_is_better,status,n,median,mean,min,max
+sys.lm.null,syscall,lmbench,L,us/op,False,OK,1,0.040600,0.040600,0.040600,0.040600

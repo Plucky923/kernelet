@@ -1,0 +1,137 @@
+{
+  "captured_utc": "2026-11-17T09:56:49.989587+00:00",
+  "final_eval_sources_sha256": {
+    "poc/eval/Makefile": "27942b99e59f3a4fb54e49bf9f28b7f119203e92a8cacbfaa5884681c2492bc5",
+    "poc/eval/configs/cases.toml": "f38f9ceeb832a9e5cb8c594c7238a8f3c5105f77d9baa8061078f163a818ddda",
+    "poc/eval/configs/payload-sources.json": "ad6b0a603b0b7e5502a543fbb8c7db0fd4aa042d367fe14a5e779f3139a3f72e",
+    "poc/eval/guest/eval_guest_runner.c": "23f31eb483639334d0a99262e4ea74e6358f56d25d49f5910ea3ce3198921f2c",
+    "poc/eval/guest/eval_init.c": "826c2cd7f1ee9dd9cde36eafe26b25b073d972f42c9d9415278dfa257c6ee21b",
+    "poc/eval/guest/vdso_selfcheck.c": "8a9fc4d7434da26183582239c6682fd137d03ef8b7c9c09054029352ff694943",
+    "poc/eval/host/__init__.py": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "poc/eval/host/build_guard.py": "ce633df75d90fa1761802209589bfb2e33b1f00587c7db14619c2d0c52de7015",
+    "poc/eval/host/cli.py": "b1d37341aced4b6301cc2854aea18eb1e9a66a659bdc60abd1bd293037b4b1d2",
+    "poc/eval/host/invariants.py": "591d61771716e189177d1af71328f1cd494071e46cdd81ea05905c3856992581",
+    "poc/eval/host/parsers.py": "9574dd2cb6ce58a85284ed5c422771b9beaa4a1bd2b73f4e8591139546e3a7df",
+    "poc/eval/host/perf_sym.py": "5850cdda456d0136627eb467eec5a8f7bf56748650478fc4df38ba1d7ee472c9",
+    "poc/eval/host/qemu_driver.py": "04859400a57179886707954b3eaaf0f29ee94f8785b95b6e4d531569e88248e3",
+    "poc/eval/host/report.py": "aa3fb8fc3f794c5cbfd53daeb06e08ebdedfbf0aa8086920a9473c2786a6bea4",
+    "poc/eval/host/schema.py": "350d3f452a95e5919d1693918fc4c7d75dd9401d0c5755aad769f9d12440a42e",
+    "poc/eval/host/tests/__init__.py": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "poc/eval/host/tests/test_build_guard.py": "68ba3a7e1f92a8e13c100cc5b5fddafb778842667fd05c996172d2bd9d7eeecb",
+    "poc/eval/host/tests/test_invariants.py": "5800c20c111b639dc9ca4a6bd8f6a35ec6cc5a42c21536cb369450aa93481438",
+    "poc/eval/host/tests/test_parsers.py": "dce2f56f5647dc8b83bd50e15e32fb4555cd86b090cd25f9dc1aec7eb7ee5b02",
+    "poc/eval/host/tests/test_qemu_driver.py": "76226ec2cfde5abdcf915d372b3517d691e2dd29ebb7afc12c189004cf3b32ca",
+    "poc/eval/host/tests/test_report.py": "be9f1ead1c8898910f2c9dd3e919bb26d907e3cf861971133975d5a3d0300d02",
+    "poc/eval/host/tests/test_schema.py": "4001a34ebc67c84a7bb79a2e489a91b9583da47a42db1507f7cdf0db743e710e",
+    "poc/eval/nix/default.nix": "5cda29c6381c2be6c81e6e9a7bc34fa63c703165ec1a726069cc682e7053d957",
+    "poc/eval/nix/will-it-scale.nix": "f6fe8c828d5af59e4906e8a8e28b1fcafde8139ef35e17cfea22e6affb3691f1",
+    "poc/eval/scripts/build_kernels.sh": "a7ae0ee1d785d0660418efc62e0914da8072dadd947499230dce3df36189bf2e",
+    "poc/eval/scripts/build_native_payload.sh": "870cc7bfd9043bbb5b878b89f3ede609ee107b9b763d5e958cec4ae858b4751f",
+    "poc/eval/scripts/build_payload_deps.sh": "e5f9066cfce7e20f19f5f1b4a5773176c358c03fb1d35e04e4f3c188f0e8143b"
+  },
+  "final_eval_source_archive_sha256": "e90269e73a07182854cd681513ff10d47a5e859ae0622fb3690794bac7849d1b",
+  "sources_changed_since_runtime_observation": {
+    "poc/eval/Makefile": {
+      "runtime_source_observation": "57f86e8044966a0e53b7f538ffd590ef781d3973acc97b99548b3e292530c70b",
+      "final": "27942b99e59f3a4fb54e49bf9f28b7f119203e92a8cacbfaa5884681c2492bc5"
+    },
+    "poc/eval/guest/eval_guest_runner.c": {
+      "runtime_source_observation": "4bd8e46cca29227ed6b660dd187e37ab5a4d603035f2364c35b32209f9fc1c37",
+      "final": "23f31eb483639334d0a99262e4ea74e6358f56d25d49f5910ea3ce3198921f2c"
+    },
+    "poc/eval/guest/eval_init.c": {
+      "runtime_source_observation": "c9f4ff12b1d4851c411487832df43feb9aadc1f47853e76e358203a247bdf478",
+      "final": "826c2cd7f1ee9dd9cde36eafe26b25b073d972f42c9d9415278dfa257c6ee21b"
+    },
+    "poc/eval/guest/vdso_selfcheck.c": {
+      "runtime_source_observation": "430e3bc609de735bc9420f81167c10db3c89a2828f0cbb19e119ee6884c27e01",
+      "final": "8a9fc4d7434da26183582239c6682fd137d03ef8b7c9c09054029352ff694943"
+    },
+    "poc/eval/host/__init__.py": {
+      "runtime_source_observation": "cdfe2287f0fe824e267decfc54887efdeb707254fbdb81cf2e3053d3fea99b19",
+      "final": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "poc/eval/host/build_guard.py": {
+      "runtime_source_observation": "bc7a16e28c61315a7c178fc8ee1d400760acfb25c83ae691070b665c1cdc9a13",
+      "final": "ce633df75d90fa1761802209589bfb2e33b1f00587c7db14619c2d0c52de7015"
+    },
+    "poc/eval/host/cli.py": {
+      "runtime_source_observation": "8a816bf278953b864b9882ffd49b3b1d9541b3e460a675a1a1cfe4b1e7ba1bf2",
+      "final": "b1d37341aced4b6301cc2854aea18eb1e9a66a659bdc60abd1bd293037b4b1d2"
+    },
+    "poc/eval/host/invariants.py": {
+      "runtime_source_observation": "8e901d01d51e5f692ca2b66a7b337012ebdd0857c7ac72b3908a83c8747b8fb6",
+      "final": "591d61771716e189177d1af71328f1cd494071e46cdd81ea05905c3856992581"
+    },
+    "poc/eval/host/parsers.py": {
+      "runtime_source_observation": "d528538f6e7847192c98d92fd9f46becd413511ac518c64fa997143a53fafe18",
+      "final": "9574dd2cb6ce58a85284ed5c422771b9beaa4a1bd2b73f4e8591139546e3a7df"
+    },
+    "poc/eval/host/perf_sym.py": {
+      "runtime_source_observation": "48ad2e56e0d4aa01eed3fadc57a7e87237bd75a70d977e87e8eceef15812853f",
+      "final": "5850cdda456d0136627eb467eec5a8f7bf56748650478fc4df38ba1d7ee472c9"
+    },
+    "poc/eval/host/qemu_driver.py": {
+      "runtime_source_observation": "2765bc2988292fb942b8a54c20b605e46e6e8115d586c363bc17a28daf261359",
+      "final": "04859400a57179886707954b3eaaf0f29ee94f8785b95b6e4d531569e88248e3"
+    },
+    "poc/eval/host/report.py": {
+      "runtime_source_observation": "873754c4b7a25000b4e2a7e28280321fecab8656b2e85f0c7b8d2ff880c24f92",
+      "final": "aa3fb8fc3f794c5cbfd53daeb06e08ebdedfbf0aa8086920a9473c2786a6bea4"
+    },
+    "poc/eval/host/schema.py": {
+      "runtime_source_observation": "aba5b2043e09eadde7bc0949dd2771b7465a2be35a21b356491fe6d8e4981c19",
+      "final": "350d3f452a95e5919d1693918fc4c7d75dd9401d0c5755aad769f9d12440a42e"
+    },
+    "poc/eval/host/tests/__init__.py": {
+      "runtime_source_observation": "d9b7cc297b178e5e2de72f2b8fa40f91184874ed3356ddbec92cbe6e42c6e82b",
+      "final": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "poc/eval/host/tests/test_build_guard.py": {
+      "runtime_source_observation": "50ebf18373e9b3c0953d3d3bb668ba53675a3b204ae26b6988cd99cecd7fb3ab",
+      "final": "68ba3a7e1f92a8e13c100cc5b5fddafb778842667fd05c996172d2bd9d7eeecb"
+    },
+    "poc/eval/host/tests/test_invariants.py": {
+      "runtime_source_observation": "f02041b2e251201ccf77737d3867d7a0e9acd91975eaeb323e34cea7b4cc9297",
+      "final": "5800c20c111b639dc9ca4a6bd8f6a35ec6cc5a42c21536cb369450aa93481438"
+    },
+    "poc/eval/host/tests/test_parsers.py": {
+      "runtime_source_observation": "fccc87ac42b3cb7a78a95b1a86052baabb09b4fa643d373c219defcea7d5bd17",
+      "final": "dce2f56f5647dc8b83bd50e15e32fb4555cd86b090cd25f9dc1aec7eb7ee5b02"
+    },
+    "poc/eval/host/tests/test_qemu_driver.py": {
+      "runtime_source_observation": "0f7158eaf21bd2409f5ae613d737ec4012a5307f16ddbb42bc5b92351d111eea",
+      "final": "76226ec2cfde5abdcf915d372b3517d691e2dd29ebb7afc12c189004cf3b32ca"
+    },
+    "poc/eval/host/tests/test_report.py": {
+      "runtime_source_observation": "52733974f8672d1d9a94bdacd9934e32273551a0cb6b18981b21ddec69686e77",
+      "final": "be9f1ead1c8898910f2c9dd3e919bb26d907e3cf861971133975d5a3d0300d02"
+    },
+    "poc/eval/host/tests/test_schema.py": {
+      "runtime_source_observation": "9c728b5c6e7ed449482a93a8aefca98d3b58c2d414e7049fd731b65444097947",
+      "final": "4001a34ebc67c84a7bb79a2e489a91b9583da47a42db1507f7cdf0db743e710e"
+    }
+  },
+  "final_compiled_helpers_sha256": {
+    "eval_guest_runner": "4b45a39c04a16af2c8f748d7f6995f94bfadb532a98cf60310afa9a2be3f8776",
+    "eval_init": "b5ad949a9e6b47285778656ed3ed179105801ea37e7fddd8829ba1f552e609da",
+    "vdso_selfcheck": "9cf018e733a2fd1d0bc8cd8f455ea0eeaea2f0b91526cdc07ca994d8f55d7219"
+  },
+  "runtime_payload_helpers_sha256": {
+    "bin/eval_guest_runner": "b4780d948f0958392181f832fc6744ba8d6569cdc53696069c3c64af697a9af2",
+    "bin/vdso_selfcheck": "b9ff6e2ffeb801984db8d688f9d931b87088ef6c6a8ca9140410a8bf14e60df3"
+  },
+  "runtime_host_helpers_sha256": {
+    "init": "a136b9c824e4499de1d45ee64f328380f1083652d3e63c342301da451d2464ed",
+    "bin/run-kernelet": "f537d012898adae77a46932c3954b8adbbf1168c4e2ce58600555fe769b1b410",
+    "modules/endovisor.ko": "1eae1375f3755794cb3e4febf9f0fa4badb2e784b37b33fa5f4bece63cc97120",
+    "kernelet-image.elf": "fbeebee8b0f18486baf2744f1d5f8daee05a1a80960dd6c80f843a0a88f1247a"
+  },
+  "compile_command": "gcc -O2 -Wall -Wextra -Werror -static -pthread",
+  "compile_exit": 0,
+  "runtime_helpers_include_final_error_path_changes": false,
+  "python_syntax_and_header_check": {
+    "files": 16,
+    "passed": true
+  }
+}

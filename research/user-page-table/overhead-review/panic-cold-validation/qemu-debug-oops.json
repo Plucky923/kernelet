@@ -1,0 +1,44 @@
+{
+  "started_utc": "2026-11-17T08:00:53.396757+00:00",
+  "command": [
+    "qemu-system-x86_64",
+    "-enable-kvm",
+    "-cpu",
+    "host",
+    "-smp",
+    "2",
+    "-m",
+    "1024M",
+    "-kernel",
+    "/mnt/data/projects/kernelet/prototype/.build/linux-6.12/arch/x86/boot/bzImage",
+    "-initrd",
+    "/mnt/data/projects/kernelet/.panic-cold-validation-work/host-debug-assertions.cpio.gz",
+    "-append",
+    "console=ttyS0 panic=-1 nokaslr mitigations=off poc_mode=poc-syscall poc_pt_mode=direct poc_vcpus=2 poc_grant_mb=256 poc_initramfs=/guests/guest-oops.cpio",
+    "-display",
+    "none",
+    "-serial",
+    "stdio",
+    "-monitor",
+    "none",
+    "-no-reboot",
+    "-nic",
+    "none"
+  ],
+  "memlock_soft": 0,
+  "qemu_exit_code": 0,
+  "checks": {
+    "qemu_exit_zero": true,
+    "host_completed": true,
+    "guest_results": true,
+    "carrier_exit": true,
+    "real_panic_reports": true
+  },
+  "results": {
+    "oops_recovery": "1",
+    "oops_resource_release": "1",
+    "oops_parent_progress": "1",
+    "suite_done": "1"
+  },
+  "carrier_exit": "RUN_POC exit_kind=exit exit_code=0 grant_create_us=26509 exit_msg=\"\""
+}

@@ -25,3 +25,6 @@
 - [Contributing a design proposal](design-proposals/README.md)
 - [Design proposal template](design-proposals/template.md)
 - [2026-11-08 TypedIO](design-proposals/2026-11-08-typed-io.md)
+- [2026-11-13 Direct page-table updates in vOSTD](design-proposals/2026-11-13-direct-page-table-updates-in-vostd.md)
+- [2026-11-16 Allocate the kernelet heap from the grant](design-proposals/2026-11-16-allocate-the-kernelet-heap-from-the-grant.md)
+- [2026-11-16 Principles of API virtualization](design-proposals/2026-11-16-principles-of-api-virtualization.md)

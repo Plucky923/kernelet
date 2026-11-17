@@ -1,0 +1,12 @@
+{
+  "component": "endovisor",
+  "input_sha256": "cea42a2f24aea6d9053535697d5d07a0cf16e5906b54cd46d383584dbbe04153",
+  "toolchain": "gcc (GCC) 16.2.1 20260810",
+  "outputs_sha256": {
+    "endovisor_ko": "8d55fa9944ff4a136e1b5bf5052fc7a09a40b9ff20689b8cf146e95bf679db82"
+  },
+  "outputs_rel": {
+    "endovisor_ko": "endovisor.ko"
+  },
+  "built_utc": "2026-11-17T12:13:48.949172+00:00"
+}

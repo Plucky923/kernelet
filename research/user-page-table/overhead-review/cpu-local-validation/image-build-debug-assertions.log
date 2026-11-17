@@ -1,0 +1,3296 @@
+[Info] [normal] Forwarded QEMU guest port: 60242->22; 54461->8080 4560->6379 43775->5201 10543->31234 63839->31236 48708->11211
+[Info] [test] Forwarded QEMU guest port: 29174->22; 41919->8080 37806->6379 45004->5201 59135->31234 13487->31236 33173->11211
+   Compiling proc-macro2 v1.0.106
+   Compiling unicode-ident v1.0.24
+   Compiling quote v1.0.46
+   Compiling syn v1.0.109
+   Compiling zerocopy v0.8.54
+   Compiling autocfg v1.5.1
+   Compiling libc v0.2.186
+   Compiling getrandom v0.3.4
+   Compiling cfg-if v1.0.4
+   Compiling thiserror v2.0.18
+   Compiling ident_case v1.0.1
+   Compiling strsim v0.10.0
+   Compiling fnv v1.0.7
+   Compiling radium v0.7.0
+   Compiling bitflags v2.13.0
+warning: unstable feature specified for `-Ctarget-feature`: `ermsb`
+  |
+  = note: this feature is not stably supported; its behavior can change in the future
+
+   Compiling bitflags v1.3.2
+   Compiling log v0.4.33
+   Compiling tap v1.0.1
+warning: `bitflags` (lib) generated 1 warning (1 duplicate)
+   Compiling bit_field v0.10.3
+   Compiling rustversion v1.0.23
+warning: `tap` (lib) generated 1 warning (1 duplicate)
+   Compiling const_fn v0.4.12
+   Compiling wyz v0.5.1
+   Compiling scopeguard v1.2.0
+warning: unexpected `cfg` condition name: `radium_atomic_8`
+ --> /mnt/data/projects/kernelet/poc/target/osdk-inputs/2127e384186b84af841186f0f59939765d654c84029107ca15dac270e8039879/cargo-home/registry/src/index.crates.io-1949cf8c6b5b557f/radium-0.7.0/src/macros.rs:3:7
+  |
+3 | #[cfg(radium_atomic_8)]
+  |       ^^^^^^^^^^^^^^^
+  |
+  = help: expected names are: `docsrs`, `feature`, `ktest`, and `test` and 33 more
+  = help: consider using a Cargo feature instead
+  = help: or consider adding in `Cargo.toml` the `check-cfg` lint config for the lint:
+           [lints.rust]
+           unexpected_cfgs = { level = "warn", check-cfg = ['cfg(radium_atomic_8)'] }
+  = help: or consider adding `println!("cargo::rustc-check-cfg=cfg(radium_atomic_8)");` to the top of the `build.rs`
+  = note: see <https://doc.rust-lang.org/nightly/rustc/check-cfg/cargo-specifics.html> for more information about checking conditional configuration
+  = note: `#[warn(unexpected_cfgs)]` on by default
+
+warning: unexpected `cfg` condition name: `radium_atomic_8`
+  --> /mnt/data/projects/kernelet/poc/target/osdk-inputs/2127e384186b84af841186f0f59939765d654c84029107ca15dac270e8039879/cargo-home/registry/src/index.crates.io-1949cf8c6b5b557f/radium-0.7.0/src/macros.rs:10:11
+   |
+10 | #[cfg(not(radium_atomic_8))]
+   |           ^^^^^^^^^^^^^^^
+   |
+   = help: consider using a Cargo feature instead
+   = help: or consider adding in `Cargo.toml` the `check-cfg` lint config for the lint:
+            [lints.rust]
+            unexpected_cfgs = { level = "warn", check-cfg = ['cfg(radium_atomic_8)'] }
+   = help: or consider adding `println!("cargo::rustc-check-cfg=cfg(radium_atomic_8)");` to the top of the `build.rs`
+   = note: see <https://doc.rust-lang.org/nightly/rustc/check-cfg/cargo-specifics.html> for more information about checking conditional configuration
+
+warning: unexpected `cfg` condition name: `radium_atomic_16`
+  --> /mnt/data/projects/kernelet/poc/target/osdk-inputs/2127e384186b84af841186f0f59939765d654c84029107ca15dac270e8039879/cargo-home/registry/src/index.crates.io-1949cf8c6b5b557f/radium-0.7.0/src/macros.rs:17:7
+   |
+17 | #[cfg(radium_atomic_16)]
+   |       ^^^^^^^^^^^^^^^^
+   |
+   = help: consider using a Cargo feature instead
+   = help: or consider adding in `Cargo.toml` the `check-cfg` lint config for the lint:
+            [lints.rust]
+            unexpected_cfgs = { level = "warn", check-cfg = ['cfg(radium_atomic_16)'] }
+   = help: or consider adding `println!("cargo::rustc-check-cfg=cfg(radium_atomic_16)");` to the top of the `build.rs`
+   = note: see <https://doc.rust-lang.org/nightly/rustc/check-cfg/cargo-specifics.html> for more information about checking conditional configuration
+
+warning: unexpected `cfg` condition name: `radium_atomic_16`
+  --> /mnt/data/projects/kernelet/poc/target/osdk-inputs/2127e384186b84af841186f0f59939765d654c84029107ca15dac270e8039879/cargo-home/registry/src/index.crates.io-1949cf8c6b5b557f/radium-0.7.0/src/macros.rs:24:11
+   |
+24 | #[cfg(not(radium_atomic_16))]
+   |           ^^^^^^^^^^^^^^^^
+   |
+   = help: consider using a Cargo feature instead
+   = help: or consider adding in `Cargo.toml` the `check-cfg` lint config for the lint:
+            [lints.rust]
+            unexpected_cfgs = { level = "warn", check-cfg = ['cfg(radium_atomic_16)'] }
+   = help: or consider adding `println!("cargo::rustc-check-cfg=cfg(radium_atomic_16)");` to the top of the `build.rs`
+   = note: see <https://doc.rust-lang.org/nightly/rustc/check-cfg/cargo-specifics.html> for more information about checking conditional configuration
+
+warning: unexpected `cfg` condition name: `radium_atomic_32`
+  --> /mnt/data/projects/kernelet/poc/target/osdk-inputs/2127e384186b84af841186f0f59939765d654c84029107ca15dac270e8039879/cargo-home/registry/src/index.crates.io-1949cf8c6b5b557f/radium-0.7.0/src/macros.rs:31:7
+   |
+31 | #[cfg(radium_atomic_32)]
+   |       ^^^^^^^^^^^^^^^^
+   |
+   = help: consider using a Cargo feature instead
+   = help: or consider adding in `Cargo.toml` the `check-cfg` lint config for the lint:
+            [lints.rust]
+            unexpected_cfgs = { level = "warn", check-cfg = ['cfg(radium_atomic_32)'] }
+   = help: or consider adding `println!("cargo::rustc-check-cfg=cfg(radium_atomic_32)");` to the top of the `build.rs`
+   = note: see <https://doc.rust-lang.org/nightly/rustc/check-cfg/cargo-specifics.html> for more information about checking conditional configuration
+
+warning: unexpected `cfg` condition name: `radium_atomic_32`
+  --> /mnt/data/projects/kernelet/poc/target/osdk-inputs/2127e384186b84af841186f0f59939765d654c84029107ca15dac270e8039879/cargo-home/registry/src/index.crates.io-1949cf8c6b5b557f/radium-0.7.0/src/macros.rs:38:11
+   |
+38 | #[cfg(not(radium_atomic_32))]
+   |           ^^^^^^^^^^^^^^^^
+   |
+   = help: consider using a Cargo feature instead
+   = help: or consider adding in `Cargo.toml` the `check-cfg` lint config for the lint:
+            [lints.rust]
+            unexpected_cfgs = { level = "warn", check-cfg = ['cfg(radium_atomic_32)'] }
+   = help: or consider adding `println!("cargo::rustc-check-cfg=cfg(radium_atomic_32)");` to the top of the `build.rs`
+   = note: see <https://doc.rust-lang.org/nightly/rustc/check-cfg/cargo-specifics.html> for more information about checking conditional configuration
+
+warning: unexpected `cfg` condition name: `radium_atomic_64`
+  --> /mnt/data/projects/kernelet/poc/target/osdk-inputs/2127e384186b84af841186f0f59939765d654c84029107ca15dac270e8039879/cargo-home/registry/src/index.crates.io-1949cf8c6b5b557f/radium-0.7.0/src/macros.rs:45:7
+   |
+45 | #[cfg(radium_atomic_64)]
+   |       ^^^^^^^^^^^^^^^^
+   |
+   = help: consider using a Cargo feature instead
+   = help: or consider adding in `Cargo.toml` the `check-cfg` lint config for the lint:
+            [lints.rust]
+            unexpected_cfgs = { level = "warn", check-cfg = ['cfg(radium_atomic_64)'] }
+   = help: or consider adding `println!("cargo::rustc-check-cfg=cfg(radium_atomic_64)");` to the top of the `build.rs`
+   = note: see <https://doc.rust-lang.org/nightly/rustc/check-cfg/cargo-specifics.html> for more information about checking conditional configuration
+
+warning: unexpected `cfg` condition name: `radium_atomic_64`
+  --> /mnt/data/projects/kernelet/poc/target/osdk-inputs/2127e384186b84af841186f0f59939765d654c84029107ca15dac270e8039879/cargo-home/registry/src/index.crates.io-1949cf8c6b5b557f/radium-0.7.0/src/macros.rs:52:11
+   |
+52 | #[cfg(not(radium_atomic_64))]
+   |           ^^^^^^^^^^^^^^^^
+   |
+   = help: consider using a Cargo feature instead
+   = help: or consider adding in `Cargo.toml` the `check-cfg` lint config for the lint:
+            [lints.rust]
+            unexpected_cfgs = { level = "warn", check-cfg = ['cfg(radium_atomic_64)'] }
+   = help: or consider adding `println!("cargo::rustc-check-cfg=cfg(radium_atomic_64)");` to the top of the `build.rs`
+   = note: see <https://doc.rust-lang.org/nightly/rustc/check-cfg/cargo-specifics.html> for more information about checking conditional configuration
+
+warning: unexpected `cfg` condition name: `radium_atomic_ptr`
+  --> /mnt/data/projects/kernelet/poc/target/osdk-inputs/2127e384186b84af841186f0f59939765d654c84029107ca15dac270e8039879/cargo-home/registry/src/index.crates.io-1949cf8c6b5b557f/radium-0.7.0/src/macros.rs:59:7
+   |
+59 | #[cfg(radium_atomic_ptr)]
+   |       ^^^^^^^^^^^^^^^^^
+   |
+   = help: consider using a Cargo feature instead
+   = help: or consider adding in `Cargo.toml` the `check-cfg` lint config for the lint:
+            [lints.rust]
+            unexpected_cfgs = { level = "warn", check-cfg = ['cfg(radium_atomic_ptr)'] }
+   = help: or consider adding `println!("cargo::rustc-check-cfg=cfg(radium_atomic_ptr)");` to the top of the `build.rs`
+   = note: see <https://doc.rust-lang.org/nightly/rustc/check-cfg/cargo-specifics.html> for more information about checking conditional configuration
+
+warning: unexpected `cfg` condition name: `radium_atomic_ptr`
+  --> /mnt/data/projects/kernelet/poc/target/osdk-inputs/2127e384186b84af841186f0f59939765d654c84029107ca15dac270e8039879/cargo-home/registry/src/index.crates.io-1949cf8c6b5b557f/radium-0.7.0/src/macros.rs:66:11
+   |
+66 | #[cfg(not(radium_atomic_ptr))]
+   |           ^^^^^^^^^^^^^^^^^
+   |
+   = help: consider using a Cargo feature instead
+   = help: or consider adding in `Cargo.toml` the `check-cfg` lint config for the lint:
+            [lints.rust]
+            unexpected_cfgs = { level = "warn", check-cfg = ['cfg(radium_atomic_ptr)'] }
+   = help: or consider adding `println!("cargo::rustc-check-cfg=cfg(radium_atomic_ptr)");` to the top of the `build.rs`
+   = note: see <https://doc.rust-lang.org/nightly/rustc/check-cfg/cargo-specifics.html> for more information about checking conditional configuration
+
+   Compiling funty v2.0.0
+warning: `bit_field` (lib) generated 1 warning (1 duplicate)
+   Compiling uguid v2.2.1
+   Compiling x86 v0.52.0
+   Compiling raw-cpuid v10.7.0
+warning: use of deprecated method `core::sync::atomic::Atomic::<i8>::fetch_update`: renamed to `try_update` for consistency
+   --> /mnt/data/projects/kernelet/poc/target/osdk-inputs/2127e384186b84af841186f0f59939765d654c84029107ca15dac270e8039879/cargo-home/registry/src/index.crates.io-1949cf8c6b5b557f/radium-0.7.0/src/lib.rs:428:18
+    |
+428 |               self.fetch_update(set_order, fetch_order, f)
+    |                    ^^^^^^^^^^^^
+...
+612 | / radium_int! {
+613 | |     8: i8, AtomicI8;
+614 | |     8: u8, AtomicU8;
+615 | |     16: i16, AtomicI16;
+...   |
+622 | |     size: usize, AtomicUsize;
+623 | | }
+    | |_- in this macro invocation
+    |
+    = note: `#[warn(deprecated)]` on by default
+    = note: this warning originates in the macro `radium` which comes from the expansion of the macro `radium_int` (in Nightly builds, run with -Z macro-backtrace for more info)
+help: replace the use of the deprecated method
+    |
+428 -             self.fetch_update(set_order, fetch_order, f)
+428 +             self.try_update(set_order, fetch_order, f)
+    |
+
+warning: use of deprecated method `core::sync::atomic::Atomic::<u8>::fetch_update`: renamed to `try_update` for consistency
+   --> /mnt/data/projects/kernelet/poc/target/osdk-inputs/2127e384186b84af841186f0f59939765d654c84029107ca15dac270e8039879/cargo-home/registry/src/index.crates.io-1949cf8c6b5b557f/radium-0.7.0/src/lib.rs:428:18
+    |
+428 |               self.fetch_update(set_order, fetch_order, f)
+    |                    ^^^^^^^^^^^^
+...
+612 | / radium_int! {
+613 | |     8: i8, AtomicI8;
+614 | |     8: u8, AtomicU8;
+615 | |     16: i16, AtomicI16;
+...   |
+622 | |     size: usize, AtomicUsize;
+623 | | }
+    | |_- in this macro invocation
+    |
+    = note: this warning originates in the macro `radium` which comes from the expansion of the macro `radium_int` (in Nightly builds, run with -Z macro-backtrace for more info)
+help: replace the use of the deprecated method
+    |
+428 -             self.fetch_update(set_order, fetch_order, f)
+428 +             self.try_update(set_order, fetch_order, f)
+    |
+
+warning: use of deprecated method `core::sync::atomic::Atomic::<i16>::fetch_update`: renamed to `try_update` for consistency
+   --> /mnt/data/projects/kernelet/poc/target/osdk-inputs/2127e384186b84af841186f0f59939765d654c84029107ca15dac270e8039879/cargo-home/registry/src/index.crates.io-1949cf8c6b5b557f/radium-0.7.0/src/lib.rs:428:18
+    |
+428 |               self.fetch_update(set_order, fetch_order, f)
+    |                    ^^^^^^^^^^^^
+...
+612 | / radium_int! {
+613 | |     8: i8, AtomicI8;
+614 | |     8: u8, AtomicU8;
+615 | |     16: i16, AtomicI16;
+...   |
+622 | |     size: usize, AtomicUsize;
+623 | | }
+    | |_- in this macro invocation
+    |
+    = note: this warning originates in the macro `radium` which comes from the expansion of the macro `radium_int` (in Nightly builds, run with -Z macro-backtrace for more info)
+help: replace the use of the deprecated method
+    |
+428 -             self.fetch_update(set_order, fetch_order, f)
+428 +             self.try_update(set_order, fetch_order, f)
+    |
+
+warning: use of deprecated method `core::sync::atomic::Atomic::<u16>::fetch_update`: renamed to `try_update` for consistency
+   --> /mnt/data/projects/kernelet/poc/target/osdk-inputs/2127e384186b84af841186f0f59939765d654c84029107ca15dac270e8039879/cargo-home/registry/src/index.crates.io-1949cf8c6b5b557f/radium-0.7.0/src/lib.rs:428:18
+    |
+428 |               self.fetch_update(set_order, fetch_order, f)
+    |                    ^^^^^^^^^^^^
+...
+612 | / radium_int! {
+613 | |     8: i8, AtomicI8;
+614 | |     8: u8, AtomicU8;
+615 | |     16: i16, AtomicI16;
+...   |
+622 | |     size: usize, AtomicUsize;
+623 | | }
+    | |_- in this macro invocation
+    |
+    = note: this warning originates in the macro `radium` which comes from the expansion of the macro `radium_int` (in Nightly builds, run with -Z macro-backtrace for more info)
+help: replace the use of the deprecated method
+    |
+428 -             self.fetch_update(set_order, fetch_order, f)
+428 +             self.try_update(set_order, fetch_order, f)
+    |
+
+warning: `bitflags` (lib) generated 1 warning
+warning: use of deprecated method `core::sync::atomic::Atomic::<i32>::fetch_update`: renamed to `try_update` for consistency
+   --> /mnt/data/projects/kernelet/poc/target/osdk-inputs/2127e384186b84af841186f0f59939765d654c84029107ca15dac270e8039879/cargo-home/registry/src/index.crates.io-1949cf8c6b5b557f/radium-0.7.0/src/lib.rs:428:18
+    |
+428 |               self.fetch_update(set_order, fetch_order, f)
+    |                    ^^^^^^^^^^^^
+...
+612 | / radium_int! {
+613 | |     8: i8, AtomicI8;
+614 | |     8: u8, AtomicU8;
+615 | |     16: i16, AtomicI16;
+...   |
+622 | |     size: usize, AtomicUsize;
+623 | | }
+    | |_- in this macro invocation
+    |
+    = note: this warning originates in the macro `radium` which comes from the expansion of the macro `radium_int` (in Nightly builds, run with -Z macro-backtrace for more info)
+help: replace the use of the deprecated method
+    |
+428 -             self.fetch_update(set_order, fetch_order, f)
+428 +             self.try_update(set_order, fetch_order, f)
+    |
+
+   Compiling volatile v0.4.6
+warning: use of deprecated method `core::sync::atomic::Atomic::<u32>::fetch_update`: renamed to `try_update` for consistency
+   --> /mnt/data/projects/kernelet/poc/target/osdk-inputs/2127e384186b84af841186f0f59939765d654c84029107ca15dac270e8039879/cargo-home/registry/src/index.crates.io-1949cf8c6b5b557f/radium-0.7.0/src/lib.rs:428:18
+    |
+428 |               self.fetch_update(set_order, fetch_order, f)
+    |                    ^^^^^^^^^^^^
+...
+612 | / radium_int! {
+613 | |     8: i8, AtomicI8;
+614 | |     8: u8, AtomicU8;
+615 | |     16: i16, AtomicI16;
+...   |
+622 | |     size: usize, AtomicUsize;
+623 | | }
+    | |_- in this macro invocation
+    |
+    = note: this warning originates in the macro `radium` which comes from the expansion of the macro `radium_int` (in Nightly builds, run with -Z macro-backtrace for more info)
+help: replace the use of the deprecated method
+    |
+428 -             self.fetch_update(set_order, fetch_order, f)
+428 +             self.try_update(set_order, fetch_order, f)
+    |
+
+warning: use of deprecated method `core::sync::atomic::Atomic::<i64>::fetch_update`: renamed to `try_update` for consistency
+   --> /mnt/data/projects/kernelet/poc/target/osdk-inputs/2127e384186b84af841186f0f59939765d654c84029107ca15dac270e8039879/cargo-home/registry/src/index.crates.io-1949cf8c6b5b557f/radium-0.7.0/src/lib.rs:428:18
+    |
+428 |               self.fetch_update(set_order, fetch_order, f)
+    |                    ^^^^^^^^^^^^
+...
+612 | / radium_int! {
+613 | |     8: i8, AtomicI8;
+614 | |     8: u8, AtomicU8;
+615 | |     16: i16, AtomicI16;
+...   |
+622 | |     size: usize, AtomicUsize;
+623 | | }
+    | |_- in this macro invocation
+    |
+    = note: this warning originates in the macro `radium` which comes from the expansion of the macro `radium_int` (in Nightly builds, run with -Z macro-backtrace for more info)
+help: replace the use of the deprecated method
+    |
+428 -             self.fetch_update(set_order, fetch_order, f)
+428 +             self.try_update(set_order, fetch_order, f)
+    |
+
+warning: use of deprecated method `core::sync::atomic::Atomic::<u64>::fetch_update`: renamed to `try_update` for consistency
+   --> /mnt/data/projects/kernelet/poc/target/osdk-inputs/2127e384186b84af841186f0f59939765d654c84029107ca15dac270e8039879/cargo-home/registry/src/index.crates.io-1949cf8c6b5b557f/radium-0.7.0/src/lib.rs:428:18
+    |
+428 |               self.fetch_update(set_order, fetch_order, f)
+    |                    ^^^^^^^^^^^^
+...
+612 | / radium_int! {
+613 | |     8: i8, AtomicI8;
+614 | |     8: u8, AtomicU8;
+615 | |     16: i16, AtomicI16;
+...   |
+622 | |     size: usize, AtomicUsize;
+623 | | }
+    | |_- in this macro invocation
+    |
+    = note: this warning originates in the macro `radium` which comes from the expansion of the macro `radium_int` (in Nightly builds, run with -Z macro-backtrace for more info)
+help: replace the use of the deprecated method
+    |
+428 -             self.fetch_update(set_order, fetch_order, f)
+428 +             self.try_update(set_order, fetch_order, f)
+    |
+
+warning: use of deprecated method `core::sync::atomic::Atomic::<isize>::fetch_update`: renamed to `try_update` for consistency
+   --> /mnt/data/projects/kernelet/poc/target/osdk-inputs/2127e384186b84af841186f0f59939765d654c84029107ca15dac270e8039879/cargo-home/registry/src/index.crates.io-1949cf8c6b5b557f/radium-0.7.0/src/lib.rs:428:18
+    |
+428 |               self.fetch_update(set_order, fetch_order, f)
+    |                    ^^^^^^^^^^^^
+...
+612 | / radium_int! {
+613 | |     8: i8, AtomicI8;
+614 | |     8: u8, AtomicU8;
+615 | |     16: i16, AtomicI16;
+...   |
+622 | |     size: usize, AtomicUsize;
+623 | | }
+    | |_- in this macro invocation
+    |
+    = note: this warning originates in the macro `radium` which comes from the expansion of the macro `radium_int` (in Nightly builds, run with -Z macro-backtrace for more info)
+help: replace the use of the deprecated method
+    |
+428 -             self.fetch_update(set_order, fetch_order, f)
+428 +             self.try_update(set_order, fetch_order, f)
+    |
+
+warning: use of deprecated method `core::sync::atomic::Atomic::<usize>::fetch_update`: renamed to `try_update` for consistency
+   --> /mnt/data/projects/kernelet/poc/target/osdk-inputs/2127e384186b84af841186f0f59939765d654c84029107ca15dac270e8039879/cargo-home/registry/src/index.crates.io-1949cf8c6b5b557f/radium-0.7.0/src/lib.rs:428:18
+    |
+428 |               self.fetch_update(set_order, fetch_order, f)
+    |                    ^^^^^^^^^^^^
+...
+612 | / radium_int! {
+613 | |     8: i8, AtomicI8;
+614 | |     8: u8, AtomicU8;
+615 | |     16: i16, AtomicI16;
+...   |
+622 | |     size: usize, AtomicUsize;
+623 | | }
+    | |_- in this macro invocation
+    |
+    = note: this warning originates in the macro `radium` which comes from the expansion of the macro `radium_int` (in Nightly builds, run with -Z macro-backtrace for more info)
+help: replace the use of the deprecated method
+    |
+428 -             self.fetch_update(set_order, fetch_order, f)
+428 +             self.try_update(set_order, fetch_order, f)
+    |
+
+warning: use of deprecated method `core::sync::atomic::Atomic::<bool>::fetch_update`: renamed to `try_update` for consistency
+   --> /mnt/data/projects/kernelet/poc/target/osdk-inputs/2127e384186b84af841186f0f59939765d654c84029107ca15dac270e8039879/cargo-home/registry/src/index.crates.io-1949cf8c6b5b557f/radium-0.7.0/src/lib.rs:428:18
+    |
+428 |             self.fetch_update(set_order, fetch_order, f)
+    |                  ^^^^^^^^^^^^
+...
+631 |         radium!(atom bool);
+    |         ------------------ in this macro invocation
+    |
+    = note: this warning originates in the macro `radium` (in Nightly builds, run with -Z macro-backtrace for more info)
+help: replace the use of the deprecated method
+    |
+428 -             self.fetch_update(set_order, fetch_order, f)
+428 +             self.try_update(set_order, fetch_order, f)
+    |
+
+warning: use of deprecated method `core::sync::atomic::Atomic::<*mut T>::fetch_update`: renamed to `try_update` for consistency
+   --> /mnt/data/projects/kernelet/poc/target/osdk-inputs/2127e384186b84af841186f0f59939765d654c84029107ca15dac270e8039879/cargo-home/registry/src/index.crates.io-1949cf8c6b5b557f/radium-0.7.0/src/lib.rs:428:18
+    |
+428 |             self.fetch_update(set_order, fetch_order, f)
+    |                  ^^^^^^^^^^^^
+...
+691 |         radium!(atom *mut T);
+    |         -------------------- in this macro invocation
+    |
+    = note: this warning originates in the macro `radium` (in Nightly builds, run with -Z macro-backtrace for more info)
+help: replace the use of the deprecated method
+    |
+428 -             self.fetch_update(set_order, fetch_order, f)
+428 +             self.try_update(set_order, fetch_order, f)
+    |
+
+   Compiling lock_api v0.4.14
+   Compiling gimli v0.34.0
+   Compiling smallvec v1.15.2
+   Compiling uefi-raw v0.12.0
+   Compiling serde_core v1.0.228
+   Compiling acpi v5.2.0
+   Compiling memoffset v0.9.1
+   Compiling num-traits v0.2.19
+warning: `radium` (lib) generated 23 warnings (1 duplicate)
+   Compiling linux-boot-params v0.19.0 (/mnt/data/projects/kernelet/poc/target/osdk-inputs/2127e384186b84af841186f0f59939765d654c84029107ca15dac270e8039879/fs/mnt/data/projects/kernelet/poc/ostd/libs/linux-bzimage/boot-params)
+warning: `linux-boot-params` (lib) generated 1 warning (1 duplicate)
+   Compiling align_ext v0.1.0 (/mnt/data/projects/kernelet/poc/target/osdk-inputs/2127e384186b84af841186f0f59939765d654c84029107ca15dac270e8039879/fs/mnt/data/projects/kernelet/poc/ostd/libs/align_ext)
+warning: `align_ext` (lib) generated 1 warning (1 duplicate)
+   Compiling spin v0.9.9
+   Compiling gimli v0.28.1
+   Compiling ostd-test v0.19.0 (/mnt/data/projects/kernelet/poc/target/osdk-inputs/2127e384186b84af841186f0f59939765d654c84029107ca15dac270e8039879/fs/mnt/data/projects/kernelet/poc/ostd/libs/ostd-test)
+   Compiling volatile v0.6.1
+warning: unexpected `cfg` condition name: `doctests`
+  --> /mnt/data/projects/kernelet/poc/target/osdk-inputs/2127e384186b84af841186f0f59939765d654c84029107ca15dac270e8039879/cargo-home/registry/src/index.crates.io-1949cf8c6b5b557f/memoffset-0.9.1/src/lib.rs:59:7
+   |
+59 | #[cfg(doctests)]
+   |       ^^^^^^^^ help: there is a config with a similar name: `doctest`
+   |
+   = help: consider using a Cargo feature instead
+   = help: or consider adding in `Cargo.toml` the `check-cfg` lint config for the lint:
+            [lints.rust]
+            unexpected_cfgs = { level = "warn", check-cfg = ['cfg(doctests)'] }
+   = help: or consider adding `println!("cargo::rustc-check-cfg=cfg(doctests)");` to the top of the `build.rs`
+   = note: see <https://doc.rust-lang.org/nightly/rustc/check-cfg/cargo-specifics.html> for more information about checking conditional configuration
+   = note: `#[warn(unexpected_cfgs)]` on by default
+
+warning: unexpected `cfg` condition name: `doctests`
+  --> /mnt/data/projects/kernelet/poc/target/osdk-inputs/2127e384186b84af841186f0f59939765d654c84029107ca15dac270e8039879/cargo-home/registry/src/index.crates.io-1949cf8c6b5b557f/memoffset-0.9.1/src/lib.rs:62:7
+   |
+62 | #[cfg(doctests)]
+   |       ^^^^^^^^ help: there is a config with a similar name: `doctest`
+   |
+   = help: consider using a Cargo feature instead
+   = help: or consider adding in `Cargo.toml` the `check-cfg` lint config for the lint:
+            [lints.rust]
+            unexpected_cfgs = { level = "warn", check-cfg = ['cfg(doctests)'] }
+   = help: or consider adding `println!("cargo::rustc-check-cfg=cfg(doctests)");` to the top of the `build.rs`
+   = note: see <https://doc.rust-lang.org/nightly/rustc/check-cfg/cargo-specifics.html> for more information about checking conditional configuration
+
+warning: unexpected `cfg` condition name: `raw_ref_macros`
+  --> /mnt/data/projects/kernelet/poc/target/osdk-inputs/2127e384186b84af841186f0f59939765d654c84029107ca15dac270e8039879/cargo-home/registry/src/index.crates.io-1949cf8c6b5b557f/memoffset-0.9.1/src/raw_field.rs:22:7
+   |
+22 | #[cfg(raw_ref_macros)]
+   |       ^^^^^^^^^^^^^^
+   |
+   = help: expected names are: `docsrs`, `feature`, `ktest`, and `test` and 33 more
+   = help: consider using a Cargo feature instead
+   = help: or consider adding in `Cargo.toml` the `check-cfg` lint config for the lint:
+            [lints.rust]
+            unexpected_cfgs = { level = "warn", check-cfg = ['cfg(raw_ref_macros)'] }
+   = help: or consider adding `println!("cargo::rustc-check-cfg=cfg(raw_ref_macros)");` to the top of the `build.rs`
+   = note: see <https://doc.rust-lang.org/nightly/rustc/check-cfg/cargo-specifics.html> for more information about checking conditional configuration
+
+warning: unexpected `cfg` condition name: `raw_ref_macros`
+  --> /mnt/data/projects/kernelet/poc/target/osdk-inputs/2127e384186b84af841186f0f59939765d654c84029107ca15dac270e8039879/cargo-home/registry/src/index.crates.io-1949cf8c6b5b557f/memoffset-0.9.1/src/raw_field.rs:30:11
+   |
+30 | #[cfg(not(raw_ref_macros))]
+   |           ^^^^^^^^^^^^^^
+   |
+   = help: consider using a Cargo feature instead
+   = help: or consider adding in `Cargo.toml` the `check-cfg` lint config for the lint:
+            [lints.rust]
+            unexpected_cfgs = { level = "warn", check-cfg = ['cfg(raw_ref_macros)'] }
+   = help: or consider adding `println!("cargo::rustc-check-cfg=cfg(raw_ref_macros)");` to the top of the `build.rs`
+   = note: see <https://doc.rust-lang.org/nightly/rustc/check-cfg/cargo-specifics.html> for more information about checking conditional configuration
+
+warning: unexpected `cfg` condition name: `allow_clippy`
+  --> /mnt/data/projects/kernelet/poc/target/osdk-inputs/2127e384186b84af841186f0f59939765d654c84029107ca15dac270e8039879/cargo-home/registry/src/index.crates.io-1949cf8c6b5b557f/memoffset-0.9.1/src/raw_field.rs:57:7
+   |
+57 | #[cfg(allow_clippy)]
+   |       ^^^^^^^^^^^^
+   |
+   = help: consider using a Cargo feature instead
+   = help: or consider adding in `Cargo.toml` the `check-cfg` lint config for the lint:
+            [lints.rust]
+            unexpected_cfgs = { level = "warn", check-cfg = ['cfg(allow_clippy)'] }
+   = help: or consider adding `println!("cargo::rustc-check-cfg=cfg(allow_clippy)");` to the top of the `build.rs`
+   = note: see <https://doc.rust-lang.org/nightly/rustc/check-cfg/cargo-specifics.html> for more information about checking conditional configuration
+
+warning: unexpected `cfg` condition name: `allow_clippy`
+  --> /mnt/data/projects/kernelet/poc/target/osdk-inputs/2127e384186b84af841186f0f59939765d654c84029107ca15dac270e8039879/cargo-home/registry/src/index.crates.io-1949cf8c6b5b557f/memoffset-0.9.1/src/raw_field.rs:69:11
+   |
+69 | #[cfg(not(allow_clippy))]
+   |           ^^^^^^^^^^^^
+   |
+   = help: consider using a Cargo feature instead
+   = help: or consider adding in `Cargo.toml` the `check-cfg` lint config for the lint:
+            [lints.rust]
+            unexpected_cfgs = { level = "warn", check-cfg = ['cfg(allow_clippy)'] }
+   = help: or consider adding `println!("cargo::rustc-check-cfg=cfg(allow_clippy)");` to the top of the `build.rs`
+   = note: see <https://doc.rust-lang.org/nightly/rustc/check-cfg/cargo-specifics.html> for more information about checking conditional configuration
+
+warning: unexpected `cfg` condition name: `allow_clippy`
+  --> /mnt/data/projects/kernelet/poc/target/osdk-inputs/2127e384186b84af841186f0f59939765d654c84029107ca15dac270e8039879/cargo-home/registry/src/index.crates.io-1949cf8c6b5b557f/memoffset-0.9.1/src/raw_field.rs:90:7
+   |
+90 | #[cfg(allow_clippy)]
+   |       ^^^^^^^^^^^^
+   |
+   = help: consider using a Cargo feature instead
+   = help: or consider adding in `Cargo.toml` the `check-cfg` lint config for the lint:
+            [lints.rust]
+            unexpected_cfgs = { level = "warn", check-cfg = ['cfg(allow_clippy)'] }
+   = help: or consider adding `println!("cargo::rustc-check-cfg=cfg(allow_clippy)");` to the top of the `build.rs`
+   = note: see <https://doc.rust-lang.org/nightly/rustc/check-cfg/cargo-specifics.html> for more information about checking conditional configuration
+
+warning: unexpected `cfg` condition name: `allow_clippy`
+   --> /mnt/data/projects/kernelet/poc/target/osdk-inputs/2127e384186b84af841186f0f59939765d654c84029107ca15dac270e8039879/cargo-home/registry/src/index.crates.io-1949cf8c6b5b557f/memoffset-0.9.1/src/raw_field.rs:100:11
+    |
+100 | #[cfg(not(allow_clippy))]
+    |           ^^^^^^^^^^^^
+    |
+    = help: consider using a Cargo feature instead
+    = help: or consider adding in `Cargo.toml` the `check-cfg` lint config for the lint:
+             [lints.rust]
+             unexpected_cfgs = { level = "warn", check-cfg = ['cfg(allow_clippy)'] }
+    = help: or consider adding `println!("cargo::rustc-check-cfg=cfg(allow_clippy)");` to the top of the `build.rs`
+    = note: see <https://doc.rust-lang.org/nightly/rustc/check-cfg/cargo-specifics.html> for more information about checking conditional configuration
+
+warning: unexpected `cfg` condition name: `allow_clippy`
+   --> /mnt/data/projects/kernelet/poc/target/osdk-inputs/2127e384186b84af841186f0f59939765d654c84029107ca15dac270e8039879/cargo-home/registry/src/index.crates.io-1949cf8c6b5b557f/memoffset-0.9.1/src/raw_field.rs:125:7
+    |
+125 | #[cfg(allow_clippy)]
+    |       ^^^^^^^^^^^^
+    |
+    = help: consider using a Cargo feature instead
+    = help: or consider adding in `Cargo.toml` the `check-cfg` lint config for the lint:
+             [lints.rust]
+             unexpected_cfgs = { level = "warn", check-cfg = ['cfg(allow_clippy)'] }
+    = help: or consider adding `println!("cargo::rustc-check-cfg=cfg(allow_clippy)");` to the top of the `build.rs`
+    = note: see <https://doc.rust-lang.org/nightly/rustc/check-cfg/cargo-specifics.html> for more information about checking conditional configuration
+
+warning: unexpected `cfg` condition name: `allow_clippy`
+   --> /mnt/data/projects/kernelet/poc/target/osdk-inputs/2127e384186b84af841186f0f59939765d654c84029107ca15dac270e8039879/cargo-home/registry/src/index.crates.io-1949cf8c6b5b557f/memoffset-0.9.1/src/raw_field.rs:141:11
+    |
+141 | #[cfg(not(allow_clippy))]
+    |           ^^^^^^^^^^^^
+    |
+    = help: consider using a Cargo feature instead
+    = help: or consider adding in `Cargo.toml` the `check-cfg` lint config for the lint:
+             [lints.rust]
+             unexpected_cfgs = { level = "warn", check-cfg = ['cfg(allow_clippy)'] }
+    = help: or consider adding `println!("cargo::rustc-check-cfg=cfg(allow_clippy)");` to the top of the `build.rs`
+    = note: see <https://doc.rust-lang.org/nightly/rustc/check-cfg/cargo-specifics.html> for more information about checking conditional configuration
+
+warning: unexpected `cfg` condition name: `tuple_ty`
+   --> /mnt/data/projects/kernelet/poc/target/osdk-inputs/2127e384186b84af841186f0f59939765d654c84029107ca15dac270e8039879/cargo-home/registry/src/index.crates.io-1949cf8c6b5b557f/memoffset-0.9.1/src/raw_field.rs:183:7
+    |
+183 | #[cfg(tuple_ty)]
+    |       ^^^^^^^^
+    |
+    = help: consider using a Cargo feature instead
+    = help: or consider adding in `Cargo.toml` the `check-cfg` lint config for the lint:
+             [lints.rust]
+             unexpected_cfgs = { level = "warn", check-cfg = ['cfg(tuple_ty)'] }
+    = help: or consider adding `println!("cargo::rustc-check-cfg=cfg(tuple_ty)");` to the top of the `build.rs`
+    = note: see <https://doc.rust-lang.org/nightly/rustc/check-cfg/cargo-specifics.html> for more information about checking conditional configuration
+
+warning: unexpected `cfg` condition name: `maybe_uninit`
+  --> /mnt/data/projects/kernelet/poc/target/osdk-inputs/2127e384186b84af841186f0f59939765d654c84029107ca15dac270e8039879/cargo-home/registry/src/index.crates.io-1949cf8c6b5b557f/memoffset-0.9.1/src/offset_of.rs:23:7
+   |
+23 | #[cfg(maybe_uninit)]
+   |       ^^^^^^^^^^^^
+   |
+   = help: consider using a Cargo feature instead
+   = help: or consider adding in `Cargo.toml` the `check-cfg` lint config for the lint:
+            [lints.rust]
+            unexpected_cfgs = { level = "warn", check-cfg = ['cfg(maybe_uninit)'] }
+   = help: or consider adding `println!("cargo::rustc-check-cfg=cfg(maybe_uninit)");` to the top of the `build.rs`
+   = note: see <https://doc.rust-lang.org/nightly/rustc/check-cfg/cargo-specifics.html> for more information about checking conditional configuration
+
+warning: unexpected `cfg` condition name: `maybe_uninit`
+  --> /mnt/data/projects/kernelet/poc/target/osdk-inputs/2127e384186b84af841186f0f59939765d654c84029107ca15dac270e8039879/cargo-home/registry/src/index.crates.io-1949cf8c6b5b557f/memoffset-0.9.1/src/offset_of.rs:37:11
+   |
+37 | #[cfg(not(maybe_uninit))]
+   |           ^^^^^^^^^^^^
+   |
+   = help: consider using a Cargo feature instead
+   = help: or consider adding in `Cargo.toml` the `check-cfg` lint config for the lint:
+            [lints.rust]
+            unexpected_cfgs = { level = "warn", check-cfg = ['cfg(maybe_uninit)'] }
+   = help: or consider adding `println!("cargo::rustc-check-cfg=cfg(maybe_uninit)");` to the top of the `build.rs`
+   = note: see <https://doc.rust-lang.org/nightly/rustc/check-cfg/cargo-specifics.html> for more information about checking conditional configuration
+
+warning: unexpected `cfg` condition name: `stable_const`
+  --> /mnt/data/projects/kernelet/poc/target/osdk-inputs/2127e384186b84af841186f0f59939765d654c84029107ca15dac270e8039879/cargo-home/registry/src/index.crates.io-1949cf8c6b5b557f/memoffset-0.9.1/src/offset_of.rs:49:7
+   |
+49 | #[cfg(stable_const)]
+   |       ^^^^^^^^^^^^
+   |
+   = help: consider using a Cargo feature instead
+   = help: or consider adding in `Cargo.toml` the `check-cfg` lint config for the lint:
+            [lints.rust]
+            unexpected_cfgs = { level = "warn", check-cfg = ['cfg(stable_const)'] }
+   = help: or consider adding `println!("cargo::rustc-check-cfg=cfg(stable_const)");` to the top of the `build.rs`
+   = note: see <https://doc.rust-lang.org/nightly/rustc/check-cfg/cargo-specifics.html> for more information about checking conditional configuration
+
+warning: unexpected `cfg` condition name: `stable_const`
+  --> /mnt/data/projects/kernelet/poc/target/osdk-inputs/2127e384186b84af841186f0f59939765d654c84029107ca15dac270e8039879/cargo-home/registry/src/index.crates.io-1949cf8c6b5b557f/memoffset-0.9.1/src/offset_of.rs:61:11
+   |
+61 | #[cfg(not(stable_const))]
+   |           ^^^^^^^^^^^^
+   |
+   = help: consider using a Cargo feature instead
+   = help: or consider adding in `Cargo.toml` the `check-cfg` lint config for the lint:
+            [lints.rust]
+            unexpected_cfgs = { level = "warn", check-cfg = ['cfg(stable_const)'] }
+   = help: or consider adding `println!("cargo::rustc-check-cfg=cfg(stable_const)");` to the top of the `build.rs`
+   = note: see <https://doc.rust-lang.org/nightly/rustc/check-cfg/cargo-specifics.html> for more information about checking conditional configuration
+
+warning: unexpected `cfg` condition name: `stable_offset_of`
+  --> /mnt/data/projects/kernelet/poc/target/osdk-inputs/2127e384186b84af841186f0f59939765d654c84029107ca15dac270e8039879/cargo-home/registry/src/index.crates.io-1949cf8c6b5b557f/memoffset-0.9.1/src/offset_of.rs:70:11
+   |
+70 | #[cfg(not(stable_offset_of))]
+   |           ^^^^^^^^^^^^^^^^
+   |
+   = help: consider using a Cargo feature instead
+   = help: or consider adding in `Cargo.toml` the `check-cfg` lint config for the lint:
+            [lints.rust]
+            unexpected_cfgs = { level = "warn", check-cfg = ['cfg(stable_offset_of)'] }
+   = help: or consider adding `println!("cargo::rustc-check-cfg=cfg(stable_offset_of)");` to the top of the `build.rs`
+   = note: see <https://doc.rust-lang.org/nightly/rustc/check-cfg/cargo-specifics.html> for more information about checking conditional configuration
+
+warning: unexpected `cfg` condition name: `stable_offset_of`
+  --> /mnt/data/projects/kernelet/poc/target/osdk-inputs/2127e384186b84af841186f0f59939765d654c84029107ca15dac270e8039879/cargo-home/registry/src/index.crates.io-1949cf8c6b5b557f/memoffset-0.9.1/src/offset_of.rs:83:7
+   |
+83 | #[cfg(stable_offset_of)]
+   |       ^^^^^^^^^^^^^^^^
+   |
+   = help: consider using a Cargo feature instead
+   = help: or consider adding in `Cargo.toml` the `check-cfg` lint config for the lint:
+            [lints.rust]
+            unexpected_cfgs = { level = "warn", check-cfg = ['cfg(stable_offset_of)'] }
+   = help: or consider adding `println!("cargo::rustc-check-cfg=cfg(stable_offset_of)");` to the top of the `build.rs`
+   = note: see <https://doc.rust-lang.org/nightly/rustc/check-cfg/cargo-specifics.html> for more information about checking conditional configuration
+
+warning: unexpected `cfg` condition name: `tuple_ty`
+   --> /mnt/data/projects/kernelet/poc/target/osdk-inputs/2127e384186b84af841186f0f59939765d654c84029107ca15dac270e8039879/cargo-home/registry/src/index.crates.io-1949cf8c6b5b557f/memoffset-0.9.1/src/offset_of.rs:127:7
+    |
+127 | #[cfg(tuple_ty)]
+    |       ^^^^^^^^
+    |
+    = help: consider using a Cargo feature instead
+    = help: or consider adding in `Cargo.toml` the `check-cfg` lint config for the lint:
+             [lints.rust]
+             unexpected_cfgs = { level = "warn", check-cfg = ['cfg(tuple_ty)'] }
+    = help: or consider adding `println!("cargo::rustc-check-cfg=cfg(tuple_ty)");` to the top of the `build.rs`
+    = note: see <https://doc.rust-lang.org/nightly/rustc/check-cfg/cargo-specifics.html> for more information about checking conditional configuration
+
+warning: unexpected `cfg` condition name: `stable_offset_of`
+   --> /mnt/data/projects/kernelet/poc/target/osdk-inputs/2127e384186b84af841186f0f59939765d654c84029107ca15dac270e8039879/cargo-home/registry/src/index.crates.io-1949cf8c6b5b557f/memoffset-0.9.1/src/offset_of.rs:128:11
+    |
+128 | #[cfg(not(stable_offset_of))]
+    |           ^^^^^^^^^^^^^^^^
+    |
+    = help: consider using a Cargo feature instead
+    = help: or consider adding in `Cargo.toml` the `check-cfg` lint config for the lint:
+             [lints.rust]
+             unexpected_cfgs = { level = "warn", check-cfg = ['cfg(stable_offset_of)'] }
+    = help: or consider adding `println!("cargo::rustc-check-cfg=cfg(stable_offset_of)");` to the top of the `build.rs`
+    = note: see <https://doc.rust-lang.org/nightly/rustc/check-cfg/cargo-specifics.html> for more information about checking conditional configuration
+
+warning: unexpected `cfg` condition name: `tuple_ty`
+   --> /mnt/data/projects/kernelet/poc/target/osdk-inputs/2127e384186b84af841186f0f59939765d654c84029107ca15dac270e8039879/cargo-home/registry/src/index.crates.io-1949cf8c6b5b557f/memoffset-0.9.1/src/offset_of.rs:142:7
+    |
+142 | #[cfg(tuple_ty)]
+    |       ^^^^^^^^
+    |
+    = help: consider using a Cargo feature instead
+    = help: or consider adding in `Cargo.toml` the `check-cfg` lint config for the lint:
+             [lints.rust]
+             unexpected_cfgs = { level = "warn", check-cfg = ['cfg(tuple_ty)'] }
+    = help: or consider adding `println!("cargo::rustc-check-cfg=cfg(tuple_ty)");` to the top of the `build.rs`
+    = note: see <https://doc.rust-lang.org/nightly/rustc/check-cfg/cargo-specifics.html> for more information about checking conditional configuration
+
+warning: unexpected `cfg` condition name: `stable_offset_of`
+   --> /mnt/data/projects/kernelet/poc/target/osdk-inputs/2127e384186b84af841186f0f59939765d654c84029107ca15dac270e8039879/cargo-home/registry/src/index.crates.io-1949cf8c6b5b557f/memoffset-0.9.1/src/offset_of.rs:143:7
+    |
+143 | #[cfg(stable_offset_of)]
+    |       ^^^^^^^^^^^^^^^^
+    |
+    = help: consider using a Cargo feature instead
+    = help: or consider adding in `Cargo.toml` the `check-cfg` lint config for the lint:
+             [lints.rust]
+             unexpected_cfgs = { level = "warn", check-cfg = ['cfg(stable_offset_of)'] }
+    = help: or consider adding `println!("cargo::rustc-check-cfg=cfg(stable_offset_of)");` to the top of the `build.rs`
+    = note: see <https://doc.rust-lang.org/nightly/rustc/check-cfg/cargo-specifics.html> for more information about checking conditional configuration
+
+warning: unexpected `cfg` condition name: `tuple_ty`
+   --> /mnt/data/projects/kernelet/poc/target/osdk-inputs/2127e384186b84af841186f0f59939765d654c84029107ca15dac270e8039879/cargo-home/registry/src/index.crates.io-1949cf8c6b5b557f/memoffset-0.9.1/src/offset_of.rs:160:7
+    |
+160 | #[cfg(tuple_ty)]
+    |       ^^^^^^^^
+    |
+    = help: consider using a Cargo feature instead
+    = help: or consider adding in `Cargo.toml` the `check-cfg` lint config for the lint:
+             [lints.rust]
+             unexpected_cfgs = { level = "warn", check-cfg = ['cfg(tuple_ty)'] }
+    = help: or consider adding `println!("cargo::rustc-check-cfg=cfg(tuple_ty)");` to the top of the `build.rs`
+    = note: see <https://doc.rust-lang.org/nightly/rustc/check-cfg/cargo-specifics.html> for more information about checking conditional configuration
+
+warning: unexpected `cfg` condition name: `stable_offset_of`
+   --> /mnt/data/projects/kernelet/poc/target/osdk-inputs/2127e384186b84af841186f0f59939765d654c84029107ca15dac270e8039879/cargo-home/registry/src/index.crates.io-1949cf8c6b5b557f/memoffset-0.9.1/src/offset_of.rs:170:11
+    |
+170 | #[cfg(not(stable_offset_of))]
+    |           ^^^^^^^^^^^^^^^^
+    |
+    = help: consider using a Cargo feature instead
+    = help: or consider adding in `Cargo.toml` the `check-cfg` lint config for the lint:
+             [lints.rust]
+             unexpected_cfgs = { level = "warn", check-cfg = ['cfg(stable_offset_of)'] }
+    = help: or consider adding `println!("cargo::rustc-check-cfg=cfg(stable_offset_of)");` to the top of the `build.rs`
+    = note: see <https://doc.rust-lang.org/nightly/rustc/check-cfg/cargo-specifics.html> for more information about checking conditional configuration
+
+warning: unexpected `cfg` condition name: `stable_offset_of`
+   --> /mnt/data/projects/kernelet/poc/target/osdk-inputs/2127e384186b84af841186f0f59939765d654c84029107ca15dac270e8039879/cargo-home/registry/src/index.crates.io-1949cf8c6b5b557f/memoffset-0.9.1/src/offset_of.rs:184:7
+    |
+184 | #[cfg(stable_offset_of)]
+    |       ^^^^^^^^^^^^^^^^
+    |
+    = help: consider using a Cargo feature instead
+    = help: or consider adding in `Cargo.toml` the `check-cfg` lint config for the lint:
+             [lints.rust]
+             unexpected_cfgs = { level = "warn", check-cfg = ['cfg(stable_offset_of)'] }
+    = help: or consider adding `println!("cargo::rustc-check-cfg=cfg(stable_offset_of)");` to the top of the `build.rs`
+    = note: see <https://doc.rust-lang.org/nightly/rustc/check-cfg/cargo-specifics.html> for more information about checking conditional configuration
+
+warning: `memoffset` (lib) generated 25 warnings (1 duplicate)
+   Compiling intrusive-collections v0.9.7
+   Compiling serde v1.0.228
+warning: `ostd-test` (lib) generated 1 warning (1 duplicate)
+   Compiling bitvec v1.1.1
+   Compiling x86_64 v0.15.5
+   Compiling syn v2.0.118
+   Compiling either v1.16.0
+   Compiling hashbrown v0.17.1
+   Compiling equivalent v1.0.2
+   Compiling winnow v0.5.40
+warning: `funty` (lib) generated 1 warning (1 duplicate)
+   Compiling json v0.12.4
+   Compiling itertools v0.10.5
+   Compiling indexmap v2.14.0
+   Compiling inventory v0.3.24
+   Compiling rand_core v0.9.5
+   Compiling typeflags-util v0.1.0 (/mnt/data/projects/kernelet/poc/target/osdk-inputs/2127e384186b84af841186f0f59939765d654c84029107ca15dac270e8039879/fs/mnt/data/projects/kernelet/poc/kernel/libs/typeflags-util)
+warning: `typeflags-util` (lib) generated 1 warning (1 duplicate)
+   Compiling paste v1.0.15
+   Compiling byteorder v1.5.0
+warning: `cfg-if` (lib) generated 1 warning (1 duplicate)
+   Compiling heapless v0.8.0
+   Compiling hash32 v0.3.1
+   Compiling stable_deref_trait v1.2.1
+   Compiling smoltcp v0.11.0 (/mnt/data/projects/kernelet/poc/target/osdk-inputs/2127e384186b84af841186f0f59939765d654c84029107ca15dac270e8039879/fs/mnt/data/projects/kernelet/poc/vendor/smoltcp)
+   Compiling managed v0.8.0
+warning: unnecessary trailing semicolon
+   --> /mnt/data/projects/kernelet/poc/target/osdk-inputs/2127e384186b84af841186f0f59939765d654c84029107ca15dac270e8039879/cargo-home/registry/src/index.crates.io-1949cf8c6b5b557f/managed-0.8.0/src/map.rs:180:10
+    |
+180 |         };
+    |          ^ help: remove this semicolon
+    |
+    = note: `#[warn(redundant_semicolons)]` (part of `#[warn(unused)]`) on by default
+
+warning: unnecessary trailing semicolon
+   --> /mnt/data/projects/kernelet/poc/target/osdk-inputs/2127e384186b84af841186f0f59939765d654c84029107ca15dac270e8039879/cargo-home/registry/src/index.crates.io-1949cf8c6b5b557f/managed-0.8.0/src/map.rs:211:10
+    |
+211 |         };
+    |          ^ help: remove this semicolon
+
+   Compiling version_check v0.9.5
+warning: hiding a lifetime that's elided elsewhere is confusing
+   --> /mnt/data/projects/kernelet/poc/target/osdk-inputs/2127e384186b84af841186f0f59939765d654c84029107ca15dac270e8039879/cargo-home/registry/src/index.crates.io-1949cf8c6b5b557f/managed-0.8.0/src/map.rs:388:17
+    |
+388 |     pub fn iter(&self) -> Iter<K, V> {
+    |                 ^^^^^     ^^^^^^^^^^ the same lifetime is hidden here
+    |                 |
+    |                 the lifetime is elided here
+    |
+    = help: the same lifetime is referred to in inconsistent ways, making the signature confusing
+    = note: `#[warn(mismatched_lifetime_syntaxes)]` on by default
+help: use `'_` for type paths
+    |
+388 |     pub fn iter(&self) -> Iter<'_, K, V> {
+    |                                +++
+
+warning: hiding a lifetime that's elided elsewhere is confusing
+   --> /mnt/data/projects/kernelet/poc/target/osdk-inputs/2127e384186b84af841186f0f59939765d654c84029107ca15dac270e8039879/cargo-home/registry/src/index.crates.io-1949cf8c6b5b557f/managed-0.8.0/src/map.rs:398:21
+    |
+398 |     pub fn iter_mut(&mut self) -> IterMut<K, V> {
+    |                     ^^^^^^^^^     ^^^^^^^^^^^^^ the same lifetime is hidden here
+    |                     |
+    |                     the lifetime is elided here
+    |
+    = help: the same lifetime is referred to in inconsistent ways, making the signature confusing
+help: use `'_` for type paths
+    |
+398 |     pub fn iter_mut(&mut self) -> IterMut<'_, K, V> {
+    |                                           +++
+
+warning: `managed` (lib) generated 5 warnings (1 duplicate)
+   Compiling unwinding v0.2.10 (/mnt/data/projects/kernelet/poc/target/osdk-inputs/2127e384186b84af841186f0f59939765d654c84029107ca15dac270e8039879/fs/mnt/data/projects/kernelet/poc/ostd/libs/unwinding)
+warning: unnecessary qualification
+  --> /mnt/data/projects/kernelet/poc/target/osdk-inputs/2127e384186b84af841186f0f59939765d654c84029107ca15dac270e8039879/fs/mnt/data/projects/kernelet/poc/ostd/libs/unwinding/src/unwinder/arch/x86_64.rs:82:20
+   |
+82 | impl ops::IndexMut<gimli::Register> for Context {
+   |                    ^^^^^^^^^^^^^^^
+   |
+   = note: requested on the command line with `-W unused-qualifications`
+help: remove the unnecessary path segments
+   |
+82 - impl ops::IndexMut<gimli::Register> for Context {
+82 + impl ops::IndexMut<Register> for Context {
+   |
+
+warning: unnecessary qualification
+  --> /mnt/data/projects/kernelet/poc/target/osdk-inputs/2127e384186b84af841186f0f59939765d654c84029107ca15dac270e8039879/fs/mnt/data/projects/kernelet/poc/ostd/libs/unwinding/src/unwinder/find_fde/gnu_eh_frame_hdr.rs:33:36
+   |
+33 |                     .parse(&bases, core::mem::size_of::<usize>() as _)
+   |                                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+help: remove the unnecessary path segments
+   |
+33 -                     .parse(&bases, core::mem::size_of::<usize>() as _)
+33 +                     .parse(&bases, size_of::<usize>() as _)
+   |
+
+warning: unnecessary qualification
+  --> /mnt/data/projects/kernelet/poc/target/osdk-inputs/2127e384186b84af841186f0f59939765d654c84029107ca15dac270e8039879/fs/mnt/data/projects/kernelet/poc/ostd/libs/unwinding/src/personality.rs:30:13
+   |
+30 |         Err(gimli::Error::UnknownPointerEncoding(eh_pe))
+   |             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+help: remove the unnecessary path segments
+   |
+30 -         Err(gimli::Error::UnknownPointerEncoding(eh_pe))
+30 +         Err(Error::UnknownPointerEncoding(eh_pe))
+   |
+
+warning: unnecessary qualification
+  --> /mnt/data/projects/kernelet/poc/target/osdk-inputs/2127e384186b84af841186f0f59939765d654c84029107ca15dac270e8039879/fs/mnt/data/projects/kernelet/poc/ostd/libs/unwinding/src/personality.rs:57:58
+   |
+57 |         constants::DW_EH_PE_absptr => input.read_address(mem::size_of::<usize>() as _),
+   |                                                          ^^^^^^^^^^^^^^^^^^^^^
+   |
+help: remove the unnecessary path segments
+   |
+57 -         constants::DW_EH_PE_absptr => input.read_address(mem::size_of::<usize>() as _),
+57 +         constants::DW_EH_PE_absptr => input.read_address(size_of::<usize>() as _),
+   |
+
+   Compiling macro_rules_attribute-proc_macro v0.1.3
+   Compiling io-util v0.1.0 (/mnt/data/projects/kernelet/poc/target/osdk-inputs/2127e384186b84af841186f0f59939765d654c84029107ca15dac270e8039879/fs/mnt/data/projects/kernelet/poc/kernel/libs/io-util)
+   Compiling ahash v0.8.12
+   Compiling takeable v0.2.2
+warning: unreachable `pub` item
+ --> /mnt/data/projects/kernelet/poc/target/osdk-inputs/2127e384186b84af841186f0f59939765d654c84029107ca15dac270e8039879/fs/mnt/data/projects/kernelet/poc/ostd/libs/unwinding/src/unwinder/arch/mod.rs:4:9
+  |
+4 | pub use x86_64::*;
+  | ---     ^^^^^^
+  | |
+  | help: consider restricting its visibility: `pub(super)`
+  |
+  = help: or consider exporting it for use by other crates
+  = note: requested on the command line with `-W unreachable-pub`
+
+warning: unreachable `pub` item
+  --> /mnt/data/projects/kernelet/poc/target/osdk-inputs/2127e384186b84af841186f0f59939765d654c84029107ca15dac270e8039879/fs/mnt/data/projects/kernelet/poc/ostd/libs/unwinding/src/unwinder/arch/x86_64.rs:41:1
+   |
+41 | pub const MAX_REG_RULES: usize = 17;
+   | ---^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   | |
+   | help: consider restricting its visibility: `pub(crate)`
+   |
+   = help: or consider exporting it for use by other crates
+
+warning: unreachable `pub` item
+  --> /mnt/data/projects/kernelet/poc/target/osdk-inputs/2127e384186b84af841186f0f59939765d654c84029107ca15dac270e8039879/fs/mnt/data/projects/kernelet/poc/ostd/libs/unwinding/src/unwinder/arch/x86_64.rs:45:1
+   |
+45 | pub struct Context {
+   | ---^^^^^^^^^^^^^^^
+   | |
+   | help: consider restricting its visibility: `pub(crate)`
+   |
+   = help: or consider exporting it for use by other crates
+
+warning: unreachable `pub` item
+  --> /mnt/data/projects/kernelet/poc/target/osdk-inputs/2127e384186b84af841186f0f59939765d654c84029107ca15dac270e8039879/fs/mnt/data/projects/kernelet/poc/ostd/libs/unwinding/src/unwinder/arch/x86_64.rs:95:1
+   |
+95 | pub extern "C-unwind" fn save_context(f: extern "C" fn(&mut Context, *mut ()), ptr: *mut ()) {
+   | ---^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   | |
+   | help: consider restricting its visibility: `pub(crate)`
+   |
+   = help: or consider exporting it for use by other crates
+
+warning: unreachable `pub` item
+   --> /mnt/data/projects/kernelet/poc/target/osdk-inputs/2127e384186b84af841186f0f59939765d654c84029107ca15dac270e8039879/fs/mnt/data/projects/kernelet/poc/ostd/libs/unwinding/src/unwinder/arch/x86_64.rs:132:1
+    |
+132 | pub unsafe fn restore_context(ctx: &Context) -> ! {
+    | ---^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    | |
+    | help: consider restricting its visibility: `pub(crate)`
+    |
+    = help: or consider exporting it for use by other crates
+
+warning: unreachable `pub` item
+  --> /mnt/data/projects/kernelet/poc/target/osdk-inputs/2127e384186b84af841186f0f59939765d654c84029107ca15dac270e8039879/fs/mnt/data/projects/kernelet/poc/ostd/libs/unwinding/src/unwinder/find_fde/mod.rs:24:1
+   |
+24 | pub struct FDESearchResult {
+   | ---^^^^^^^^^^^^^^^^^^^^^^^
+   | |
+   | help: consider restricting its visibility: `pub(super)`
+   |
+   = help: or consider exporting it for use by other crates
+
+warning: unreachable `pub` item
+  --> /mnt/data/projects/kernelet/poc/target/osdk-inputs/2127e384186b84af841186f0f59939765d654c84029107ca15dac270e8039879/fs/mnt/data/projects/kernelet/poc/ostd/libs/unwinding/src/unwinder/find_fde/mod.rs:30:1
+   |
+30 | pub trait FDEFinder {
+   | ---^^^^^^^^^^^^^^^^
+   | |
+   | help: consider restricting its visibility: `pub(super)`
+   |
+   = help: or consider exporting it for use by other crates
+
+warning: unreachable `pub` item
+  --> /mnt/data/projects/kernelet/poc/target/osdk-inputs/2127e384186b84af841186f0f59939765d654c84029107ca15dac270e8039879/fs/mnt/data/projects/kernelet/poc/ostd/libs/unwinding/src/unwinder/find_fde/mod.rs:34:1
+   |
+34 | pub struct GlobalFinder(());
+   | ---^^^^^^^^^^^^^^^^^^^^
+   | |
+   | help: consider restricting its visibility: `pub(super)`
+   |
+   = help: or consider exporting it for use by other crates
+
+warning: unreachable `pub` item
+  --> /mnt/data/projects/kernelet/poc/target/osdk-inputs/2127e384186b84af841186f0f59939765d654c84029107ca15dac270e8039879/fs/mnt/data/projects/kernelet/poc/ostd/libs/unwinding/src/unwinder/find_fde/mod.rs:62:1
+   |
+62 | pub fn get_finder() -> &'static GlobalFinder {
+   | ---^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   | |
+   | help: consider restricting its visibility: `pub(super)`
+   |
+   = help: or consider exporting it for use by other crates
+
+warning: unreachable `pub` item
+ --> /mnt/data/projects/kernelet/poc/target/osdk-inputs/2127e384186b84af841186f0f59939765d654c84029107ca15dac270e8039879/fs/mnt/data/projects/kernelet/poc/ostd/libs/unwinding/src/unwinder/find_fde/gnu_eh_frame_hdr.rs:6:1
+  |
+6 | pub struct StaticFinder(());
+  | ---^^^^^^^^^^^^^^^^^^^^
+  | |
+  | help: consider restricting its visibility: `pub(super)`
+  |
+  = help: or consider exporting it for use by other crates
+
+warning: unreachable `pub` item
+ --> /mnt/data/projects/kernelet/poc/target/osdk-inputs/2127e384186b84af841186f0f59939765d654c84029107ca15dac270e8039879/fs/mnt/data/projects/kernelet/poc/ostd/libs/unwinding/src/unwinder/find_fde/gnu_eh_frame_hdr.rs:8:1
+  |
+8 | pub fn get_finder() -> &'static StaticFinder {
+  | ---^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  | |
+  | help: consider restricting its visibility: `pub(super)`
+  |
+  = help: or consider exporting it for use by other crates
+
+warning: unreachable `pub` item
+  --> /mnt/data/projects/kernelet/poc/target/osdk-inputs/2127e384186b84af841186f0f59939765d654c84029107ca15dac270e8039879/fs/mnt/data/projects/kernelet/poc/ostd/libs/unwinding/src/unwinder/frame.rs:41:1
+   |
+41 | pub struct Frame {
+   | ---^^^^^^^^^^^^^
+   | |
+   | help: consider restricting its visibility: `pub(super)`
+   |
+   = help: or consider exporting it for use by other crates
+
+warning: unreachable `pub` item
+  --> /mnt/data/projects/kernelet/poc/target/osdk-inputs/2127e384186b84af841186f0f59939765d654c84029107ca15dac270e8039879/fs/mnt/data/projects/kernelet/poc/ostd/libs/unwinding/src/unwinder/frame.rs:47:5
+   |
+47 |     pub fn from_context(ctx: &Context, signal: bool) -> Result<Option<Self>, gimli::Error> {
+   |     ---^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   |     |
+   |     help: consider restricting its visibility: `pub(super)`
+
+warning: unreachable `pub` item
+   --> /mnt/data/projects/kernelet/poc/target/osdk-inputs/2127e384186b84af841186f0f59939765d654c84029107ca15dac270e8039879/fs/mnt/data/projects/kernelet/poc/ostd/libs/unwinding/src/unwinder/frame.rs:129:5
+    |
+129 |     pub fn adjust_stack_for_args(&self, ctx: &mut Context) {
+    |     ---^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |     |
+    |     help: consider restricting its visibility: `pub(super)`
+
+warning: unreachable `pub` item
+   --> /mnt/data/projects/kernelet/poc/target/osdk-inputs/2127e384186b84af841186f0f59939765d654c84029107ca15dac270e8039879/fs/mnt/data/projects/kernelet/poc/ostd/libs/unwinding/src/unwinder/frame.rs:134:5
+    |
+134 |     pub fn unwind(&self, ctx: &Context) -> Result<Context, gimli::Error> {
+    |     ---^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |     |
+    |     help: consider restricting its visibility: `pub(super)`
+
+warning: unreachable `pub` item
+   --> /mnt/data/projects/kernelet/poc/target/osdk-inputs/2127e384186b84af841186f0f59939765d654c84029107ca15dac270e8039879/fs/mnt/data/projects/kernelet/poc/ostd/libs/unwinding/src/unwinder/frame.rs:174:5
+    |
+174 |     pub fn bases(&self) -> &BaseAddresses {
+    |     ---^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |     |
+    |     help: consider restricting its visibility: `pub(super)`
+
+warning: unreachable `pub` item
+   --> /mnt/data/projects/kernelet/poc/target/osdk-inputs/2127e384186b84af841186f0f59939765d654c84029107ca15dac270e8039879/fs/mnt/data/projects/kernelet/poc/ostd/libs/unwinding/src/unwinder/frame.rs:178:5
+    |
+178 |     pub fn personality(&self) -> Option<PersonalityRoutine> {
+    |     ---^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |     |
+    |     help: consider restricting its visibility: `pub(super)`
+
+warning: unreachable `pub` item
+   --> /mnt/data/projects/kernelet/poc/target/osdk-inputs/2127e384186b84af841186f0f59939765d654c84029107ca15dac270e8039879/fs/mnt/data/projects/kernelet/poc/ostd/libs/unwinding/src/unwinder/frame.rs:186:5
+    |
+186 |     pub fn lsda(&self) -> usize {
+    |     ---^^^^^^^^^^^^^^^^^^^^^^^^
+    |     |
+    |     help: consider restricting its visibility: `pub(super)`
+
+warning: unreachable `pub` item
+   --> /mnt/data/projects/kernelet/poc/target/osdk-inputs/2127e384186b84af841186f0f59939765d654c84029107ca15dac270e8039879/fs/mnt/data/projects/kernelet/poc/ostd/libs/unwinding/src/unwinder/frame.rs:194:5
+    |
+194 |     pub fn initial_address(&self) -> usize {
+    |     ---^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |     |
+    |     help: consider restricting its visibility: `pub(super)`
+
+warning: unreachable `pub` item
+   --> /mnt/data/projects/kernelet/poc/target/osdk-inputs/2127e384186b84af841186f0f59939765d654c84029107ca15dac270e8039879/fs/mnt/data/projects/kernelet/poc/ostd/libs/unwinding/src/unwinder/frame.rs:198:5
+    |
+198 |     pub fn is_signal_trampoline(&self) -> bool {
+    |     ---^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |     |
+    |     help: consider restricting its visibility: `pub(super)`
+
+warning: unreachable `pub` item
+  --> /mnt/data/projects/kernelet/poc/target/osdk-inputs/2127e384186b84af841186f0f59939765d654c84029107ca15dac270e8039879/fs/mnt/data/projects/kernelet/poc/ostd/libs/unwinding/src/arch.rs:17:9
+   |
+17 | pub use x86_64::*;
+   | ---     ^^^^^^
+   | |
+   | help: consider restricting its visibility: `pub(crate)`
+   |
+   = help: or consider exporting it for use by other crates
+
+warning: unreachable `pub` item
+ --> /mnt/data/projects/kernelet/poc/target/osdk-inputs/2127e384186b84af841186f0f59939765d654c84029107ca15dac270e8039879/fs/mnt/data/projects/kernelet/poc/ostd/libs/unwinding/src/arch.rs:5:5
+  |
+5 |     pub struct Arch;
+  |     ---^^^^^^^^^^^^
+  |     |
+  |     help: consider restricting its visibility: `pub(crate)`
+  |
+  = help: or consider exporting it for use by other crates
+
+warning: unreachable `pub` item
+ --> /mnt/data/projects/kernelet/poc/target/osdk-inputs/2127e384186b84af841186f0f59939765d654c84029107ca15dac270e8039879/fs/mnt/data/projects/kernelet/poc/ostd/libs/unwinding/src/arch.rs:9:9
+  |
+9 |         pub const SP: Register = X86_64::RSP;
+  |         ---^^^^^^^^^^^^^^^^^^^
+  |         |
+  |         help: consider restricting its visibility: `pub(crate)`
+
+warning: unreachable `pub` item
+  --> /mnt/data/projects/kernelet/poc/target/osdk-inputs/2127e384186b84af841186f0f59939765d654c84029107ca15dac270e8039879/fs/mnt/data/projects/kernelet/poc/ostd/libs/unwinding/src/arch.rs:10:9
+   |
+10 |         pub const RA: Register = X86_64::RA;
+   |         ---^^^^^^^^^^^^^^^^^^^
+   |         |
+   |         help: consider restricting its visibility: `pub(crate)`
+
+warning: unreachable `pub` item
+  --> /mnt/data/projects/kernelet/poc/target/osdk-inputs/2127e384186b84af841186f0f59939765d654c84029107ca15dac270e8039879/fs/mnt/data/projects/kernelet/poc/ostd/libs/unwinding/src/arch.rs:12:9
+   |
+12 |         pub const UNWIND_DATA_REG: (Register, Register) = (X86_64::RAX, X86_64::RDX);
+   |         ---^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   |         |
+   |         help: consider restricting its visibility: `pub(crate)`
+
+warning: unreachable `pub` item
+  --> /mnt/data/projects/kernelet/poc/target/osdk-inputs/2127e384186b84af841186f0f59939765d654c84029107ca15dac270e8039879/fs/mnt/data/projects/kernelet/poc/ostd/libs/unwinding/src/arch.rs:13:9
+   |
+13 |         pub const UNWIND_PRIVATE_DATA_SIZE: usize = 6;
+   |         ---^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   |         |
+   |         help: consider restricting its visibility: `pub(crate)`
+
+warning: unreachable `pub` item
+ --> /mnt/data/projects/kernelet/poc/target/osdk-inputs/2127e384186b84af841186f0f59939765d654c84029107ca15dac270e8039879/fs/mnt/data/projects/kernelet/poc/ostd/libs/unwinding/src/util.rs:3:1
+  |
+3 | pub type StaticSlice = EndianSlice<'static, NativeEndian>;
+  | ---^^^^^^^^^^^^^^^^^
+  | |
+  | help: consider restricting its visibility: `pub(crate)`
+  |
+  = help: or consider exporting it for use by other crates
+
+warning: unreachable `pub` item
+ --> /mnt/data/projects/kernelet/poc/target/osdk-inputs/2127e384186b84af841186f0f59939765d654c84029107ca15dac270e8039879/fs/mnt/data/projects/kernelet/poc/ostd/libs/unwinding/src/util.rs:5:1
+  |
+5 | pub unsafe fn get_unlimited_slice<'a>(start: *const u8) -> &'a [u8] {
+  | ---^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  | |
+  | help: consider restricting its visibility: `pub(crate)`
+  |
+  = help: or consider exporting it for use by other crates
+
+warning: unreachable `pub` item
+  --> /mnt/data/projects/kernelet/poc/target/osdk-inputs/2127e384186b84af841186f0f59939765d654c84029107ca15dac270e8039879/fs/mnt/data/projects/kernelet/poc/ostd/libs/unwinding/src/util.rs:13:1
+   |
+13 | pub unsafe fn deref_pointer(ptr: Pointer) -> usize {
+   | ---^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   | |
+   | help: consider restricting its visibility: `pub(crate)`
+   |
+   = help: or consider exporting it for use by other crates
+
+warning: unreachable `pub` item
+  --> /mnt/data/projects/kernelet/poc/target/osdk-inputs/2127e384186b84af841186f0f59939765d654c84029107ca15dac270e8039879/fs/mnt/data/projects/kernelet/poc/ostd/libs/unwinding/src/util.rs:25:1
+   |
+25 | pub type c_int = i32;
+   | ---^^^^^^^^^^^
+   | |
+   | help: consider restricting its visibility: `pub(crate)`
+   |
+   = help: or consider exporting it for use by other crates
+
+warning: unreachable `pub` item
+  --> /mnt/data/projects/kernelet/poc/target/osdk-inputs/2127e384186b84af841186f0f59939765d654c84029107ca15dac270e8039879/fs/mnt/data/projects/kernelet/poc/ostd/libs/unwinding/src/util.rs:39:1
+   |
+39 | pub fn abort() -> ! {
+   | ---^^^^^^^^^^^^^^^^
+   | |
+   | help: consider restricting its visibility: `pub(crate)`
+   |
+   = help: or consider exporting it for use by other crates
+
+warning: `takeable` (lib) generated 1 warning (1 duplicate)
+   Compiling jhash v0.1.0 (/mnt/data/projects/kernelet/poc/target/osdk-inputs/2127e384186b84af841186f0f59939765d654c84029107ca15dac270e8039879/fs/mnt/data/projects/kernelet/poc/kernel/libs/jhash)
+   Compiling allocator-api2 v0.2.21
+warning: `io-util` (lib) generated 1 warning (1 duplicate)
+   Compiling owo-colors v4.3.0
+warning: `jhash` (lib) generated 1 warning (1 duplicate)
+   Compiling macro_rules_attribute v0.1.3
+warning: `macro_rules_attribute` (lib) generated 1 warning (1 duplicate)
+   Compiling konst_macro_rules v0.2.19
+   Compiling polonius-the-crab v0.2.1
+warning: unused import: `super::fragmentation::PacketAssemblerSet`
+  --> /mnt/data/projects/kernelet/poc/target/osdk-inputs/2127e384186b84af841186f0f59939765d654c84029107ca15dac270e8039879/fs/mnt/data/projects/kernelet/poc/vendor/smoltcp/src/iface/interface/mod.rs:35:5
+   |
+35 | use super::fragmentation::PacketAssemblerSet;
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = note: `#[warn(unused_imports)]` (part of `#[warn(unused)]`) on by default
+
+warning: unused import: `IFACE_MAX_SIXLOWPAN_ADDRESS_CONTEXT_COUNT`
+  --> /mnt/data/projects/kernelet/poc/target/osdk-inputs/2127e384186b84af841186f0f59939765d654c84029107ca15dac270e8039879/fs/mnt/data/projects/kernelet/poc/vendor/smoltcp/src/iface/interface/mod.rs:41:43
+   |
+41 | use crate::config::{IFACE_MAX_ADDR_COUNT, IFACE_MAX_SIXLOWPAN_ADDRESS_CONTEXT_COUNT};
+   |                                           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+   Compiling foldhash v0.2.0
+   Compiling once_cell v1.21.4
+   Compiling never-say-never v6.6.666
+warning: `equivalent` (lib) generated 1 warning (1 duplicate)
+warning: `never-say-never` (lib) generated 1 warning (1 duplicate)
+   Compiling unicode-xid v0.2.6
+   Compiling hashbrown v0.16.1
+   Compiling konst v0.2.20
+   Compiling const_format_proc_macros v0.2.34
+   Compiling time-core v0.1.9
+warning: `unwinding` (lib) generated 36 warnings (1 duplicate) (run `cargo fix --lib -p unwinding` to apply 35 suggestions)
+   Compiling powerfmt v0.2.0
+warning: `rand_core` (lib) generated 1 warning (1 duplicate)
+   Compiling font8x8 v0.2.7
+warning: `time-core` (lib) generated 1 warning (1 duplicate)
+   Compiling deranged v0.5.8
+   Compiling num-conv v0.2.2
+   Compiling adler2 v2.0.1
+warning: hiding a lifetime that's elided elsewhere is confusing
+    --> /mnt/data/projects/kernelet/poc/target/osdk-inputs/2127e384186b84af841186f0f59939765d654c84029107ca15dac270e8039879/cargo-home/registry/src/index.crates.io-1949cf8c6b5b557f/font8x8-0.2.7/src/basic.rs:1538:13
+     |
+1538 |     fn iter(&self) -> ::core::slice::Iter<FontUnicode> {
+     |             ^^^^^     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ the same lifetime is hidden here
+     |             |
+     |             the lifetime is elided here
+     |
+     = help: the same lifetime is referred to in inconsistent ways, making the signature confusing
+     = note: `#[warn(mismatched_lifetime_syntaxes)]` on by default
+help: use `'_` for type paths
+     |
+1538 |     fn iter(&self) -> ::core::slice::Iter<'_, FontUnicode> {
+     |                                           +++
+
+warning: hiding a lifetime that's elided elsewhere is confusing
+   --> /mnt/data/projects/kernelet/poc/target/osdk-inputs/2127e384186b84af841186f0f59939765d654c84029107ca15dac270e8039879/cargo-home/registry/src/index.crates.io-1949cf8c6b5b557f/font8x8-0.2.7/src/block.rs:538:13
+    |
+538 |     fn iter(&self) -> ::core::slice::Iter<FontUnicode> {
+    |             ^^^^^     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ the same lifetime is hidden here
+    |             |
+    |             the lifetime is elided here
+    |
+    = help: the same lifetime is referred to in inconsistent ways, making the signature confusing
+help: use `'_` for type paths
+    |
+538 |     fn iter(&self) -> ::core::slice::Iter<'_, FontUnicode> {
+    |                                           +++
+
+warning: hiding a lifetime that's elided elsewhere is confusing
+    --> /mnt/data/projects/kernelet/poc/target/osdk-inputs/2127e384186b84af841186f0f59939765d654c84029107ca15dac270e8039879/cargo-home/registry/src/index.crates.io-1949cf8c6b5b557f/font8x8-0.2.7/src/box.rs:1977:13
+     |
+1977 |     fn iter(&self) -> ::core::slice::Iter<FontUnicode> {
+     |             ^^^^^     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ the same lifetime is hidden here
+     |             |
+     |             the lifetime is elided here
+     |
+     = help: the same lifetime is referred to in inconsistent ways, making the signature confusing
+help: use `'_` for type paths
+     |
+1977 |     fn iter(&self) -> ::core::slice::Iter<'_, FontUnicode> {
+     |                                           +++
+
+warning: hiding a lifetime that's elided elsewhere is confusing
+   --> /mnt/data/projects/kernelet/poc/target/osdk-inputs/2127e384186b84af841186f0f59939765d654c84029107ca15dac270e8039879/cargo-home/registry/src/index.crates.io-1949cf8c6b5b557f/font8x8-0.2.7/src/greek.rs:927:13
+    |
+927 |     fn iter(&self) -> ::core::slice::Iter<FontUnicode> {
+    |             ^^^^^     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ the same lifetime is hidden here
+    |             |
+    |             the lifetime is elided here
+    |
+    = help: the same lifetime is referred to in inconsistent ways, making the signature confusing
+help: use `'_` for type paths
+    |
+927 |     fn iter(&self) -> ::core::slice::Iter<'_, FontUnicode> {
+    |                                           +++
+
+warning: hiding a lifetime that's elided elsewhere is confusing
+    --> /mnt/data/projects/kernelet/poc/target/osdk-inputs/2127e384186b84af841186f0f59939765d654c84029107ca15dac270e8039879/cargo-home/registry/src/index.crates.io-1949cf8c6b5b557f/font8x8-0.2.7/src/hiragana.rs:1394:13
+     |
+1394 |     fn iter(&self) -> ::core::slice::Iter<FontUnicode> {
+     |             ^^^^^     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ the same lifetime is hidden here
+     |             |
+     |             the lifetime is elided here
+     |
+     = help: the same lifetime is referred to in inconsistent ways, making the signature confusing
+help: use `'_` for type paths
+     |
+1394 |     fn iter(&self) -> ::core::slice::Iter<'_, FontUnicode> {
+     |                                           +++
+
+warning: hiding a lifetime that's elided elsewhere is confusing
+    --> /mnt/data/projects/kernelet/poc/target/osdk-inputs/2127e384186b84af841186f0f59939765d654c84029107ca15dac270e8039879/cargo-home/registry/src/index.crates.io-1949cf8c6b5b557f/font8x8-0.2.7/src/latin.rs:1474:13
+     |
+1474 |     fn iter(&self) -> ::core::slice::Iter<FontUnicode> {
+     |             ^^^^^     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ the same lifetime is hidden here
+     |             |
+     |             the lifetime is elided here
+     |
+     = help: the same lifetime is referred to in inconsistent ways, making the signature confusing
+help: use `'_` for type paths
+     |
+1474 |     fn iter(&self) -> ::core::slice::Iter<'_, FontUnicode> {
+     |                                           +++
+
+warning: hiding a lifetime that's elided elsewhere is confusing
+   --> /mnt/data/projects/kernelet/poc/target/osdk-inputs/2127e384186b84af841186f0f59939765d654c84029107ca15dac270e8039879/cargo-home/registry/src/index.crates.io-1949cf8c6b5b557f/font8x8-0.2.7/src/misc.rs:209:13
+    |
+209 |     fn iter(&self) -> ::core::slice::Iter<FontUnicode> {
+    |             ^^^^^     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ the same lifetime is hidden here
+    |             |
+    |             the lifetime is elided here
+    |
+    = help: the same lifetime is referred to in inconsistent ways, making the signature confusing
+help: use `'_` for type paths
+    |
+209 |     fn iter(&self) -> ::core::slice::Iter<'_, FontUnicode> {
+    |                                           +++
+
+warning: hiding a lifetime that's elided elsewhere is confusing
+   --> /mnt/data/projects/kernelet/poc/target/osdk-inputs/2127e384186b84af841186f0f59939765d654c84029107ca15dac270e8039879/cargo-home/registry/src/index.crates.io-1949cf8c6b5b557f/font8x8-0.2.7/src/sga.rs:450:13
+    |
+450 |     fn iter(&self) -> ::core::slice::Iter<FontUnicode> {
+    |             ^^^^^     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ the same lifetime is hidden here
+    |             |
+    |             the lifetime is elided here
+    |
+    = help: the same lifetime is referred to in inconsistent ways, making the signature confusing
+help: use `'_` for type paths
+    |
+450 |     fn iter(&self) -> ::core::slice::Iter<'_, FontUnicode> {
+    |                                           +++
+
+warning: hiding a lifetime that's elided elsewhere is confusing
+  --> /mnt/data/projects/kernelet/poc/target/osdk-inputs/2127e384186b84af841186f0f59939765d654c84029107ca15dac270e8039879/cargo-home/registry/src/index.crates.io-1949cf8c6b5b557f/font8x8-0.2.7/src/unicode.rs:69:13
+   |
+69 |     fn iter(&self) -> ::core::slice::Iter<FontUnicode>;
+   |             ^^^^^     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ the same lifetime is hidden here
+   |             |
+   |             the lifetime is elided here
+   |
+   = help: the same lifetime is referred to in inconsistent ways, making the signature confusing
+help: use `'_` for type paths
+   |
+69 |     fn iter(&self) -> ::core::slice::Iter<'_, FontUnicode>;
+   |                                           +++
+
+warning: `adler2` (lib) generated 1 warning (1 duplicate)
+   Compiling zero v0.1.3
+warning: `num-conv` (lib) generated 1 warning (1 duplicate)
+   Compiling miniz_oxide v0.8.9
+   Compiling toml_datetime v0.6.11
+   Compiling serde_spanned v0.6.9
+warning: `font8x8` (lib) generated 10 warnings (1 duplicate)
+   Compiling xmas-elf v0.10.0
+   Compiling logo-ascii-art v0.1.0 (/mnt/data/projects/kernelet/poc/target/osdk-inputs/2127e384186b84af841186f0f59939765d654c84029107ca15dac270e8039879/fs/mnt/data/projects/kernelet/poc/kernel/libs/logo-ascii-art)
+warning: unexpected `cfg` condition name: `fuzzing`
+    --> /mnt/data/projects/kernelet/poc/target/osdk-inputs/2127e384186b84af841186f0f59939765d654c84029107ca15dac270e8039879/cargo-home/registry/src/index.crates.io-1949cf8c6b5b557f/miniz_oxide-0.8.9/src/inflate/core.rs:2013:18
+     |
+2013 |         if !cfg!(fuzzing) {
+     |                  ^^^^^^^
+     |
+     = help: expected names are: `docsrs`, `feature`, `ktest`, and `test` and 33 more
+     = help: consider using a Cargo feature instead
+     = help: or consider adding in `Cargo.toml` the `check-cfg` lint config for the lint:
+              [lints.rust]
+              unexpected_cfgs = { level = "warn", check-cfg = ['cfg(fuzzing)'] }
+     = help: or consider adding `println!("cargo::rustc-check-cfg=cfg(fuzzing)");` to the top of the `build.rs`
+     = note: see <https://doc.rust-lang.org/nightly/rustc/check-cfg/cargo-specifics.html> for more information about checking conditional configuration
+     = note: `#[warn(unexpected_cfgs)]` on by default
+
+warning: `logo-ascii-art` (lib) generated 1 warning (1 duplicate)
+   Compiling keyable-arc v0.1.0 (/mnt/data/projects/kernelet/poc/target/osdk-inputs/2127e384186b84af841186f0f59939765d654c84029107ca15dac270e8039879/fs/mnt/data/projects/kernelet/poc/kernel/libs/keyable-arc)
+   Compiling id-alloc v0.1.0 (/mnt/data/projects/kernelet/poc/target/osdk-inputs/2127e384186b84af841186f0f59939765d654c84029107ca15dac270e8039879/fs/mnt/data/projects/kernelet/poc/ostd/libs/id-alloc)
+warning: unused variable: `frag`
+  --> /mnt/data/projects/kernelet/poc/target/osdk-inputs/2127e384186b84af841186f0f59939765d654c84029107ca15dac270e8039879/fs/mnt/data/projects/kernelet/poc/vendor/smoltcp/src/iface/interface/ipv4.rs:91:9
+   |
+91 |         frag: &'a mut FragmentsBuffer,
+   |         ^^^^ help: if this is intentional, prefix it with an underscore: `_frag`
+   |
+   = note: `#[warn(unused_variables)]` (part of `#[warn(unused)]`) on by default
+
+   Compiling sparse-id-alloc v0.1.0 (/mnt/data/projects/kernelet/poc/target/osdk-inputs/2127e384186b84af841186f0f59939765d654c84029107ca15dac270e8039879/fs/mnt/data/projects/kernelet/poc/kernel/libs/sparse-id-alloc)
+warning: `keyable-arc` (lib) generated 1 warning (1 duplicate)
+warning: unused variable: `repr`
+    --> /mnt/data/projects/kernelet/poc/target/osdk-inputs/2127e384186b84af841186f0f59939765d654c84029107ca15dac270e8039879/fs/mnt/data/projects/kernelet/poc/vendor/smoltcp/src/iface/interface/mod.rs:1210:26
+     |
+1210 |             IpRepr::Ipv4(repr) => {
+     |                          ^^^^ help: if this is intentional, prefix it with an underscore: `_repr`
+
+   Compiling toml_edit v0.19.15
+   Compiling const_format v0.2.36
+warning: `id-alloc` (lib) generated 1 warning (1 duplicate)
+   Compiling ppv-lite86 v0.2.21
+   Compiling lru v0.16.4
+warning: `sparse-id-alloc` (lib) generated 1 warning (1 duplicate)
+warning: `owo-colors` (lib) generated 1 warning (1 duplicate)
+warning: `const_format` (lib) generated 1 warning (1 duplicate)
+   Compiling rand_chacha v0.9.0
+   Compiling darling_core v0.13.4
+warning: methods `link_local_ipv6_address` and `mldv2_report_packet` are never used
+   --> /mnt/data/projects/kernelet/poc/target/osdk-inputs/2127e384186b84af841186f0f59939765d654c84029107ca15dac270e8039879/fs/mnt/data/projects/kernelet/poc/vendor/smoltcp/src/iface/interface/ipv6.rs:171:8
+    |
+ 21 | impl InterfaceInner {
+    | ------------------- methods in this implementation
+...
+171 |     fn link_local_ipv6_address(&self) -> Option<Ipv6Address> {
+    |        ^^^^^^^^^^^^^^^^^^^^^^^
+...
+526 |     pub(super) fn mldv2_report_packet<'any>(
+    |                   ^^^^^^^^^^^^^^^^^^^
+    |
+    = note: `#[warn(dead_code)]` (part of `#[warn(unused)]`) on by default
+
+warning: hiding a lifetime that's elided elsewhere is confusing
+   --> /mnt/data/projects/kernelet/poc/target/osdk-inputs/2127e384186b84af841186f0f59939765d654c84029107ca15dac270e8039879/fs/mnt/data/projects/kernelet/poc/vendor/smoltcp/src/storage/assembler.rs:330:22
+    |
+330 |     pub fn iter_data(&self, first_offset: usize) -> AssemblerIter {
+    |                      ^^^^^                          ^^^^^^^^^^^^^ the same lifetime is hidden here
+    |                      |
+    |                      the lifetime is elided here
+    |
+    = help: the same lifetime is referred to in inconsistent ways, making the signature confusing
+    = note: `#[warn(mismatched_lifetime_syntaxes)]` on by default
+help: use `'_` for type paths
+    |
+330 |     pub fn iter_data(&self, first_offset: usize) -> AssemblerIter<'_> {
+    |                                                                  ++++
+
+   Compiling zerocopy-derive v0.8.54
+   Compiling thiserror-impl v2.0.18
+   Compiling ptr_meta_derive v0.3.1
+   Compiling int-to-c-enum-derive v0.1.0 (/mnt/data/projects/kernelet/poc/target/osdk-inputs/2127e384186b84af841186f0f59939765d654c84029107ca15dac270e8039879/fs/mnt/data/projects/kernelet/poc/ostd/libs/int-to-c-enum/derive)
+   Compiling padding-struct v0.2.0 (/mnt/data/projects/kernelet/poc/target/osdk-inputs/2127e384186b84af841186f0f59939765d654c84029107ca15dac270e8039879/fs/mnt/data/projects/kernelet/poc/ostd/libs/padding-struct)
+   Compiling ostd-pod-macros v0.4.0 (/mnt/data/projects/kernelet/poc/target/osdk-inputs/2127e384186b84af841186f0f59939765d654c84029107ca15dac270e8039879/fs/mnt/data/projects/kernelet/poc/ostd/libs/ostd-pod/macros)
+warning: `miniz_oxide` (lib) generated 2 warnings (1 duplicate)
+   Compiling typeflags v0.1.0 (/mnt/data/projects/kernelet/poc/target/osdk-inputs/2127e384186b84af841186f0f59939765d654c84029107ca15dac270e8039879/fs/mnt/data/projects/kernelet/poc/kernel/libs/typeflags)
+   Compiling rand v0.9.5
+   Compiling ptr_meta v0.3.1
+   Compiling aster-rights-proc v0.1.0 (/mnt/data/projects/kernelet/poc/target/osdk-inputs/2127e384186b84af841186f0f59939765d654c84029107ca15dac270e8039879/fs/mnt/data/projects/kernelet/poc/kernel/libs/aster-rights-proc)
+   Compiling short-vis-path v0.1.0 (/mnt/data/projects/kernelet/poc/target/osdk-inputs/2127e384186b84af841186f0f59939765d654c84029107ca15dac270e8039879/fs/mnt/data/projects/kernelet/poc/kernel/libs/short-vis-path)
+   Compiling int-to-c-enum v0.1.0 (/mnt/data/projects/kernelet/poc/target/osdk-inputs/2127e384186b84af841186f0f59939765d654c84029107ca15dac270e8039879/fs/mnt/data/projects/kernelet/poc/ostd/libs/int-to-c-enum)
+   Compiling time v0.3.53
+   Compiling atomic-integer-wrapper v0.1.0 (/mnt/data/projects/kernelet/poc/target/osdk-inputs/2127e384186b84af841186f0f59939765d654c84029107ca15dac270e8039879/fs/mnt/data/projects/kernelet/poc/kernel/libs/atomic-integer-wrapper)
+   Compiling getset v0.1.7
+warning: `int-to-c-enum` (lib) generated 1 warning (1 duplicate)
+   Compiling aster-rights v0.1.0 (/mnt/data/projects/kernelet/poc/target/osdk-inputs/2127e384186b84af841186f0f59939765d654c84029107ca15dac270e8039879/fs/mnt/data/projects/kernelet/poc/kernel/libs/aster-rights)
+warning: `aster-rights` (lib) generated 1 warning (1 duplicate)
+   Compiling ext-trait-proc_macros v1.0.1
+   Compiling nougat-proc_macros v0.2.4
+   Compiling ostd-macros v0.19.0 (/mnt/data/projects/kernelet/poc/target/osdk-inputs/2127e384186b84af841186f0f59939765d654c84029107ca15dac270e8039879/fs/mnt/data/projects/kernelet/poc/ostd/libs/ostd-macros)
+   Compiling lending-iterator-proc_macros v0.1.7
+warning: `serde` (lib) generated 1 warning (1 duplicate)
+   Compiling ext-trait v1.0.1
+   Compiling extension-traits v1.0.1
+warning: `ext-trait` (lib) generated 1 warning (1 duplicate)
+warning: `extension-traits` (lib) generated 1 warning (1 duplicate)
+warning: `smoltcp` (lib) generated 7 warnings (1 duplicate) (run `cargo fix --lib -p smoltcp` to apply 5 suggestions)
+   Compiling multiboot2-common v0.3.0
+warning: `thiserror` (lib) generated 1 warning (1 duplicate)
+   Compiling multiboot2 v0.24.1
+   Compiling nougat v0.2.4
+   Compiling toml v0.7.8
+   Compiling darling_macro v0.13.4
+   Compiling lending-iterator v0.1.7
+warning: `nougat` (lib) generated 1 warning (1 duplicate)
+warning: unnecessary parentheses around type
+   --> /mnt/data/projects/kernelet/poc/target/osdk-inputs/2127e384186b84af841186f0f59939765d654c84029107ca15dac270e8039879/cargo-home/registry/src/index.crates.io-1949cf8c6b5b557f/lending-iterator-0.1.7/src/lending_iterator/dyn/_mod.rs:115:9
+    |
+115 | /         (dyn
+116 | |             'usability +
+117 | |             LendingIteratorDyn<Item = Item> +
+118 | |             $($AutoTraits)*
+119 | |         )
+    | |_________^
+    |
+    = note: `#[warn(unused_parens)]` (part of `#[warn(unused)]`) on by default
+    = note: this warning originates in the macro `__emit__` which comes from the expansion of the macro `with_auto_traits` (in Nightly builds, run with -Z macro-backtrace for more info)
+
+warning: unnecessary parentheses around type
+   --> /mnt/data/projects/kernelet/poc/target/osdk-inputs/2127e384186b84af841186f0f59939765d654c84029107ca15dac270e8039879/cargo-home/registry/src/index.crates.io-1949cf8c6b5b557f/lending-iterator-0.1.7/src/lending_iterator/dyn/_mod.rs:115:9
+    |
+115 | /         (dyn
+116 | |             'usability +
+117 | |             LendingIteratorDyn<Item = Item> +
+118 | |             $($AutoTraits)*
+119 | |         )
+    | |_________^
+    |
+    = note: this warning originates in the macro `__emit__` which comes from the expansion of the macro `with_auto_traits` (in Nightly builds, run with -Z macro-backtrace for more info)
+
+warning: unexpected `cfg` condition name: `TODO`
+   --> /mnt/data/projects/kernelet/poc/target/osdk-inputs/2127e384186b84af841186f0f59939765d654c84029107ca15dac270e8039879/cargo-home/registry/src/index.crates.io-1949cf8c6b5b557f/lending-iterator-0.1.7/src/lending_iterator/_mod.rs:430:11
+    |
+430 |     #[cfg(TODO)]
+    |           ^^^^
+    |
+    = help: expected names are: `docsrs`, `feature`, `ktest`, and `test` and 33 more
+    = help: consider using a Cargo feature instead
+    = help: or consider adding in `Cargo.toml` the `check-cfg` lint config for the lint:
+             [lints.rust]
+             unexpected_cfgs = { level = "warn", check-cfg = ['cfg(TODO)'] }
+    = help: or consider adding `println!("cargo::rustc-check-cfg=cfg(TODO)");` to the top of the `build.rs`
+    = note: see <https://doc.rust-lang.org/nightly/rustc/check-cfg/cargo-specifics.html> for more information about checking conditional configuration
+    = note: `#[warn(unexpected_cfgs)]` on by default
+    = note: this warning originates in the macro `__emit__` which comes from the expansion of the macro `with_cfg_better_docs` (in Nightly builds, run with -Z macro-backtrace for more info)
+
+warning: unexpected `cfg` condition name: `TODO`
+   --> /mnt/data/projects/kernelet/poc/target/osdk-inputs/2127e384186b84af841186f0f59939765d654c84029107ca15dac270e8039879/cargo-home/registry/src/index.crates.io-1949cf8c6b5b557f/lending-iterator-0.1.7/src/lending_iterator/_mod.rs:457:11
+    |
+457 |     #[cfg(TODO)]
+    |           ^^^^
+    |
+    = help: consider using a Cargo feature instead
+    = help: or consider adding in `Cargo.toml` the `check-cfg` lint config for the lint:
+             [lints.rust]
+             unexpected_cfgs = { level = "warn", check-cfg = ['cfg(TODO)'] }
+    = help: or consider adding `println!("cargo::rustc-check-cfg=cfg(TODO)");` to the top of the `build.rs`
+    = note: see <https://doc.rust-lang.org/nightly/rustc/check-cfg/cargo-specifics.html> for more information about checking conditional configuration
+    = note: this warning originates in the macro `__emit__` which comes from the expansion of the macro `with_cfg_better_docs` (in Nightly builds, run with -Z macro-backtrace for more info)
+
+   Compiling cpio-decoder v0.1.0 (/mnt/data/projects/kernelet/poc/target/osdk-inputs/2127e384186b84af841186f0f59939765d654c84029107ca15dac270e8039879/fs/mnt/data/projects/kernelet/poc/kernel/libs/cpio-decoder)
+warning: `lending-iterator` (lib) generated 7 warnings (3 duplicates)
+   Compiling darling v0.13.4
+   Compiling inherit-methods-macro v0.1.0 (https://github.com/asterinas/inherit-methods-macro?rev=98f7e3e#98f7e3eb)
+warning: `cpio-decoder` (lib) generated 1 warning (1 duplicate)
+   Compiling component-macro v0.1.0 (/mnt/data/projects/kernelet/poc/target/osdk-inputs/2127e384186b84af841186f0f59939765d654c84029107ca15dac270e8039879/fs/mnt/data/projects/kernelet/poc/kernel/libs/comp-sys/component-macro)
+   Compiling component v0.1.0 (/mnt/data/projects/kernelet/poc/target/osdk-inputs/2127e384186b84af841186f0f59939765d654c84029107ca15dac270e8039879/fs/mnt/data/projects/kernelet/poc/kernel/libs/comp-sys/component)
+warning: `component` (lib) generated 1 warning (1 duplicate)
+   Compiling ostd-pod v0.4.0 (/mnt/data/projects/kernelet/poc/target/osdk-inputs/2127e384186b84af841186f0f59939765d654c84029107ca15dac270e8039879/fs/mnt/data/projects/kernelet/poc/ostd/libs/ostd-pod)
+warning: unexpected `cfg` condition value: `128`
+   --> /mnt/data/projects/kernelet/poc/target/osdk-inputs/2127e384186b84af841186f0f59939765d654c84029107ca15dac270e8039879/cargo-home/registry/src/index.crates.io-1949cf8c6b5b557f/ahash-0.8.12/src/fallback_hash.rs:164:11
+    |
+164 |     #[cfg(target_pointer_width = "128")]
+    |           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = note: see <https://doc.rust-lang.org/nightly/rustc/check-cfg/cargo-specifics.html> for more information about checking conditional configuration
+    = note: `#[warn(unexpected_cfgs)]` on by default
+help: `128` is an expected value for `target_has_atomic`
+    |
+164 -     #[cfg(target_pointer_width = "128")]
+164 +     #[cfg(target_has_atomic = "128")]
+    |
+help: `128` is an expected value for `target_has_atomic_load_store`
+    |
+164 -     #[cfg(target_pointer_width = "128")]
+164 +     #[cfg(target_has_atomic_load_store = "128")]
+    |
+help: `128` is an expected value for `target_has_atomic_primitive_alignment`
+    |
+164 -     #[cfg(target_pointer_width = "128")]
+164 +     #[cfg(target_has_atomic_primitive_alignment = "128")]
+    |
+
+warning: unexpected `cfg` condition name: `fuzzing`
+  --> /mnt/data/projects/kernelet/poc/target/osdk-inputs/2127e384186b84af841186f0f59939765d654c84029107ca15dac270e8039879/cargo-home/registry/src/index.crates.io-1949cf8c6b5b557f/ahash-0.8.12/src/random_state.rs:48:58
+   |
+48 |     if #[cfg(all(feature = "compile-time-rng", any(test, fuzzing)))] {
+   |                                                          ^^^^^^^
+   |
+   = help: expected names are: `docsrs`, `feature`, `folded_multiply`, `ktest`, `specialize`, and `test` and 33 more
+   = help: consider using a Cargo feature instead
+   = help: or consider adding in `Cargo.toml` the `check-cfg` lint config for the lint:
+            [lints.rust]
+            unexpected_cfgs = { level = "warn", check-cfg = ['cfg(fuzzing)'] }
+   = help: or consider adding `println!("cargo::rustc-check-cfg=cfg(fuzzing)");` to the top of the `build.rs`
+   = note: see <https://doc.rust-lang.org/nightly/rustc/check-cfg/cargo-specifics.html> for more information about checking conditional configuration
+
+warning: unexpected `cfg` condition name: `fuzzing`
+  --> /mnt/data/projects/kernelet/poc/target/osdk-inputs/2127e384186b84af841186f0f59939765d654c84029107ca15dac270e8039879/cargo-home/registry/src/index.crates.io-1949cf8c6b5b557f/ahash-0.8.12/src/random_state.rs:68:54
+   |
+68 |     } else if #[cfg(all(feature = "runtime-rng", not(fuzzing)))] {
+   |                                                      ^^^^^^^
+   |
+   = help: consider using a Cargo feature instead
+   = help: or consider adding in `Cargo.toml` the `check-cfg` lint config for the lint:
+            [lints.rust]
+            unexpected_cfgs = { level = "warn", check-cfg = ['cfg(fuzzing)'] }
+   = help: or consider adding `println!("cargo::rustc-check-cfg=cfg(fuzzing)");` to the top of the `build.rs`
+   = note: see <https://doc.rust-lang.org/nightly/rustc/check-cfg/cargo-specifics.html> for more information about checking conditional configuration
+
+   Compiling ostd v0.19.0 (/mnt/data/projects/kernelet/poc/target/osdk-inputs/2127e384186b84af841186f0f59939765d654c84029107ca15dac270e8039879/fs/mnt/data/projects/kernelet/poc/ostd)
+warning: methods `read_u128x2`, `read_u128x4`, `read_last_u16`, `read_last_u128x2`, and `read_last_u128x4` are never used
+  --> /mnt/data/projects/kernelet/poc/target/osdk-inputs/2127e384186b84af841186f0f59939765d654c84029107ca15dac270e8039879/cargo-home/registry/src/index.crates.io-1949cf8c6b5b557f/ahash-0.8.12/src/convert.rs:69:8
+   |
+64 | pub(crate) trait ReadFromSlice {
+   |                  ------------- methods in this trait
+...
+69 |     fn read_u128x2(&self) -> ([u128; 2], &[u8]);
+   |        ^^^^^^^^^^^
+70 |     fn read_u128x4(&self) -> ([u128; 4], &[u8]);
+   |        ^^^^^^^^^^^
+71 |     fn read_last_u16(&self) -> u16;
+   |        ^^^^^^^^^^^^^
+...
+75 |     fn read_last_u128x2(&self) -> [u128; 2];
+   |        ^^^^^^^^^^^^^^^^
+76 |     fn read_last_u128x4(&self) -> [u128; 4];
+   |        ^^^^^^^^^^^^^^^^
+   |
+   = note: `#[warn(dead_code)]` (part of `#[warn(unused)]`) on by default
+
+warning: `ostd-pod` (lib) generated 1 warning (1 duplicate)
+   Compiling hashbrown v0.14.5
+warning: `ahash` (lib) generated 5 warnings (1 duplicate)
+warning: unused label
+   --> /mnt/data/projects/kernelet/poc/target/osdk-inputs/2127e384186b84af841186f0f59939765d654c84029107ca15dac270e8039879/fs/mnt/data/projects/kernelet/poc/ostd/src/mm/dma/util.rs:121:22
+    |
+121 |     let priv_flags = 'priv_flags: {
+    |                      ^^^^^^^^^^^
+    |
+    = note: `#[warn(unused_labels)]` (part of `#[warn(unused)]`) on by default
+
+warning: unnecessary qualification
+  --> /mnt/data/projects/kernelet/poc/target/osdk-inputs/2127e384186b84af841186f0f59939765d654c84029107ca15dac270e8039879/fs/mnt/data/projects/kernelet/poc/ostd/src/panic.rs:74:33
+   |
+74 | pub fn __stash_message(message: core::fmt::Arguments<'_>) {
+   |                                 ^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = note: requested on the command line with `-W unused-qualifications`
+help: remove the unnecessary path segments
+   |
+74 - pub fn __stash_message(message: core::fmt::Arguments<'_>) {
+74 + pub fn __stash_message(message: fmt::Arguments<'_>) {
+   |
+
+warning: the item `SpinLock` is imported redundantly
+   --> /mnt/data/projects/kernelet/poc/target/osdk-inputs/2127e384186b84af841186f0f59939765d654c84029107ca15dac270e8039879/fs/mnt/data/projects/kernelet/poc/ostd/src/panic.rs:215:30
+    |
+ 10 | use crate::sync::SpinLock;
+    |     --------------------- the item `SpinLock` is already imported here
+...
+215 |     use crate::{early_print, sync::SpinLock};
+    |                              ^^^^^^^^^^^^^^
+    |
+    = note: requested on the command line with `-W redundant-imports`
+
+warning: unnecessary qualification
+   --> /mnt/data/projects/kernelet/poc/target/osdk-inputs/2127e384186b84af841186f0f59939765d654c84029107ca15dac270e8039879/fs/mnt/data/projects/kernelet/poc/ostd/src/smp.rs:139:17
+    |
+139 |                 crate::irq::call_virtual_ipi_callback_functions();
+    |                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |
+help: remove the unnecessary path segments
+    |
+139 -                 crate::irq::call_virtual_ipi_callback_functions();
+139 +                 irq::call_virtual_ipi_callback_functions();
+    |
+
+warning: `rand_chacha` (lib) generated 1 warning (1 duplicate)
+warning: use of deprecated method `core::sync::atomic::Atomic::<u64>::fetch_update`: renamed to `try_update` for consistency
+   --> /mnt/data/projects/kernelet/poc/target/osdk-inputs/2127e384186b84af841186f0f59939765d654c84029107ca15dac270e8039879/fs/mnt/data/projects/kernelet/poc/ostd/src/mm/frame/meta.rs:272:18
+    |
+272 |                 .fetch_update(Ordering::Relaxed, Ordering::Relaxed, |old| {
+    |                  ^^^^^^^^^^^^
+    |
+    = note: `#[warn(deprecated)]` on by default
+help: replace the use of the deprecated method
+    |
+272 -                 .fetch_update(Ordering::Relaxed, Ordering::Relaxed, |old| {
+272 +                 .try_update(Ordering::Relaxed, Ordering::Relaxed, |old| {
+    |
+
+warning: associated items `type_` and `is_cpu_exception` are never used
+   --> /mnt/data/projects/kernelet/poc/target/osdk-inputs/2127e384186b84af841186f0f59939765d654c84029107ca15dac270e8039879/fs/mnt/data/projects/kernelet/poc/ostd/src/arch/x86/cpu/context/mod.rs:450:14
+    |
+387 | impl CpuException {
+    | ----------------- associated items in this implementation
+...
+450 |     const fn type_(&self) -> CpuExceptionType {
+    |              ^^^^^
+...
+461 |     pub(in crate::arch) const fn is_cpu_exception(trap_num: usize) -> bool {
+    |                                  ^^^^^^^^^^^^^^^^
+    |
+    = note: `#[warn(dead_code)]` (part of `#[warn(unused)]`) on by default
+
+warning: enum `CpuExceptionType` is never used
+   --> /mnt/data/projects/kernelet/poc/target/osdk-inputs/2127e384186b84af841186f0f59939765d654c84029107ca15dac270e8039879/fs/mnt/data/projects/kernelet/poc/ostd/src/arch/x86/cpu/context/mod.rs:857:6
+    |
+857 | enum CpuExceptionType {
+    |      ^^^^^^^^^^^^^^^^
+
+warning: method `is_fault_or_trap` is never used
+   --> /mnt/data/projects/kernelet/poc/target/osdk-inputs/2127e384186b84af841186f0f59939765d654c84029107ca15dac270e8039879/fs/mnt/data/projects/kernelet/poc/ostd/src/arch/x86/cpu/context/mod.rs:874:8
+    |
+872 | impl CpuExceptionType {
+    | --------------------- method in this implementation
+873 |     /// Returns whether this exception type is a fault or a trap.
+874 |     fn is_fault_or_trap(self) -> bool {
+    |        ^^^^^^^^^^^^^^^^
+
+warning: function `enable_essential_features` is never used
+    --> /mnt/data/projects/kernelet/poc/target/osdk-inputs/2127e384186b84af841186f0f59939765d654c84029107ca15dac270e8039879/fs/mnt/data/projects/kernelet/poc/ostd/src/arch/x86/cpu/context/mod.rs:1244:24
+     |
+1244 | pub(in crate::arch) fn enable_essential_features() {
+     |                        ^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: variants `Tsc` and `KvmFeatures` are never constructed
+  --> /mnt/data/projects/kernelet/poc/target/osdk-inputs/2127e384186b84af841186f0f59939765d654c84029107ca15dac270e8039879/fs/mnt/data/projects/kernelet/poc/ostd/src/arch/x86/cpu/cpuid.rs:17:5
+   |
+14 | enum Leaf {
+   |      ---- variants in this enum
+...
+17 |     Tsc = 0x15,
+   |     ^^^
+...
+20 |     KvmFeatures = 0x40000001,
+   |     ^^^^^^^^^^^
+
+warning: function `query_tsc_freq` is never used
+  --> /mnt/data/projects/kernelet/poc/target/osdk-inputs/2127e384186b84af841186f0f59939765d654c84029107ca15dac270e8039879/fs/mnt/data/projects/kernelet/poc/ostd/src/arch/x86/cpu/cpuid.rs:57:24
+   |
+57 | pub(in crate::arch) fn query_tsc_freq() -> Option<u64> {
+   |                        ^^^^^^^^^^^^^^
+
+warning: function `query_if_running_in_qemu` is never used
+   --> /mnt/data/projects/kernelet/poc/target/osdk-inputs/2127e384186b84af841186f0f59939765d654c84029107ca15dac270e8039879/fs/mnt/data/projects/kernelet/poc/ostd/src/arch/x86/cpu/cpuid.rs:159:24
+    |
+159 | pub(in crate::arch) fn query_if_running_in_qemu() -> bool {
+    |                        ^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: function `query_if_running_under_kvm` is never used
+   --> /mnt/data/projects/kernelet/poc/target/osdk-inputs/2127e384186b84af841186f0f59939765d654c84029107ca15dac270e8039879/fs/mnt/data/projects/kernelet/poc/ostd/src/arch/x86/cpu/cpuid.rs:174:24
+    |
+174 | pub(in crate::arch) fn query_if_running_under_kvm() -> bool {
+    |                        ^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: function `query_hypervisor_signature` is never used
+   --> /mnt/data/projects/kernelet/poc/target/osdk-inputs/2127e384186b84af841186f0f59939765d654c84029107ca15dac270e8039879/fs/mnt/data/projects/kernelet/poc/ostd/src/arch/x86/cpu/cpuid.rs:183:4
+    |
+183 | fn query_hypervisor_signature() -> Option<[u8; 12]> {
+    |    ^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: function `query_kvm_feature` is never used
+   --> /mnt/data/projects/kernelet/poc/target/osdk-inputs/2127e384186b84af841186f0f59939765d654c84029107ca15dac270e8039879/fs/mnt/data/projects/kernelet/poc/ostd/src/arch/x86/cpu/cpuid.rs:195:24
+    |
+195 | pub(in crate::arch) fn query_kvm_feature(bit: u32) -> bool {
+    |                        ^^^^^^^^^^^^^^^^^
+
+warning: function `construct_io_mem_allocator_builder` is never used
+  --> /mnt/data/projects/kernelet/poc/target/osdk-inputs/2127e384186b84af841186f0f59939765d654c84029107ca15dac270e8039879/fs/mnt/data/projects/kernelet/poc/ostd/src/arch/x86/io/mod.rs:36:22
+   |
+36 | pub(super) unsafe fn construct_io_mem_allocator_builder() -> IoMemAllocatorBuilder {
+   |                      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: constant `MAX_IO_PORT` is never used
+  --> /mnt/data/projects/kernelet/poc/target/osdk-inputs/2127e384186b84af841186f0f59939765d654c84029107ca15dac270e8039879/fs/mnt/data/projects/kernelet/poc/ostd/src/arch/x86/io/mod.rs:90:18
+   |
+90 | pub(crate) const MAX_IO_PORT: u16 = u16::MAX;
+   |                  ^^^^^^^^^^^
+
+warning: function `init` is never used
+  --> /mnt/data/projects/kernelet/poc/target/osdk-inputs/2127e384186b84af841186f0f59939765d654c84029107ca15dac270e8039879/fs/mnt/data/projects/kernelet/poc/ostd/src/arch/x86/iommu/mod.rs:35:15
+   |
+35 | pub(crate) fn init(io_mem_builder: &IoMemAllocatorBuilder) -> Result<(), IommuError> {
+   |               ^^^^
+
+warning: multiple associated items are never used
+  --> /mnt/data/projects/kernelet/poc/target/osdk-inputs/2127e384186b84af841186f0f59939765d654c84029107ca15dac270e8039879/fs/mnt/data/projects/kernelet/poc/ostd/src/arch/x86/iommu/dma_remapping/mod.rs:39:11
+   |
+35 | impl PciDeviceLocation {
+   | ---------------------- associated items in this implementation
+...
+39 |     const MIN_BUS: u8 = 0;
+   |           ^^^^^^^
+40 |     const MAX_BUS: u8 = 255;
+   |           ^^^^^^^
+41 |
+42 |     const MIN_DEVICE: u8 = 0;
+   |           ^^^^^^^^^^
+43 |     const MAX_DEVICE: u8 = 31;
+   |           ^^^^^^^^^^
+44 |
+45 |     const MIN_FUNCTION: u8 = 0;
+   |           ^^^^^^^^^^^^
+46 |     const MAX_FUNCTION: u8 = 7;
+   |           ^^^^^^^^^^^^
+...
+49 |     fn all() -> impl Iterator<Item = PciDeviceLocation> {
+   |        ^^^
+
+warning: function `init` is never used
+   --> /mnt/data/projects/kernelet/poc/target/osdk-inputs/2127e384186b84af841186f0f59939765d654c84029107ca15dac270e8039879/fs/mnt/data/projects/kernelet/poc/ostd/src/arch/x86/iommu/dma_remapping/mod.rs:124:15
+    |
+124 | pub(super) fn init() {
+    |               ^^^^
+
+warning: struct `FaultEventRegisters` is never constructed
+  --> /mnt/data/projects/kernelet/poc/target/osdk-inputs/2127e384186b84af841186f0f59939765d654c84029107ca15dac270e8039879/fs/mnt/data/projects/kernelet/poc/ostd/src/arch/x86/iommu/fault.rs:19:8
+   |
+19 | struct FaultEventRegisters {
+   |        ^^^^^^^^^^^^^^^^^^^
+
+warning: associated items `status` and `new` are never used
+  --> /mnt/data/projects/kernelet/poc/target/osdk-inputs/2127e384186b84af841186f0f59939765d654c84029107ca15dac270e8039879/fs/mnt/data/projects/kernelet/poc/ostd/src/arch/x86/iommu/fault.rs:32:8
+   |
+31 | impl FaultEventRegisters {
+   | ------------------------ associated items in this implementation
+32 |     fn status(&self) -> FaultStatus {
+   |        ^^^^^^
+...
+42 |     unsafe fn new(base_register_vaddr: NonNull<u8>) -> Self {
+   |               ^^^
+
+warning: method `clear_fault` is never used
+   --> /mnt/data/projects/kernelet/poc/target/osdk-inputs/2127e384186b84af841186f0f59939765d654c84029107ca15dac270e8039879/fs/mnt/data/projects/kernelet/poc/ostd/src/arch/x86/iommu/fault.rs:105:8
+    |
+100 | impl FaultRecording {
+    | ------------------- method in this implementation
+...
+105 |     fn clear_fault(&mut self) {
+    |        ^^^^^^^^^^^
+
+warning: static `FAULT_EVENT_REGS` is never used
+   --> /mnt/data/projects/kernelet/poc/target/osdk-inputs/2127e384186b84af841186f0f59939765d654c84029107ca15dac270e8039879/fs/mnt/data/projects/kernelet/poc/ostd/src/arch/x86/iommu/fault.rs:235:8
+    |
+235 | static FAULT_EVENT_REGS: Once<SpinLock<FaultEventRegisters, LocalIrqDisabled>> = Once::new();
+    |        ^^^^^^^^^^^^^^^^
+
+warning: function `init` is never used
+   --> /mnt/data/projects/kernelet/poc/target/osdk-inputs/2127e384186b84af841186f0f59939765d654c84029107ca15dac270e8039879/fs/mnt/data/projects/kernelet/poc/ostd/src/arch/x86/iommu/fault.rs:243:22
+    |
+243 | pub(super) unsafe fn init(base_register_vaddr: NonNull<u8>) {
+    |                      ^^^^
+
+warning: function `iommu_fault_handler` is never used
+   --> /mnt/data/projects/kernelet/poc/target/osdk-inputs/2127e384186b84af841186f0f59939765d654c84029107ca15dac270e8039879/fs/mnt/data/projects/kernelet/poc/ostd/src/arch/x86/iommu/fault.rs:249:4
+    |
+249 | fn iommu_fault_handler(_frame: &TrapFrame) {
+    |    ^^^^^^^^^^^^^^^^^^^
+
+warning: function `primary_fault_handler` is never used
+   --> /mnt/data/projects/kernelet/poc/target/osdk-inputs/2127e384186b84af841186f0f59939765d654c84029107ca15dac270e8039879/fs/mnt/data/projects/kernelet/poc/ostd/src/arch/x86/iommu/fault.rs:263:4
+    |
+263 | fn primary_fault_handler(fault_event_regs: &mut FaultEventRegisters) {
+    |    ^^^^^^^^^^^^^^^^^^^^^
+
+warning: function `init` is never used
+  --> /mnt/data/projects/kernelet/poc/target/osdk-inputs/2127e384186b84af841186f0f59939765d654c84029107ca15dac270e8039879/fs/mnt/data/projects/kernelet/poc/ostd/src/arch/x86/iommu/interrupt_remapping/mod.rs:54:15
+   |
+54 | pub(super) fn init() {
+   |               ^^^^
+
+warning: fields `num_entries` and `extended_interrupt_mode` are never read
+  --> /mnt/data/projects/kernelet/poc/target/osdk-inputs/2127e384186b84af841186f0f59939765d654c84029107ca15dac270e8039879/fs/mnt/data/projects/kernelet/poc/ostd/src/arch/x86/iommu/interrupt_remapping/table.rs:26:5
+   |
+25 | pub(in crate::arch::iommu) struct IntRemappingTable {
+   |                                   ----------------- fields in this struct
+26 |     num_entries: u16,
+   |     ^^^^^^^^^^^
+27 |     extended_interrupt_mode: ExtendedInterruptMode,
+   |     ^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: associated items `new` and `encode` are never used
+  --> /mnt/data/projects/kernelet/poc/target/osdk-inputs/2127e384186b84af841186f0f59939765d654c84029107ca15dac270e8039879/fs/mnt/data/projects/kernelet/poc/ostd/src/arch/x86/iommu/interrupt_remapping/table.rs:45:19
+   |
+35 | impl IntRemappingTable {
+   | ---------------------- associated items in this implementation
+...
+45 |     pub(super) fn new() -> Self {
+   |                   ^^^
+...
+91 |     pub(crate) fn encode(&self) -> u64 {
+   |                   ^^^^^^
+
+warning: function `init` is never used
+  --> /mnt/data/projects/kernelet/poc/target/osdk-inputs/2127e384186b84af841186f0f59939765d654c84029107ca15dac270e8039879/fs/mnt/data/projects/kernelet/poc/ostd/src/arch/x86/iommu/invalidate/mod.rs:12:15
+   |
+12 | pub(super) fn init() {
+   |               ^^^^
+
+warning: associated items `size`, `base_paddr`, and `new` are never used
+  --> /mnt/data/projects/kernelet/poc/target/osdk-inputs/2127e384186b84af841186f0f59939765d654c84029107ca15dac270e8039879/fs/mnt/data/projects/kernelet/poc/ostd/src/arch/x86/iommu/invalidate/queue.rs:29:35
+   |
+14 | impl Queue {
+   | ---------- associated items in this implementation
+...
+29 |     pub(in crate::arch::iommu) fn size(&self) -> usize {
+   |                                   ^^^^
+...
+33 |     pub(in crate::arch::iommu) fn base_paddr(&self) -> Paddr {
+   |                                   ^^^^^^^^^^
+...
+37 |     pub(super) fn new() -> Self {
+   |                   ^^^
+
+warning: fields `capability`, `extended_capability`, `global_command`, `root_table_address`, and `interrupt_remapping_table_addr` are never read
+  --> /mnt/data/projects/kernelet/poc/target/osdk-inputs/2127e384186b84af841186f0f59939765d654c84029107ca15dac270e8039879/fs/mnt/data/projects/kernelet/poc/ostd/src/arch/x86/iommu/registers/mod.rs:71:5
+   |
+69 | pub(super) struct IommuRegisters {
+   |                   -------------- fields in this struct
+70 |     version: VolatileRef<'static, u32, ReadOnly>,
+71 |     capability: VolatileRef<'static, u64, ReadOnly>,
+   |     ^^^^^^^^^^
+72 |     extended_capability: VolatileRef<'static, u64, ReadOnly>,
+   |     ^^^^^^^^^^^^^^^^^^^
+73 |     global_command: VolatileRef<'static, u32, WriteOnly>,
+   |     ^^^^^^^^^^^^^^
+74 |     global_status: VolatileRef<'static, u32, ReadOnly>,
+75 |     root_table_address: VolatileRef<'static, u64, ReadWrite>,
+   |     ^^^^^^^^^^^^^^^^^^
+...
+78 |     interrupt_remapping_table_addr: VolatileRef<'static, u64, ReadWrite>,
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = note: `IommuRegisters` has a derived impl for the trait `Debug`, but this is intentionally ignored during dead code analysis
+
+warning: multiple associated items are never used
+   --> /mnt/data/projects/kernelet/poc/target/osdk-inputs/2127e384186b84af841186f0f59939765d654c84029107ca15dac270e8039879/fs/mnt/data/projects/kernelet/poc/ostd/src/arch/x86/iommu/registers/mod.rs:95:19
+    |
+ 83 | impl IommuRegisters {
+    | ------------------- associated items in this implementation
+...
+ 95 |     pub(super) fn read_capability(&self) -> Capability {
+    |                   ^^^^^^^^^^^^^^^
+...
+100 |     pub(super) fn read_extended_capability(&self) -> ExtendedCapability {
+    |                   ^^^^^^^^^^^^^^^^^^^^^^^^
+...
+110 |     pub(super) fn enable_dma_remapping(
+    |                   ^^^^^^^^^^^^^^^^^^^^
+...
+127 |     pub(super) fn enable_interrupt_remapping(&mut self, table: &'static IntRemappingTable) {
+    |                   ^^^^^^^^^^^^^^^^^^^^^^^^^^
+...
+151 |     pub(super) fn enable_queued_invalidation(&mut self, queue: &Queue) {
+    |                   ^^^^^^^^^^^^^^^^^^^^^^^^^^
+...
+251 |     fn write_global_command(&mut self, command: GlobalCommand, enable: bool) {
+    |        ^^^^^^^^^^^^^^^^^^^^
+...
+266 |     fn new(io_mem_builder: &IoMemAllocatorBuilder) -> Option<Self> {
+    |        ^^^
+
+warning: function `init` is never used
+   --> /mnt/data/projects/kernelet/poc/target/osdk-inputs/2127e384186b84af841186f0f59939765d654c84029107ca15dac270e8039879/fs/mnt/data/projects/kernelet/poc/ostd/src/arch/x86/iommu/registers/mod.rs:331:15
+    |
+331 | pub(super) fn init(io_mem_builder: &IoMemAllocatorBuilder) -> Result<(), IommuError> {
+    |               ^^^^
+
+warning: struct `Capability` is never constructed
+ --> /mnt/data/projects/kernelet/poc/target/osdk-inputs/2127e384186b84af841186f0f59939765d654c84029107ca15dac270e8039879/fs/mnt/data/projects/kernelet/poc/ostd/src/arch/x86/iommu/registers/capability.rs:8:35
+  |
+8 | pub(in crate::arch::iommu) struct Capability(u64);
+  |                                   ^^^^^^^^^^
+
+warning: multiple associated items are never used
+  --> /mnt/data/projects/kernelet/poc/target/osdk-inputs/2127e384186b84af841186f0f59939765d654c84029107ca15dac270e8039879/fs/mnt/data/projects/kernelet/poc/ostd/src/arch/x86/iommu/registers/capability.rs:12:41
+   |
+10 | impl Capability {
+   | --------------- associated items in this implementation
+11 |     /// Create Capability from `value`
+12 |     pub(in crate::arch::iommu) const fn new(value: u64) -> Self {
+   |                                         ^^^
+...
+17 |     const fn flags(&self) -> CapabilityFlags {
+   |              ^^^^^
+...
+26 |     pub(in crate::arch::iommu) const fn fault_recording_number(&self) -> u64 {
+   |                                         ^^^^^^^^^^^^^^^^^^^^^^
+...
+34 |     const fn maximum_address_mask_value(&self) -> u64 {
+   |              ^^^^^^^^^^^^^^^^^^^^^^^^^^
+...
+51 |     const fn domain_support_number(&self) -> u64 {
+   |              ^^^^^^^^^^^^^^^^^^^^^
+...
+57 |     pub(in crate::arch::iommu) const fn supported_adjusted_guest_address_widths(
+   |                                         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+...
+68 |     pub(in crate::arch::iommu) const fn fault_recording_register_offset(&self) -> u64 {
+   |                                         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+...
+74 |     const fn second_stage_large_page_support(&self) -> CapabilitySslps {
+   |              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+...
+81 |     const fn maximum_guest_address_width(&self) -> u64 {
+   |              ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: struct `ExtendedCapability` is never constructed
+ --> /mnt/data/projects/kernelet/poc/target/osdk-inputs/2127e384186b84af841186f0f59939765d654c84029107ca15dac270e8039879/fs/mnt/data/projects/kernelet/poc/ostd/src/arch/x86/iommu/registers/extended_cap.rs:7:35
+  |
+7 | pub(in crate::arch::iommu) struct ExtendedCapability(u64);
+  |                                   ^^^^^^^^^^^^^^^^^^
+
+warning: associated items `new`, `flags`, `iotlb_register_offset`, `maximum_handle_mask`, and `pasid_size` are never used
+  --> /mnt/data/projects/kernelet/poc/target/osdk-inputs/2127e384186b84af841186f0f59939765d654c84029107ca15dac270e8039879/fs/mnt/data/projects/kernelet/poc/ostd/src/arch/x86/iommu/registers/extended_cap.rs:11:25
+   |
+ 9 | impl ExtendedCapability {
+   | ----------------------- associated items in this implementation
+10 |     /// Creates ExtendedCapability from `value`
+11 |     pub(super) const fn new(value: u64) -> Self {
+   |                         ^^^
+...
+16 |     pub(in crate::arch::iommu) const fn flags(&self) -> ExtendedCapabilityFlags {
+   |                                         ^^^^^
+...
+25 |     pub(super) const fn iotlb_register_offset(&self) -> u64 {
+   |                         ^^^^^^^^^^^^^^^^^^^^^
+...
+32 |     const fn maximum_handle_mask(&self) -> u64 {
+   |              ^^^^^^^^^^^^^^^^^^^
+...
+43 |     const fn pasid_size(&self) -> u64 {
+   |              ^^^^^^^^^^
+
+warning: field `queue_addr` is never read
+  --> /mnt/data/projects/kernelet/poc/target/osdk-inputs/2127e384186b84af841186f0f59939765d654c84029107ca15dac270e8039879/fs/mnt/data/projects/kernelet/poc/ostd/src/arch/x86/iommu/registers/invalidation.rs:18:9
+   |
+15 | pub(super) struct InvalidationRegisters {
+   |                   --------------------- field in this struct
+...
+18 |     pub queue_addr: VolatileRef<'static, u64, ReadWrite>,
+   |         ^^^^^^^^^^
+   |
+   = note: `InvalidationRegisters` has a derived impl for the trait `Debug`, but this is intentionally ignored during dead code analysis
+
+warning: associated function `new` is never used
+  --> /mnt/data/projects/kernelet/poc/target/osdk-inputs/2127e384186b84af841186f0f59939765d654c84029107ca15dac270e8039879/fs/mnt/data/projects/kernelet/poc/ostd/src/arch/x86/iommu/registers/invalidation.rs:39:26
+   |
+32 | impl InvalidationRegisters {
+   | -------------------------- associated function in this implementation
+...
+39 |     pub(super) unsafe fn new(base: NonNull<u8>) -> Self {
+   |                          ^^^
+
+warning: struct `IrqChip` is never constructed
+  --> /mnt/data/projects/kernelet/poc/target/osdk-inputs/2127e384186b84af841186f0f59939765d654c84029107ca15dac270e8039879/fs/mnt/data/projects/kernelet/poc/ostd/src/arch/x86/irq/chip/mod.rs:31:12
+   |
+31 | pub struct IrqChip {
+   |            ^^^^^^^
+
+warning: struct `IsaOverride` is never constructed
+  --> /mnt/data/projects/kernelet/poc/target/osdk-inputs/2127e384186b84af841186f0f59939765d654c84029107ca15dac270e8039879/fs/mnt/data/projects/kernelet/poc/ostd/src/arch/x86/irq/chip/mod.rs:36:8
+   |
+36 | struct IsaOverride {
+   |        ^^^^^^^^^^^
+
+warning: methods `map_gsi_pin_to`, `disable_gsi`, `map_isa_pin_to`, and `count_io_apics` are never used
+   --> /mnt/data/projects/kernelet/poc/target/osdk-inputs/2127e384186b84af841186f0f59939765d654c84029107ca15dac270e8039879/fs/mnt/data/projects/kernelet/poc/ostd/src/arch/x86/irq/chip/mod.rs:51:12
+    |
+ 43 | impl IrqChip {
+    | ------------ methods in this implementation
+...
+ 51 |     pub fn map_gsi_pin_to(
+    |            ^^^^^^^^^^^^^^
+...
+ 75 |     fn disable_gsi(&self, gsi_index: u32) {
+    |        ^^^^^^^^^^^
+...
+ 94 |     pub fn map_isa_pin_to(
+    |            ^^^^^^^^^^^^^^
+...
+119 |     pub fn count_io_apics(&self) -> usize {
+    |            ^^^^^^^^^^^^^^
+
+warning: struct `MappedIrqLine` is never constructed
+   --> /mnt/data/projects/kernelet/poc/target/osdk-inputs/2127e384186b84af841186f0f59939765d654c84029107ca15dac270e8039879/fs/mnt/data/projects/kernelet/poc/ostd/src/arch/x86/irq/chip/mod.rs:127:12
+    |
+127 | pub struct MappedIrqLine {
+    |            ^^^^^^^^^^^^^
+
+warning: static `IRQ_CHIP` is never used
+   --> /mnt/data/projects/kernelet/poc/target/osdk-inputs/2127e384186b84af841186f0f59939765d654c84029107ca15dac270e8039879/fs/mnt/data/projects/kernelet/poc/ostd/src/arch/x86/irq/chip/mod.rs:163:12
+    |
+163 | pub static IRQ_CHIP: Once<IrqChip> = Once::new();
+    |            ^^^^^^^^
+
+warning: function `init` is never used
+   --> /mnt/data/projects/kernelet/poc/target/osdk-inputs/2127e384186b84af841186f0f59939765d654c84029107ca15dac270e8039879/fs/mnt/data/projects/kernelet/poc/ostd/src/arch/x86/irq/chip/mod.rs:165:24
+    |
+165 | pub(in crate::arch) fn init(io_mem_builder: &IoMemAllocatorBuilder) {
+    |                        ^^^^
+
+warning: function `init_and_disable_pic_if_present` is never used
+   --> /mnt/data/projects/kernelet/poc/target/osdk-inputs/2127e384186b84af841186f0f59939765d654c84029107ca15dac270e8039879/fs/mnt/data/projects/kernelet/poc/ostd/src/arch/x86/irq/chip/mod.rs:279:4
+    |
+279 | fn init_and_disable_pic_if_present(madt_table: Pin<&Madt>) {
+    |    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: struct `IoApic` is never constructed
+  --> /mnt/data/projects/kernelet/poc/target/osdk-inputs/2127e384186b84af841186f0f59939765d654c84029107ca15dac270e8039879/fs/mnt/data/projects/kernelet/poc/ostd/src/arch/x86/irq/chip/ioapic.rs:20:19
+   |
+20 | pub(super) struct IoApic {
+   |                   ^^^^^^
+
+warning: associated items `new`, `enable`, `disable`, `interrupt_base`, `interrupt_end`, and `address` are never used
+   --> /mnt/data/projects/kernelet/poc/target/osdk-inputs/2127e384186b84af841186f0f59939765d654c84029107ca15dac270e8039879/fs/mnt/data/projects/kernelet/poc/ostd/src/arch/x86/irq/chip/ioapic.rs:30:26
+    |
+ 26 | impl IoApic {
+    | ----------- associated items in this implementation
+...
+ 30 |     pub(super) unsafe fn new(
+    |                          ^^^
+...
+ 98 |     pub(super) fn enable(&mut self, index: u8, irq: &IrqLine) -> Result<()> {
+    |                   ^^^^^^
+...
+152 |     pub(super) fn disable(&mut self, index: u8) -> Result<()> {
+    |                   ^^^^^^^
+...
+169 |     pub(super) fn interrupt_base(&self) -> u32 {
+    |                   ^^^^^^^^^^^^^^
+...
+174 |     pub(super) fn interrupt_end(&self) -> u32 {
+    |                   ^^^^^^^^^^^^^
+...
+179 |     pub(super) fn address(&self) -> usize {
+    |                   ^^^^^^^
+
+warning: struct `IoApicAccess` is never constructed
+   --> /mnt/data/projects/kernelet/poc/target/osdk-inputs/2127e384186b84af841186f0f59939765d654c84029107ca15dac270e8039879/fs/mnt/data/projects/kernelet/poc/ostd/src/arch/x86/irq/chip/ioapic.rs:184:8
+    |
+184 | struct IoApicAccess {
+    |        ^^^^^^^^^^^^
+
+warning: multiple associated items are never used
+   --> /mnt/data/projects/kernelet/poc/target/osdk-inputs/2127e384186b84af841186f0f59939765d654c84029107ca15dac270e8039879/fs/mnt/data/projects/kernelet/poc/ostd/src/arch/x86/irq/chip/ioapic.rs:190:11
+    |
+188 | impl IoApicAccess {
+    | ----------------- associated items in this implementation
+189 |     /// I/O Register Select (index).
+190 |     const MMIO_REGSEL: usize = 0x00;
+    |           ^^^^^^^^^^^
+191 |     /// I/O Window (data).
+192 |     const MMIO_WIN: usize = 0x10;
+    |           ^^^^^^^^
+...
+198 |     const MMIO_SIZE: usize = crate::mm::PAGE_SIZE;
+    |           ^^^^^^^^^
+...
+201 |     pub(self) const IOAPICID: u8 = 0x00;
+    |                     ^^^^^^^^
+202 |     /// IOAPIC Version.
+203 |     pub(self) const IOAPICVER: u8 = 0x01;
+    |                     ^^^^^^^^^
+204 |     /// IOAPIC Arbitration.
+205 |     pub(self) const IOAPICARB: u8 = 0x02;
+    |                     ^^^^^^^^^
+206 |     /// Redirection Table.
+207 |     pub(self) const IOREDTBL: u8 = 0x10;
+    |                     ^^^^^^^^
+...
+212 |     pub(self) unsafe fn new(base_address: usize, io_mem_builder: &IoMemAllocatorBuilder) -> Self {
+    |                         ^^^
+...
+221 |     pub(self) unsafe fn read(&mut self, register: u8) -> u32 {
+    |                         ^^^^
+...
+230 |     pub(self) unsafe fn write(&mut self, register: u8, data: u32) {
+    |                         ^^^^^
+...
+239 |     pub(self) fn id(&mut self) -> u8 {
+    |                  ^^
+...
+245 |     pub(self) fn version(&mut self) -> u8 {
+    |                  ^^^^^^^
+...
+251 |     pub(self) fn max_redirection_entry(&mut self) -> u8 {
+    |                  ^^^^^^^^^^^^^^^^^^^^^
+
+warning: constant `IRQ_OFFSET` is never used
+  --> /mnt/data/projects/kernelet/poc/target/osdk-inputs/2127e384186b84af841186f0f59939765d654c84029107ca15dac270e8039879/fs/mnt/data/projects/kernelet/poc/ostd/src/arch/x86/irq/chip/pic.rs:18:7
+   |
+18 | const IRQ_OFFSET: u8 = 0x20;
+   |       ^^^^^^^^^^
+
+warning: function `probe_legacy_pic` is never used
+  --> /mnt/data/projects/kernelet/poc/target/osdk-inputs/2127e384186b84af841186f0f59939765d654c84029107ca15dac270e8039879/fs/mnt/data/projects/kernelet/poc/ostd/src/arch/x86/irq/chip/pic.rs:23:15
+   |
+23 | pub(super) fn probe_legacy_pic() -> bool {
+   |               ^^^^^^^^^^^^^^^^
+
+warning: function `init_and_disable` is never used
+  --> /mnt/data/projects/kernelet/poc/target/osdk-inputs/2127e384186b84af841186f0f59939765d654c84029107ca15dac270e8039879/fs/mnt/data/projects/kernelet/poc/ostd/src/arch/x86/irq/chip/pic.rs:39:15
+   |
+39 | pub(super) fn init_and_disable() {
+   |               ^^^^^^^^^^^^^^^^
+
+warning: function `set_mask` is never used
+  --> /mnt/data/projects/kernelet/poc/target/osdk-inputs/2127e384186b84af841186f0f59939765d654c84029107ca15dac270e8039879/fs/mnt/data/projects/kernelet/poc/ostd/src/arch/x86/irq/chip/pic.rs:45:4
+   |
+45 | fn set_mask(master_mask: u8, slave_mask: u8) {
+   |    ^^^^^^^^
+
+warning: function `init` is never used
+   --> /mnt/data/projects/kernelet/poc/target/osdk-inputs/2127e384186b84af841186f0f59939765d654c84029107ca15dac270e8039879/fs/mnt/data/projects/kernelet/poc/ostd/src/arch/x86/kernel/acpi/mod.rs:133:24
+    |
+133 | pub(in crate::arch) fn init() {
+    |                        ^^^^
+
+warning: function `tlb_flush_all_including_global` is never used
+   --> /mnt/data/projects/kernelet/poc/target/osdk-inputs/2127e384186b84af841186f0f59939765d654c84029107ca15dac270e8039879/fs/mnt/data/projects/kernelet/poc/ostd/src/arch/x86/mm/mod.rs:111:15
+    |
+111 | pub(crate) fn tlb_flush_all_including_global() {
+    |               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: function `activate_page_table` is never used
+   --> /mnt/data/projects/kernelet/poc/target/osdk-inputs/2127e384186b84af841186f0f59939765d654c84029107ca15dac270e8039879/fs/mnt/data/projects/kernelet/poc/ostd/src/arch/x86/mm/mod.rs:163:22
+    |
+163 | pub(crate) unsafe fn activate_page_table(root_paddr: Paddr) {
+    |                      ^^^^^^^^^^^^^^^^^^^
+
+warning: function `current_page_table_paddr` is never used
+   --> /mnt/data/projects/kernelet/poc/target/osdk-inputs/2127e384186b84af841186f0f59939765d654c84029107ca15dac270e8039879/fs/mnt/data/projects/kernelet/poc/ostd/src/arch/x86/mm/mod.rs:181:15
+    |
+181 | pub(crate) fn current_page_table_paddr() -> Paddr {
+    |               ^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: function `init` is never used
+  --> /mnt/data/projects/kernelet/poc/target/osdk-inputs/2127e384186b84af841186f0f59939765d654c84029107ca15dac270e8039879/fs/mnt/data/projects/kernelet/poc/ostd/src/arch/x86/power.rs:44:15
+   |
+44 | pub(super) fn init() {
+   |               ^^^^
+
+warning: function `init` is never used
+  --> /mnt/data/projects/kernelet/poc/target/osdk-inputs/2127e384186b84af841186f0f59939765d654c84029107ca15dac270e8039879/fs/mnt/data/projects/kernelet/poc/ostd/src/arch/x86/power.rs:35:19
+   |
+35 |     pub(super) fn init() {
+   |                   ^^^^
+
+warning: associated items `new` and `probe` are never used
+  --> /mnt/data/projects/kernelet/poc/target/osdk-inputs/2127e384186b84af841186f0f59939765d654c84029107ca15dac270e8039879/fs/mnt/data/projects/kernelet/poc/ostd/src/arch/x86/serial.rs:35:21
+   |
+30 | impl SerialAccess {
+   | ----------------- associated items in this implementation
+...
+35 |     const unsafe fn new(port: u16) -> Self {
+   |                     ^^^
+...
+53 |     fn probe(&mut self) -> bool {
+   |        ^^^^^
+
+warning: function `init` is never used
+   --> /mnt/data/projects/kernelet/poc/target/osdk-inputs/2127e384186b84af841186f0f59939765d654c84029107ca15dac270e8039879/fs/mnt/data/projects/kernelet/poc/ostd/src/arch/x86/serial.rs:110:22
+    |
+110 | pub(crate) unsafe fn init(early_cmdline: &EarlyCmdline) {
+    |                      ^^^^
+
+warning: constant `KCODE64` is never used
+   --> /mnt/data/projects/kernelet/poc/target/osdk-inputs/2127e384186b84af841186f0f59939765d654c84029107ca15dac270e8039879/fs/mnt/data/projects/kernelet/poc/ostd/src/arch/x86/trap/gdt.rs:170:27
+    |
+170 | pub(in crate::arch) const KCODE64: u64 = 0x00AF_9B00_0000_FFFF;
+    |                           ^^^^^^^
+
+warning: constant `KDATA` is never used
+   --> /mnt/data/projects/kernelet/poc/target/osdk-inputs/2127e384186b84af841186f0f59939765d654c84029107ca15dac270e8039879/fs/mnt/data/projects/kernelet/poc/ostd/src/arch/x86/trap/gdt.rs:171:27
+    |
+171 | pub(in crate::arch) const KDATA: u64 = 0x00CF_9300_0000_FFFF;
+    |                           ^^^^^
+
+warning: constant `KCODE32` is never used
+   --> /mnt/data/projects/kernelet/poc/target/osdk-inputs/2127e384186b84af841186f0f59939765d654c84029107ca15dac270e8039879/fs/mnt/data/projects/kernelet/poc/ostd/src/arch/x86/trap/gdt.rs:174:27
+    |
+174 | pub(in crate::arch) const KCODE32: u64 = 0x00CF_9B00_0000_FFFF;
+    |                           ^^^^^^^
+
+warning: constant `UCODE64` is never used
+   --> /mnt/data/projects/kernelet/poc/target/osdk-inputs/2127e384186b84af841186f0f59939765d654c84029107ca15dac270e8039879/fs/mnt/data/projects/kernelet/poc/ostd/src/arch/x86/trap/gdt.rs:182:7
+    |
+182 | const UCODE64: u64 = 0x00AF_FB00_0000_FFFF;
+    |       ^^^^^^^
+
+warning: constant `UDATA` is never used
+   --> /mnt/data/projects/kernelet/poc/target/osdk-inputs/2127e384186b84af841186f0f59939765d654c84029107ca15dac270e8039879/fs/mnt/data/projects/kernelet/poc/ostd/src/arch/x86/trap/gdt.rs:183:7
+    |
+183 | const UDATA: u64 = 0x00CF_F300_0000_FFFF;
+    |       ^^^^^
+
+warning: fields `bootloader_name`, `kernel_cmdline`, `initramfs`, `framebuffer_arg`, and `memory_regions` are never read
+   --> /mnt/data/projects/kernelet/poc/target/osdk-inputs/2127e384186b84af841186f0f59939765d654c84029107ca15dac270e8039879/fs/mnt/data/projects/kernelet/poc/ostd/src/boot/mod.rs:130:16
+    |
+129 | pub(crate) struct EarlyBootInfo {
+    |                   ------------- fields in this struct
+130 |     pub(crate) bootloader_name: &'static str,
+    |                ^^^^^^^^^^^^^^^
+131 |     pub(crate) kernel_cmdline: &'static str,
+    |                ^^^^^^^^^^^^^^
+132 |     pub(crate) initramfs: Option<&'static [u8]>,
+    |                ^^^^^^^^^
+133 |     pub(crate) acpi_arg: BootloaderAcpiArg,
+134 |     pub(crate) framebuffer_arg: Option<BootloaderFramebufferArg>,
+    |                ^^^^^^^^^^^^^^^
+135 |     pub(crate) memory_regions: MemoryRegionArray,
+    |                ^^^^^^^^^^^^^^
+
+warning: function `init_after_heap` is never used
+   --> /mnt/data/projects/kernelet/poc/target/osdk-inputs/2127e384186b84af841186f0f59939765d654c84029107ca15dac270e8039879/fs/mnt/data/projects/kernelet/poc/ostd/src/boot/mod.rs:145:15
+    |
+145 | pub(crate) fn init_after_heap() {
+    |               ^^^^^^^^^^^^^^^
+
+warning: function `parse_early_cmdline` is never used
+   --> /mnt/data/projects/kernelet/poc/target/osdk-inputs/2127e384186b84af841186f0f59939765d654c84029107ca15dac270e8039879/fs/mnt/data/projects/kernelet/poc/ostd/src/boot/mod.rs:206:15
+    |
+206 | pub(crate) fn parse_early_cmdline() -> EarlyCmdline {
+    |               ^^^^^^^^^^^^^^^^^^^
+
+warning: method `as_aligned` is never used
+   --> /mnt/data/projects/kernelet/poc/target/osdk-inputs/2127e384186b84af841186f0f59939765d654c84029107ca15dac270e8039879/fs/mnt/data/projects/kernelet/poc/ostd/src/boot/memory_region.rs:142:8
+    |
+ 60 | impl MemoryRegion {
+    | ----------------- method in this implementation
+...
+142 |     fn as_aligned(&self) -> Self {
+    |        ^^^^^^^^^^
+
+warning: struct `ArrayFullError` is never constructed
+   --> /mnt/data/projects/kernelet/poc/target/osdk-inputs/2127e384186b84af841186f0f59939765d654c84029107ca15dac270e8039879/fs/mnt/data/projects/kernelet/poc/ostd/src/boot/memory_region.rs:195:19
+    |
+195 | pub(crate) struct ArrayFullError;
+    |                   ^^^^^^^^^^^^^^
+
+warning: methods `push` and `into_non_overlapping` are never used
+   --> /mnt/data/projects/kernelet/poc/target/osdk-inputs/2127e384186b84af841186f0f59939765d654c84029107ca15dac270e8039879/fs/mnt/data/projects/kernelet/poc/ostd/src/boot/memory_region.rs:209:19
+    |
+197 | impl<const LEN: usize> MemoryRegionArray<LEN> {
+    | --------------------------------------------- methods in this implementation
+...
+209 |     pub(crate) fn push(&mut self, region: MemoryRegion) -> Result<(), ArrayFullError> {
+    |                   ^^^^
+...
+235 |     pub(crate) fn into_non_overlapping(mut self) -> Self {
+    |                   ^^^^^^^^^^^^^^^^^^^^
+
+warning: static `CPU_LOCAL_STORAGES` is never used
+   --> /mnt/data/projects/kernelet/poc/target/osdk-inputs/2127e384186b84af841186f0f59939765d654c84029107ca15dac270e8039879/fs/mnt/data/projects/kernelet/poc/ostd/src/cpu/local/mod.rs:186:8
+    |
+186 | static CPU_LOCAL_STORAGES: Once<&'static [Paddr]> = Once::new();
+    |        ^^^^^^^^^^^^^^^^^^
+
+warning: function `copy_bsp_for_ap` is never used
+   --> /mnt/data/projects/kernelet/poc/target/osdk-inputs/2127e384186b84af841186f0f59939765d654c84029107ca15dac270e8039879/fs/mnt/data/projects/kernelet/poc/ostd/src/cpu/local/mod.rs:203:22
+    |
+203 | pub(crate) unsafe fn copy_bsp_for_ap(num_cpus: usize) {
+    |                      ^^^^^^^^^^^^^^^
+
+warning: function `get_ap` is never used
+   --> /mnt/data/projects/kernelet/poc/target/osdk-inputs/2127e384186b84af841186f0f59939765d654c84029107ca15dac270e8039879/fs/mnt/data/projects/kernelet/poc/ostd/src/cpu/local/mod.rs:264:15
+    |
+264 | pub(crate) fn get_ap(cpu_id: CpuId) -> Paddr {
+    |               ^^^^^^
+
+warning: method `as_ptr` is never used
+   --> /mnt/data/projects/kernelet/poc/target/osdk-inputs/2127e384186b84af841186f0f59939765d654c84029107ca15dac270e8039879/fs/mnt/data/projects/kernelet/poc/ostd/src/cpu/local/static_cpu_local.rs:166:19
+    |
+144 | impl<T: 'static> CpuLocal<T, StaticStorage<T>> {
+    | ---------------------------------------------- method in this implementation
+...
+166 |     pub(crate) fn as_ptr(&self) -> *const T {
+    |                   ^^^^^^
+
+warning: function `debug_assert_false` is never used
+   --> /mnt/data/projects/kernelet/poc/target/osdk-inputs/2127e384186b84af841186f0f59939765d654c84029107ca15dac270e8039879/fs/mnt/data/projects/kernelet/poc/ostd/src/cpu/local/mod.rs:304:27
+    |
+304 |             pub(super) fn debug_assert_false() {
+    |                           ^^^^^^^^^^^^^^^^^^
+
+warning: function `init` is never used
+  --> /mnt/data/projects/kernelet/poc/target/osdk-inputs/2127e384186b84af841186f0f59939765d654c84029107ca15dac270e8039879/fs/mnt/data/projects/kernelet/poc/ostd/src/io/mod.rs:40:22
+   |
+40 | pub(crate) unsafe fn init(io_mem_builder: IoMemAllocatorBuilder) {
+   |                      ^^^^
+
+warning: variant `Native` is never constructed
+  --> /mnt/data/projects/kernelet/poc/target/osdk-inputs/2127e384186b84af841186f0f59939765d654c84029107ca15dac270e8039879/fs/mnt/data/projects/kernelet/poc/ostd/src/io/io_mem/mod.rs:50:5
+   |
+49 | enum IoMemBackend {
+   |      ------------ variant in this enum
+50 |     Native(Arc<KVirtArea>),
+   |     ^^^^^^
+   |
+   = note: `IoMemBackend` has derived impls for the traits `Debug` and `Clone`, but these are intentionally ignored during dead code analysis
+
+warning: associated function `new` is never used
+   --> /mnt/data/projects/kernelet/poc/target/osdk-inputs/2127e384186b84af841186f0f59939765d654c84029107ca15dac270e8039879/fs/mnt/data/projects/kernelet/poc/ostd/src/io/io_mem/mod.rs:101:26
+    |
+ 70 | impl<SecuritySensitivity> IoMem<SecuritySensitivity> {
+    | ---------------------------------------------------- associated function in this implementation
+...
+101 |     pub(crate) unsafe fn new(range: Range<Paddr>, flags: PageFlags, cache: CachePolicy) -> Self {
+    |                          ^^^
+
+warning: methods `read_once` and `write_once` are never used
+   --> /mnt/data/projects/kernelet/poc/target/osdk-inputs/2127e384186b84af841186f0f59939765d654c84029107ca15dac270e8039879/fs/mnt/data/projects/kernelet/poc/ostd/src/io/io_mem/mod.rs:224:26
+    |
+211 | impl IoMem<Sensitive> {
+    | --------------------- methods in this implementation
+...
+224 |     pub(crate) unsafe fn read_once<T: PodOnce>(&self, offset: usize) -> T {
+    |                          ^^^^^^^^^
+...
+243 |     pub(crate) unsafe fn write_once<T: PodOnce>(&self, offset: usize, value: &T) {
+    |                          ^^^^^^^^^^
+
+warning: associated items `acquire` and `new` are never used
+  --> /mnt/data/projects/kernelet/poc/target/osdk-inputs/2127e384186b84af841186f0f59939765d654c84029107ca15dac270e8039879/fs/mnt/data/projects/kernelet/poc/ostd/src/io/io_mem/allocator.rs:26:19
+   |
+22 | impl IoMemAllocator {
+   | ------------------- associated items in this implementation
+...
+26 |     pub(super) fn acquire(
+   |                   ^^^^^^^
+...
+68 |     unsafe fn new(allocators: Vec<RangeAllocator>) -> Self {
+   |               ^^^
+
+warning: struct `IoMemAllocatorBuilder` is never constructed
+  --> /mnt/data/projects/kernelet/poc/target/osdk-inputs/2127e384186b84af841186f0f59939765d654c84029107ca15dac270e8039879/fs/mnt/data/projects/kernelet/poc/ostd/src/io/io_mem/allocator.rs:77:19
+   |
+77 | pub(crate) struct IoMemAllocatorBuilder {
+   |                   ^^^^^^^^^^^^^^^^^^^^^
+
+warning: associated items `new`, `reserve`, and `remove` are never used
+   --> /mnt/data/projects/kernelet/poc/target/osdk-inputs/2127e384186b84af841186f0f59939765d654c84029107ca15dac270e8039879/fs/mnt/data/projects/kernelet/poc/ostd/src/io/io_mem/allocator.rs:90:26
+    |
+ 81 | impl IoMemAllocatorBuilder {
+    | -------------------------- associated items in this implementation
+...
+ 90 |     pub(crate) unsafe fn new(ranges: Vec<Range<usize>>) -> Self {
+    |                          ^^^
+...
+108 |     pub(crate) fn reserve(
+    |                   ^^^^^^^
+...
+131 |     pub(crate) fn remove(&self, range: Range<usize>) {
+    |                   ^^^^^^
+
+warning: static `IO_MEM_ALLOCATOR` is never used
+   --> /mnt/data/projects/kernelet/poc/target/osdk-inputs/2127e384186b84af841186f0f59939765d654c84029107ca15dac270e8039879/fs/mnt/data/projects/kernelet/poc/ostd/src/io/io_mem/allocator.rs:149:19
+    |
+149 | pub(super) static IO_MEM_ALLOCATOR: Once<IoMemAllocator> = Once::new();
+    |                   ^^^^^^^^^^^^^^^^
+
+warning: function `init` is never used
+   --> /mnt/data/projects/kernelet/poc/target/osdk-inputs/2127e384186b84af841186f0f59939765d654c84029107ca15dac270e8039879/fs/mnt/data/projects/kernelet/poc/ostd/src/io/io_mem/allocator.rs:157:29
+    |
+157 | pub(in crate::io) unsafe fn init(io_mem_builder: IoMemAllocatorBuilder) {
+    |                             ^^^^
+
+warning: function `init` is never used
+  --> /mnt/data/projects/kernelet/poc/target/osdk-inputs/2127e384186b84af841186f0f59939765d654c84029107ca15dac270e8039879/fs/mnt/data/projects/kernelet/poc/ostd/src/io/io_port/allocator.rs:79:29
+   |
+79 | pub(in crate::io) unsafe fn init() {
+   |                             ^^^^
+
+warning: function `init` is never used
+   --> /mnt/data/projects/kernelet/poc/target/osdk-inputs/2127e384186b84af841186f0f59939765d654c84029107ca15dac270e8039879/fs/mnt/data/projects/kernelet/poc/ostd/src/mm/frame/allocator.rs:263:22
+    |
+263 | pub(crate) unsafe fn init() {
+    |                      ^^^^
+
+warning: associated items `new` and `allocated_regions` are never used
+   --> /mnt/data/projects/kernelet/poc/target/osdk-inputs/2127e384186b84af841186f0f59939765d654c84029107ca15dac270e8039879/fs/mnt/data/projects/kernelet/poc/ostd/src/mm/frame/allocator.rs:331:19
+    |
+325 | impl EarlyFrameAllocator {
+    | ------------------------ associated items in this implementation
+...
+331 |     pub(crate) fn new() -> Self {
+    |                   ^^^
+...
+392 |     pub(super) fn allocated_regions(&self) -> [Range<Paddr>; 2] {
+    |                   ^^^^^^^^^^^^^^^^^
+
+warning: function `init_early_allocator` is never used
+   --> /mnt/data/projects/kernelet/poc/target/osdk-inputs/2127e384186b84af841186f0f59939765d654c84029107ca15dac270e8039879/fs/mnt/data/projects/kernelet/poc/ostd/src/mm/frame/allocator.rs:442:22
+    |
+442 | pub(crate) unsafe fn init_early_allocator() {
+    |                      ^^^^^^^^^^^^^^^^^^^^
+
+warning: function `init` is never used
+   --> /mnt/data/projects/kernelet/poc/target/osdk-inputs/2127e384186b84af841186f0f59939765d654c84029107ca15dac270e8039879/fs/mnt/data/projects/kernelet/poc/ostd/src/mm/frame/meta.rs:511:22
+    |
+511 | pub(crate) unsafe fn init() -> Segment<MetaPageMeta> {
+    |                      ^^^^
+
+warning: function `tracked_paddr_range` is never used
+   --> /mnt/data/projects/kernelet/poc/target/osdk-inputs/2127e384186b84af841186f0f59939765d654c84029107ca15dac270e8039879/fs/mnt/data/projects/kernelet/poc/ostd/src/mm/frame/meta.rs:582:4
+    |
+582 | fn tracked_paddr_range(regions: &[MemoryRegion]) -> Range<Paddr> {
+    |    ^^^^^^^^^^^^^^^^^^^
+
+warning: function `alloc_meta_frames` is never used
+   --> /mnt/data/projects/kernelet/poc/target/osdk-inputs/2127e384186b84af841186f0f59939765d654c84029107ca15dac270e8039879/fs/mnt/data/projects/kernelet/poc/ostd/src/mm/frame/meta.rs:596:4
+    |
+596 | fn alloc_meta_frames(tot_nr_frames: usize) -> (usize, Paddr) {
+    |    ^^^^^^^^^^^^^^^^^
+
+warning: function `mark_unusable_ranges` is never used
+   --> /mnt/data/projects/kernelet/poc/target/osdk-inputs/2127e384186b84af841186f0f59939765d654c84029107ca15dac270e8039879/fs/mnt/data/projects/kernelet/poc/ostd/src/mm/frame/meta.rs:654:4
+    |
+654 | fn mark_unusable_ranges() {
+    |    ^^^^^^^^^^^^^^^^^^^^
+
+warning: function `add_temp_linear_mapping` is never used
+   --> /mnt/data/projects/kernelet/poc/target/osdk-inputs/2127e384186b84af841186f0f59939765d654c84029107ca15dac270e8039879/fs/mnt/data/projects/kernelet/poc/ostd/src/mm/frame/meta.rs:683:4
+    |
+683 | fn add_temp_linear_mapping(max_paddr: Paddr) {
+    |    ^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: constant `FRAME_METADATA_CAP_VADDR` is never used
+   --> /mnt/data/projects/kernelet/poc/target/osdk-inputs/2127e384186b84af841186f0f59939765d654c84029107ca15dac270e8039879/fs/mnt/data/projects/kernelet/poc/ostd/src/mm/kspace/mod.rs:112:7
+    |
+112 | const FRAME_METADATA_CAP_VADDR: Vaddr = 0xffff_fff0_8000_0000 << ADDR_WIDTH_SHIFT;
+    |       ^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: constant `FRAME_METADATA_RANGE` is never used
+   --> /mnt/data/projects/kernelet/poc/target/osdk-inputs/2127e384186b84af841186f0f59939765d654c84029107ca15dac270e8039879/fs/mnt/data/projects/kernelet/poc/ostd/src/mm/kspace/mod.rs:114:18
+    |
+114 | pub(super) const FRAME_METADATA_RANGE: Range<Vaddr> =
+    |                  ^^^^^^^^^^^^^^^^^^^^
+
+warning: function `init_kernel_page_table` is never used
+   --> /mnt/data/projects/kernelet/poc/target/osdk-inputs/2127e384186b84af841186f0f59939765d654c84029107ca15dac270e8039879/fs/mnt/data/projects/kernelet/poc/ostd/src/mm/kspace/mod.rs:247:15
+    |
+247 | pub(crate) fn init_kernel_page_table(meta_pages: Segment<MetaPageMeta>) {
+    |               ^^^^^^^^^^^^^^^^^^^^^^
+
+warning: function `activate_kernel_page_table` is never used
+   --> /mnt/data/projects/kernelet/poc/target/osdk-inputs/2127e384186b84af841186f0f59939765d654c84029107ca15dac270e8039879/fs/mnt/data/projects/kernelet/poc/ostd/src/mm/kspace/mod.rs:337:22
+    |
+337 | pub(crate) unsafe fn activate_kernel_page_table() {
+    |                      ^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: associated items `try_reserve`, `try_reserve_aligned`, `map_additional_frames`, `map_additional_frames_batch`, and `map_untracked_frames` are never used
+   --> /mnt/data/projects/kernelet/poc/target/osdk-inputs/2127e384186b84af841186f0f59939765d654c84029107ca15dac270e8039879/fs/mnt/data/projects/kernelet/poc/ostd/src/mm/kspace/kvirt_area.rs:115:19
+    |
+ 82 | impl KVirtArea {
+    | -------------- associated items in this implementation
+...
+115 |     pub(crate) fn try_reserve(area_size: usize) -> crate::Result<Self> {
+    |                   ^^^^^^^^^^^
+...
+120 |     pub(crate) fn try_reserve_aligned(area_size: usize, alignment: usize) -> crate::Result<Self> {
+    |                   ^^^^^^^^^^^^^^^^^^^
+...
+190 |     pub(crate) fn map_additional_frames<T: AnyFrameMeta + ?Sized>(
+    |                   ^^^^^^^^^^^^^^^^^^^^^
+...
+201 |     pub(crate) fn map_additional_frames_batch<
+    |                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+...
+283 |     pub(crate) unsafe fn map_untracked_frames(
+    |                          ^^^^^^^^^^^^^^^^^^^^
+
+warning: function `prepare_unmapped_range` is never used
+   --> /mnt/data/projects/kernelet/poc/target/osdk-inputs/2127e384186b84af841186f0f59939765d654c84029107ca15dac270e8039879/fs/mnt/data/projects/kernelet/poc/ostd/src/mm/kspace/kvirt_area.rs:330:4
+    |
+330 | fn prepare_unmapped_range(
+    |    ^^^^^^^^^^^^^^^^^^^^^^
+
+warning: function `max_page_level` is never used
+   --> /mnt/data/projects/kernelet/poc/target/osdk-inputs/2127e384186b84af841186f0f59939765d654c84029107ca15dac270e8039879/fs/mnt/data/projects/kernelet/poc/ostd/src/mm/page_table/mod.rs:189:15
+    |
+189 | pub(crate) fn max_page_level<C: PagingConstsTrait>(len: usize) -> PagingLevel {
+    |               ^^^^^^^^^^^^^^
+
+warning: function `largest_pages` is never used
+   --> /mnt/data/projects/kernelet/poc/target/osdk-inputs/2127e384186b84af841186f0f59939765d654c84029107ca15dac270e8039879/fs/mnt/data/projects/kernelet/poc/ostd/src/mm/page_table/mod.rs:220:15
+    |
+220 | pub(crate) fn largest_pages<C: PageTableConfig>(
+    |               ^^^^^^^^^^^^^
+
+warning: method `activate` is never used
+   --> /mnt/data/projects/kernelet/poc/target/osdk-inputs/2127e384186b84af841186f0f59939765d654c84029107ca15dac270e8039879/fs/mnt/data/projects/kernelet/poc/ostd/src/mm/page_table/mod.rs:339:26
+    |
+338 | impl PageTable<UserPtConfig> {
+    | ---------------------------- method in this implementation
+339 |     pub(in crate::mm) fn activate(&self) {
+    |                          ^^^^^^^^
+
+warning: associated items `new_kernel_page_table` and `create_user_page_table` are never used
+   --> /mnt/data/projects/kernelet/poc/target/osdk-inputs/2127e384186b84af841186f0f59939765d654c84029107ca15dac270e8039879/fs/mnt/data/projects/kernelet/poc/ostd/src/mm/page_table/mod.rs:368:26
+    |
+360 | impl PageTable<KernelPtConfig> {
+    | ------------------------------ associated items in this implementation
+...
+368 |     pub(in crate::mm) fn new_kernel_page_table() -> Self {
+    |                          ^^^^^^^^^^^^^^^^^^^^^
+...
+389 |     pub(in crate::mm) fn create_user_page_table(&'static self) -> PageTable<UserPtConfig> {
+    |                          ^^^^^^^^^^^^^^^^^^^^^^
+
+warning: methods `first_activate_unchecked`, `cursor_mut_for_mapping`, and `shallow_copy` are never used
+   --> /mnt/data/projects/kernelet/poc/target/osdk-inputs/2127e384186b84af841186f0f59939765d654c84029107ca15dac270e8039879/fs/mnt/data/projects/kernelet/poc/ostd/src/mm/page_table/mod.rs:443:33
+    |
+433 | impl<C: PageTableConfig> PageTable<C> {
+    | ------------------------------------- methods in this implementation
+...
+443 |     pub(in crate::mm) unsafe fn first_activate_unchecked(&self) {
+    |                                 ^^^^^^^^^^^^^^^^^^^^^^^^
+...
+511 |     pub(crate) fn cursor_mut_for_mapping<'rcu, G: AsAtomicModeGuard>(
+    |                   ^^^^^^^^^^^^^^^^^^^^^^
+...
+539 |     pub(crate) unsafe fn shallow_copy(&self) -> Self {
+    |                          ^^^^^^^^^^^^
+
+warning: associated items `new_for_mapping` and `prepare_mapping` are never used
+   --> /mnt/data/projects/kernelet/poc/target/osdk-inputs/2127e384186b84af841186f0f59939765d654c84029107ca15dac270e8039879/fs/mnt/data/projects/kernelet/poc/ostd/src/mm/page_table/cursor/mod.rs:391:19
+    |
+375 | impl<'rcu, C: PageTableConfig> CursorMut<'rcu, C> {
+    | ------------------------------------------------- associated items in this implementation
+...
+391 |     pub(super) fn new_for_mapping(
+    |                   ^^^^^^^^^^^^^^^
+...
+438 |     pub(in crate::mm) fn prepare_mapping(
+    |                          ^^^^^^^^^^^^^^^
+
+warning: methods `activate` and `first_activate` are never used
+   --> /mnt/data/projects/kernelet/poc/target/osdk-inputs/2127e384186b84af841186f0f59939765d654c84029107ca15dac270e8039879/fs/mnt/data/projects/kernelet/poc/ostd/src/mm/page_table/node/mod.rs:109:26
+    |
+ 66 | impl<C: PageTableConfig> PageTableNode<C> {
+    | ----------------------------------------- methods in this implementation
+...
+109 |     pub(super) unsafe fn activate(&self) {
+    |                          ^^^^^^^^
+...
+132 |     pub(super) unsafe fn first_activate(&self) {
+    |                          ^^^^^^^^^^^^^^
+
+warning: function `with_borrow` is never used
+  --> /mnt/data/projects/kernelet/poc/target/osdk-inputs/2127e384186b84af841186f0f59939765d654c84029107ca15dac270e8039879/fs/mnt/data/projects/kernelet/poc/ostd/src/mm/page_table/boot_pt.rs:41:15
+   |
+41 | pub(crate) fn with_borrow<F, R>(f: F) -> Result<R, ()>
+   |               ^^^^^^^^^^^
+
+warning: function `dismiss` is never used
+  --> /mnt/data/projects/kernelet/poc/target/osdk-inputs/2127e384186b84af841186f0f59939765d654c84029107ca15dac270e8039879/fs/mnt/data/projects/kernelet/poc/ostd/src/mm/page_table/boot_pt.rs:73:22
+   |
+73 | pub(crate) unsafe fn dismiss() {
+   |                      ^^^^^^^
+
+warning: static `BOOT_PAGE_TABLE` is never used
+  --> /mnt/data/projects/kernelet/poc/target/osdk-inputs/2127e384186b84af841186f0f59939765d654c84029107ca15dac270e8039879/fs/mnt/data/projects/kernelet/poc/ostd/src/mm/page_table/boot_pt.rs:95:8
+   |
+95 | static BOOT_PAGE_TABLE: SpinLock<Option<BootPageTable>> = SpinLock::new(None);
+   |        ^^^^^^^^^^^^^^^
+
+warning: static `DISMISS_COUNT` is never used
+  --> /mnt/data/projects/kernelet/poc/target/osdk-inputs/2127e384186b84af841186f0f59939765d654c84029107ca15dac270e8039879/fs/mnt/data/projects/kernelet/poc/ostd/src/mm/page_table/boot_pt.rs:97:8
+   |
+97 | static DISMISS_COUNT: AtomicU32 = AtomicU32::new(0);
+   |        ^^^^^^^^^^^^^
+
+warning: static `IS_DISMISSED` is never used
+   --> /mnt/data/projects/kernelet/poc/target/osdk-inputs/2127e384186b84af841186f0f59939765d654c84029107ca15dac270e8039879/fs/mnt/data/projects/kernelet/poc/ostd/src/mm/page_table/boot_pt.rs:100:12
+    |
+100 |     static IS_DISMISSED: bool = false;
+    |            ^^^^^^^^^^^^
+    |
+    = note: this warning originates in the macro `cpu_local_cell` (in Nightly builds, run with -Z macro-backtrace for more info)
+
+warning: constant `PTE_POINTS_TO_FIRMWARE_PT` is never used
+   --> /mnt/data/projects/kernelet/poc/target/osdk-inputs/2127e384186b84af841186f0f59939765d654c84029107ca15dac270e8039879/fs/mnt/data/projects/kernelet/poc/ostd/src/mm/page_table/boot_pt.rs:121:7
+    |
+121 | const PTE_POINTS_TO_FIRMWARE_PT: PageTableFlags = PageTableFlags::AVAIL1;
+    |       ^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: associated items `from_current_pt`, `root_address`, and `map_base_page` are never used
+   --> /mnt/data/projects/kernelet/poc/target/osdk-inputs/2127e384186b84af841186f0f59939765d654c84029107ca15dac270e8039879/fs/mnt/data/projects/kernelet/poc/ostd/src/mm/page_table/boot_pt.rs:132:15
+    |
+123 | impl<E: PteTrait, C: PagingConstsTrait> BootPageTable<E, C> {
+    | ----------------------------------------------------------- associated items in this implementation
+...
+132 |     unsafe fn from_current_pt() -> Self {
+    |               ^^^^^^^^^^^^^^^
+...
+150 |     pub(crate) fn root_address(&self) -> Paddr {
+    |                   ^^^^^^^^^^^^
+...
+164 |     pub(in crate::mm) unsafe fn map_base_page(
+    |                                 ^^^^^^^^^^^^^
+
+warning: function `dfs_walk_on_leave` is never used
+   --> /mnt/data/projects/kernelet/poc/target/osdk-inputs/2127e384186b84af841186f0f59939765d654c84029107ca15dac270e8039879/fs/mnt/data/projects/kernelet/poc/ostd/src/mm/page_table/boot_pt.rs:319:4
+    |
+319 | fn dfs_walk_on_leave<E: PteTrait, C: PagingConstsTrait>(
+    |    ^^^^^^^^^^^^^^^^^
+
+warning: method `as_trap_frame` is never used
+  --> /mnt/data/projects/kernelet/poc/target/osdk-inputs/2127e384186b84af841186f0f59939765d654c84029107ca15dac270e8039879/fs/mnt/data/projects/kernelet/poc/ostd/src/user.rs:18:8
+   |
+13 | pub(crate) trait UserContextApiInternal {
+   |                  ---------------------- method in this trait
+...
+18 |     fn as_trap_frame(&self) -> TrapFrame;
+   |        ^^^^^^^^^^^^^
+
+warning: function `range_difference` is never used
+  --> /mnt/data/projects/kernelet/poc/target/osdk-inputs/2127e384186b84af841186f0f59939765d654c84029107ca15dac270e8039879/fs/mnt/data/projects/kernelet/poc/ostd/src/util/ops.rs:12:15
+   |
+12 | pub(crate) fn range_difference<T: Ord + Copy>(
+   |               ^^^^^^^^^^^^^^^^
+
+warning: method `alloc_specific` is never used
+  --> /mnt/data/projects/kernelet/poc/target/osdk-inputs/2127e384186b84af841186f0f59939765d654c84029107ca15dac270e8039879/fs/mnt/data/projects/kernelet/poc/ostd/src/util/range_alloc.rs:30:19
+   |
+17 | impl RangeAllocator {
+   | ------------------- method in this implementation
+...
+30 |     pub(crate) fn alloc_specific(
+   |                   ^^^^^^^^^^^^^^
+
+warning: unreachable `pub` item
+  --> /mnt/data/projects/kernelet/poc/target/osdk-inputs/2127e384186b84af841186f0f59939765d654c84029107ca15dac270e8039879/fs/mnt/data/projects/kernelet/poc/ostd/src/arch/x86/irq/chip/mod.rs:31:1
+   |
+31 | pub struct IrqChip {
+   | ---^^^^^^^^^^^^^^^
+   | |
+   | help: consider restricting its visibility: `pub(crate)`
+   |
+   = help: or consider exporting it for use by other crates
+   = note: requested on the command line with `-W unreachable-pub`
+
+warning: unreachable `pub` item
+  --> /mnt/data/projects/kernelet/poc/target/osdk-inputs/2127e384186b84af841186f0f59939765d654c84029107ca15dac270e8039879/fs/mnt/data/projects/kernelet/poc/ostd/src/arch/x86/irq/chip/mod.rs:51:5
+   |
+51 |       pub fn map_gsi_pin_to(
+   |       ^--
+   |       |
+   |  _____help: consider restricting its visibility: `pub(crate)`
+   | |
+52 | |         &'static self,
+53 | |         irq_line: IrqLine,
+54 | |         gsi_index: u32,
+55 | |     ) -> Result<MappedIrqLine> {
+   | |______________________________^
+
+warning: unreachable `pub` item
+  --> /mnt/data/projects/kernelet/poc/target/osdk-inputs/2127e384186b84af841186f0f59939765d654c84029107ca15dac270e8039879/fs/mnt/data/projects/kernelet/poc/ostd/src/arch/x86/irq/chip/mod.rs:94:5
+   |
+94 |       pub fn map_isa_pin_to(
+   |       ^--
+   |       |
+   |  _____help: consider restricting its visibility: `pub(crate)`
+   | |
+95 | |         &'static self,
+96 | |         irq_line: IrqLine,
+97 | |         isa_index: u8,
+98 | |     ) -> Result<MappedIrqLine> {
+   | |______________________________^
+
+warning: unreachable `pub` item
+   --> /mnt/data/projects/kernelet/poc/target/osdk-inputs/2127e384186b84af841186f0f59939765d654c84029107ca15dac270e8039879/fs/mnt/data/projects/kernelet/poc/ostd/src/arch/x86/irq/chip/mod.rs:119:5
+    |
+119 |     pub fn count_io_apics(&self) -> usize {
+    |     ---^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |     |
+    |     help: consider restricting its visibility: `pub(crate)`
+
+warning: unreachable `pub` item
+   --> /mnt/data/projects/kernelet/poc/target/osdk-inputs/2127e384186b84af841186f0f59939765d654c84029107ca15dac270e8039879/fs/mnt/data/projects/kernelet/poc/ostd/src/arch/x86/irq/chip/mod.rs:127:1
+    |
+127 | pub struct MappedIrqLine {
+    | ---^^^^^^^^^^^^^^^^^^^^^
+    | |
+    | help: consider restricting its visibility: `pub(crate)`
+    |
+    = help: or consider exporting it for use by other crates
+
+warning: unreachable `pub` item
+   --> /mnt/data/projects/kernelet/poc/target/osdk-inputs/2127e384186b84af841186f0f59939765d654c84029107ca15dac270e8039879/fs/mnt/data/projects/kernelet/poc/ostd/src/arch/x86/irq/chip/mod.rs:163:1
+    |
+163 | pub static IRQ_CHIP: Once<IrqChip> = Once::new();
+    | ---^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    | |
+    | help: consider restricting its visibility: `pub(crate)`
+    |
+    = help: or consider exporting it for use by other crates
+
+warning: unreachable `pub` item
+   --> /mnt/data/projects/kernelet/poc/target/osdk-inputs/2127e384186b84af841186f0f59939765d654c84029107ca15dac270e8039879/fs/mnt/data/projects/kernelet/poc/ostd/src/user.rs:261:5
+    |
+261 |     pub unsafe extern "C" fn first_user_task_entry() -> ! {
+    |     ---^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |     |
+    |     help: consider restricting its visibility: `pub(super)`
+    |
+    = help: or consider exporting it for use by other crates
+
+warning: unreachable `pub` item
+   --> /mnt/data/projects/kernelet/poc/target/osdk-inputs/2127e384186b84af841186f0f59939765d654c84029107ca15dac270e8039879/fs/mnt/data/projects/kernelet/poc/ostd/src/user.rs:295:5
+    |
+295 |     pub unsafe extern "C" fn user_event_entry(raw_event: u64) -> ! {
+    |     ---^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |     |
+    |     help: consider restricting its visibility: `pub(super)`
+    |
+    = help: or consider exporting it for use by other crates
+
+   Compiling osdk-heap-allocator v0.19.0 (/mnt/data/projects/kernelet/poc/target/osdk-inputs/2127e384186b84af841186f0f59939765d654c84029107ca15dac270e8039879/fs/mnt/data/projects/kernelet/poc/osdk/deps/heap-allocator)
+   Compiling aster-console v0.1.0 (/mnt/data/projects/kernelet/poc/target/osdk-inputs/2127e384186b84af841186f0f59939765d654c84029107ca15dac270e8039879/fs/mnt/data/projects/kernelet/poc/kernel/core/comps/console)
+   Compiling aster-pci v0.1.0 (/mnt/data/projects/kernelet/poc/target/osdk-inputs/2127e384186b84af841186f0f59939765d654c84029107ca15dac270e8039879/fs/mnt/data/projects/kernelet/poc/kernel/core/comps/pci)
+   Compiling aster-fuse v0.1.0 (/mnt/data/projects/kernelet/poc/target/osdk-inputs/2127e384186b84af841186f0f59939765d654c84029107ca15dac270e8039879/fs/mnt/data/projects/kernelet/poc/kernel/libs/aster-fuse)
+   Compiling aster-input v0.1.0 (/mnt/data/projects/kernelet/poc/target/osdk-inputs/2127e384186b84af841186f0f59939765d654c84029107ca15dac270e8039879/fs/mnt/data/projects/kernelet/poc/kernel/core/comps/input)
+   Compiling aster-cmdline v0.1.0 (/mnt/data/projects/kernelet/poc/target/osdk-inputs/2127e384186b84af841186f0f59939765d654c84029107ca15dac270e8039879/fs/mnt/data/projects/kernelet/poc/kernel/core/comps/cmdline)
+   Compiling aster-framebuffer v0.1.0 (/mnt/data/projects/kernelet/poc/target/osdk-inputs/2127e384186b84af841186f0f59939765d654c84029107ca15dac270e8039879/fs/mnt/data/projects/kernelet/poc/kernel/core/comps/framebuffer)
+   Compiling osdk-frame-allocator v0.19.0 (/mnt/data/projects/kernelet/poc/target/osdk-inputs/2127e384186b84af841186f0f59939765d654c84029107ca15dac270e8039879/fs/mnt/data/projects/kernelet/poc/osdk/deps/frame-allocator)
+   Compiling ring-buffer v0.1.0 (/mnt/data/projects/kernelet/poc/target/osdk-inputs/2127e384186b84af841186f0f59939765d654c84029107ca15dac270e8039879/fs/mnt/data/projects/kernelet/poc/kernel/libs/ring-buffer)
+   Compiling xarray v0.1.0 (/mnt/data/projects/kernelet/poc/target/osdk-inputs/2127e384186b84af841186f0f59939765d654c84029107ca15dac270e8039879/fs/mnt/data/projects/kernelet/poc/kernel/libs/xarray)
+warning: `ring-buffer` (lib) generated 1 warning (1 duplicate)
+   Compiling aster-logger v0.1.0 (/mnt/data/projects/kernelet/poc/target/osdk-inputs/2127e384186b84af841186f0f59939765d654c84029107ca15dac270e8039879/fs/mnt/data/projects/kernelet/poc/kernel/core/comps/logger)
+   Compiling aster-uart v0.1.0 (/mnt/data/projects/kernelet/poc/target/osdk-inputs/2127e384186b84af841186f0f59939765d654c84029107ca15dac270e8039879/fs/mnt/data/projects/kernelet/poc/kernel/comps/uart)
+warning: `aster-uart` (lib) generated 1 warning (1 duplicate)
+warning: function `init` is never used
+  --> /mnt/data/projects/kernelet/poc/target/osdk-inputs/2127e384186b84af841186f0f59939765d654c84029107ca15dac270e8039879/fs/mnt/data/projects/kernelet/poc/kernel/core/comps/pci/src/lib.rs:96:4
+   |
+96 | fn init() {
+   |    ^^^^
+   |
+   = note: `#[warn(dead_code)]` (part of `#[warn(unused)]`) on by default
+
+warning: function `init` is never used
+   --> /mnt/data/projects/kernelet/poc/target/osdk-inputs/2127e384186b84af841186f0f59939765d654c84029107ca15dac270e8039879/fs/mnt/data/projects/kernelet/poc/kernel/core/comps/pci/src/arch/x86/mod.rs:108:15
+    |
+108 | pub(crate) fn init() -> Option<RangeInclusive<u8>> {
+    |               ^^^^
+
+warning: method `register_common_device` is never used
+  --> /mnt/data/projects/kernelet/poc/target/osdk-inputs/2127e384186b84af841186f0f59939765d654c84029107ca15dac270e8039879/fs/mnt/data/projects/kernelet/poc/kernel/core/comps/pci/src/bus.rs:75:19
+   |
+48 | impl PciBus {
+   | ----------- method in this implementation
+...
+75 |     pub(super) fn register_common_device(&mut self, mut common_device: PciCommonDevice) {
+   |                   ^^^^^^^^^^^^^^^^^^^^^^
+
+warning: enum `CapabilityType` is never used
+  --> /mnt/data/projects/kernelet/poc/target/osdk-inputs/2127e384186b84af841186f0f59939765d654c84029107ca15dac270e8039879/fs/mnt/data/projects/kernelet/poc/kernel/core/comps/pci/src/capability/mod.rs:34:6
+   |
+34 | enum CapabilityType {
+   |      ^^^^^^^^^^^^^^
+
+warning: associated items `CAPABILITY_TOP` and `parse` are never used
+  --> /mnt/data/projects/kernelet/poc/target/osdk-inputs/2127e384186b84af841186f0f59939765d654c84029107ca15dac270e8039879/fs/mnt/data/projects/kernelet/poc/kernel/core/comps/pci/src/capability/mod.rs:79:11
+   |
+77 | impl RawCapabilities {
+   | -------------------- associated items in this implementation
+78 |     /// The top of the capability position.
+79 |     const CAPABILITY_TOP: u16 = 0xFC;
+   |           ^^^^^^^^^^^^^^
+...
+82 |     pub(super) fn parse(dev: &PciCommonDevice) -> Self {
+   |                   ^^^^^
+
+warning: associated function `parse` is never used
+  --> /mnt/data/projects/kernelet/poc/target/osdk-inputs/2127e384186b84af841186f0f59939765d654c84029107ca15dac270e8039879/fs/mnt/data/projects/kernelet/poc/kernel/core/comps/pci/src/capability/msix.rs:26:19
+   |
+25 | impl RawCapabilityMsix {
+   | ---------------------- associated function in this implementation
+26 |     pub(super) fn parse(dev: &PciCommonDevice, cap_ptr: u16) -> Self {
+   |                   ^^^^^
+
+warning: associated function `new` is never used
+  --> /mnt/data/projects/kernelet/poc/target/osdk-inputs/2127e384186b84af841186f0f59939765d654c84029107ca15dac270e8039879/fs/mnt/data/projects/kernelet/poc/kernel/core/comps/pci/src/capability/vendor.rs:17:19
+   |
+16 | impl RawCapabilityVndr {
+   | ---------------------- associated function in this implementation
+17 |     pub(super) fn new(cap_ptr: u16, length: u16) -> Self {
+   |                   ^^^
+
+warning: associated function `new` is never used
+   --> /mnt/data/projects/kernelet/poc/target/osdk-inputs/2127e384186b84af841186f0f59939765d654c84029107ca15dac270e8039879/fs/mnt/data/projects/kernelet/poc/kernel/core/comps/pci/src/cfg_space.rs:269:19
+    |
+246 | impl Bar {
+    | -------- associated function in this implementation
+...
+269 |     pub(super) fn new(location: PciDeviceLocation, index: u8) -> Result<Self> {
+    |                   ^^^
+
+warning: associated function `new` is never used
+   --> /mnt/data/projects/kernelet/poc/target/osdk-inputs/2127e384186b84af841186f0f59939765d654c84029107ca15dac270e8039879/fs/mnt/data/projects/kernelet/poc/kernel/core/comps/pci/src/cfg_space.rs:373:8
+    |
+328 | impl MemoryBar {
+    | -------------- associated function in this implementation
+...
+373 |     fn new(location: &PciDeviceLocation, index: u8, raw: u32) -> Result<Self> {
+    |        ^^^
+
+warning: associated function `new` is never used
+   --> /mnt/data/projects/kernelet/poc/target/osdk-inputs/2127e384186b84af841186f0f59939765d654c84029107ca15dac270e8039879/fs/mnt/data/projects/kernelet/poc/kernel/core/comps/pci/src/cfg_space.rs:498:8
+    |
+486 | impl IoBar {
+    | ---------- associated function in this implementation
+...
+498 |     fn new(location: &PciDeviceLocation, index: u8, raw: u32) -> Result<Self> {
+    |        ^^^
+
+warning: enum `BarKind` is never used
+   --> /mnt/data/projects/kernelet/poc/target/osdk-inputs/2127e384186b84af841186f0f59939765d654c84029107ca15dac270e8039879/fs/mnt/data/projects/kernelet/poc/kernel/core/comps/pci/src/cfg_space.rs:533:6
+    |
+533 | enum BarKind {
+    |      ^^^^^^^
+
+warning: constant `MEMORY_ADDRESS_MASK` is never used
+   --> /mnt/data/projects/kernelet/poc/target/osdk-inputs/2127e384186b84af841186f0f59939765d654c84029107ca15dac270e8039879/fs/mnt/data/projects/kernelet/poc/kernel/core/comps/pci/src/cfg_space.rs:538:7
+    |
+538 | const MEMORY_ADDRESS_MASK: u64 = !0xF;
+    |       ^^^^^^^^^^^^^^^^^^^
+
+warning: constant `IO_ADDRESS_MASK` is never used
+   --> /mnt/data/projects/kernelet/poc/target/osdk-inputs/2127e384186b84af841186f0f59939765d654c84029107ca15dac270e8039879/fs/mnt/data/projects/kernelet/poc/kernel/core/comps/pci/src/cfg_space.rs:539:7
+    |
+539 | const IO_ADDRESS_MASK: u32 = !0x3;
+    |       ^^^^^^^^^^^^^^^
+
+warning: function `decode_size` is never used
+   --> /mnt/data/projects/kernelet/poc/target/osdk-inputs/2127e384186b84af841186f0f59939765d654c84029107ca15dac270e8039879/fs/mnt/data/projects/kernelet/poc/kernel/core/comps/pci/src/cfg_space.rs:542:4
+    |
+542 | fn decode_size(size_encoded: u64, kind: BarKind) -> u64 {
+    |    ^^^^^^^^^^^
+
+warning: associated function `new` is never used
+  --> /mnt/data/projects/kernelet/poc/target/osdk-inputs/2127e384186b84af841186f0f59939765d654c84029107ca15dac270e8039879/fs/mnt/data/projects/kernelet/poc/kernel/core/comps/pci/src/common_device.rs:97:19
+   |
+25 | impl PciCommonDevice {
+   | -------------------- associated function in this implementation
+...
+97 |     pub(super) fn new(location: PciDeviceLocation) -> Option<Self> {
+   |                   ^^^
+
+warning: associated function `try_from_raw` is never used
+   --> /mnt/data/projects/kernelet/poc/target/osdk-inputs/2127e384186b84af841186f0f59939765d654c84029107ca15dac270e8039879/fs/mnt/data/projects/kernelet/poc/kernel/core/comps/pci/src/common_device.rs:159:8
+    |
+153 | impl PciHeaderType {
+    | ------------------ associated function in this implementation
+...
+159 |     fn try_from_raw(raw: u8) -> Option<Self> {
+    |        ^^^^^^^^^^^^
+
+warning: associated function `new` is never used
+   --> /mnt/data/projects/kernelet/poc/target/osdk-inputs/2127e384186b84af841186f0f59939765d654c84029107ca15dac270e8039879/fs/mnt/data/projects/kernelet/poc/kernel/core/comps/pci/src/common_device.rs:226:8
+    |
+214 | impl BarManager {
+    | --------------- associated function in this implementation
+...
+226 |     fn new(device_type: PciDeviceType, location: PciDeviceLocation) -> Self {
+    |        ^^^
+
+warning: associated function `new` is never used
+   --> /mnt/data/projects/kernelet/poc/target/osdk-inputs/2127e384186b84af841186f0f59939765d654c84029107ca15dac270e8039879/fs/mnt/data/projects/kernelet/poc/kernel/core/comps/pci/src/device_info.rs:110:19
+    |
+109 | impl PciDeviceId {
+    | ---------------- associated function in this implementation
+110 |     pub(super) fn new(location: PciDeviceLocation) -> Self {
+    |                   ^^^
+
+warning: `xarray` (lib) generated 1 warning (1 duplicate)
+warning: `aster-logger` (lib) generated 1 warning (1 duplicate)
+   Compiling aster-util v0.1.0 (/mnt/data/projects/kernelet/poc/target/osdk-inputs/2127e384186b84af841186f0f59939765d654c84029107ca15dac270e8039879/fs/mnt/data/projects/kernelet/poc/kernel/libs/aster-util)
+warning: `osdk-frame-allocator` (lib) generated 1 warning (1 duplicate)
+warning: `aster-console` (lib) generated 1 warning (1 duplicate)
+warning: `aster-pci` (lib) generated 19 warnings (1 duplicate)
+warning: `aster-framebuffer` (lib) generated 1 warning (1 duplicate)
+warning: `aster-input` (lib) generated 1 warning (1 duplicate)
+warning: `ostd` (lib) generated 131 warnings (1 duplicate) (run `cargo fix --lib -p ostd` to apply 11 suggestions)
+   Compiling aster-softirq v0.1.0 (/mnt/data/projects/kernelet/poc/target/osdk-inputs/2127e384186b84af841186f0f59939765d654c84029107ca15dac270e8039879/fs/mnt/data/projects/kernelet/poc/kernel/core/comps/softirq)
+   Compiling device-id v0.1.0 (/mnt/data/projects/kernelet/poc/target/osdk-inputs/2127e384186b84af841186f0f59939765d654c84029107ca15dac270e8039879/fs/mnt/data/projects/kernelet/poc/kernel/libs/device-id)
+   Compiling aster-systree v0.1.0 (/mnt/data/projects/kernelet/poc/target/osdk-inputs/2127e384186b84af841186f0f59939765d654c84029107ca15dac270e8039879/fs/mnt/data/projects/kernelet/poc/kernel/core/comps/systree)
+   Compiling aster-time v0.1.0 (/mnt/data/projects/kernelet/poc/target/osdk-inputs/2127e384186b84af841186f0f59939765d654c84029107ca15dac270e8039879/fs/mnt/data/projects/kernelet/poc/kernel/core/comps/time)
+warning: `aster-cmdline` (lib) generated 1 warning (1 duplicate)
+warning: `osdk-heap-allocator` (lib) generated 1 warning (1 duplicate)
+warning: methods `calculate_instant`, `cycles_to_nanos_lossy`, `update_last_record`, `calibrate`, `update`, and `read_instant` are never used
+   --> /mnt/data/projects/kernelet/poc/target/osdk-inputs/2127e384186b84af841186f0f59939765d654c84029107ca15dac270e8039879/fs/mnt/data/projects/kernelet/poc/kernel/core/comps/time/src/clocksource.rs:92:8
+    |
+ 60 | impl ClockSource {
+    | ---------------- methods in this implementation
+...
+ 92 |     fn calculate_instant(&self) -> (Instant, u64) {
+    |        ^^^^^^^^^^^^^^^^^
+...
+115 |     fn cycles_to_nanos_lossy(&self, cycles: u64) -> u64 {
+    |        ^^^^^^^^^^^^^^^^^^^^^
+...
+129 |     fn update_last_record(&self, record: (Instant, u64)) {
+    |        ^^^^^^^^^^^^^^^^^^
+...
+159 |     pub(crate) fn calibrate(&self, instant_cycles: u64) {
+    |                   ^^^^^^^^^
+...
+164 |     pub(crate) fn update(&self) {
+    |                   ^^^^^^
+...
+170 |     pub(crate) fn read_instant(&self) -> Instant {
+    |                   ^^^^^^^^^^^^
+    |
+    = note: `#[warn(dead_code)]` (part of `#[warn(unused)]`) on by default
+
+warning: `device-id` (lib) generated 1 warning (1 duplicate)
+warning: `aster-util` (lib) generated 1 warning (1 duplicate)
+warning: `aster-time` (lib) generated 2 warnings (1 duplicate)
+   Compiling dma-pool v0.1.0 (/mnt/data/projects/kernelet/poc/target/osdk-inputs/2127e384186b84af841186f0f59939765d654c84029107ca15dac270e8039879/fs/mnt/data/projects/kernelet/poc/kernel/libs/dma-pool)
+warning: `aster-softirq` (lib) generated 1 warning (1 duplicate)
+   Compiling aster-bigtcp v0.1.0 (/mnt/data/projects/kernelet/poc/target/osdk-inputs/2127e384186b84af841186f0f59939765d654c84029107ca15dac270e8039879/fs/mnt/data/projects/kernelet/poc/kernel/libs/aster-bigtcp)
+   Compiling aster-block v0.1.0 (/mnt/data/projects/kernelet/poc/target/osdk-inputs/2127e384186b84af841186f0f59939765d654c84029107ca15dac270e8039879/fs/mnt/data/projects/kernelet/poc/kernel/core/comps/block)
+   Compiling aster-device v0.1.0 (/mnt/data/projects/kernelet/poc/target/osdk-inputs/2127e384186b84af841186f0f59939765d654c84029107ca15dac270e8039879/fs/mnt/data/projects/kernelet/poc/kernel/core/comps/device)
+warning: `dma-pool` (lib) generated 1 warning (1 duplicate)
+warning: `aster-systree` (lib) generated 1 warning (1 duplicate)
+   Compiling aster-nvme v0.1.0 (/mnt/data/projects/kernelet/poc/target/osdk-inputs/2127e384186b84af841186f0f59939765d654c84029107ca15dac270e8039879/fs/mnt/data/projects/kernelet/poc/kernel/core/comps/nvme)
+warning: `aster-fuse` (lib) generated 1 warning (1 duplicate)
+warning: `aster-block` (lib) generated 1 warning (1 duplicate)
+   Compiling aster-network v0.1.0 (/mnt/data/projects/kernelet/poc/target/osdk-inputs/2127e384186b84af841186f0f59939765d654c84029107ca15dac270e8039879/fs/mnt/data/projects/kernelet/poc/kernel/core/comps/network)
+warning: `aster-device` (lib) generated 1 warning (1 duplicate)
+warning: `aster-nvme` (lib) generated 1 warning (1 duplicate)
+   Compiling aster-virtio v0.1.0 (/mnt/data/projects/kernelet/poc/target/osdk-inputs/2127e384186b84af841186f0f59939765d654c84029107ca15dac270e8039879/fs/mnt/data/projects/kernelet/poc/kernel/core/comps/virtio)
+warning: `aster-bigtcp` (lib) generated 1 warning (1 duplicate)
+warning: `aster-network` (lib) generated 1 warning (1 duplicate)
+warning: variant `Pci` is never constructed
+   --> /mnt/data/projects/kernelet/poc/target/osdk-inputs/2127e384186b84af841186f0f59939765d654c84029107ca15dac270e8039879/fs/mnt/data/projects/kernelet/poc/kernel/core/comps/virtio/src/transport/mod.rs:113:5
+    |
+112 | pub(crate) enum ConfigGeneration {
+    |                 ---------------- variant in this enum
+113 |     Pci(SafePtr<u8, IoMem>),
+    |     ^^^
+    |
+    = note: `ConfigGeneration` has a derived impl for the trait `Debug`, but this is intentionally ignored during dead code analysis
+    = note: `#[warn(dead_code)]` (part of `#[warn(unused)]`) on by default
+
+warning: method `is_fatal` is never used
+   --> /mnt/data/projects/kernelet/poc/target/osdk-inputs/2127e384186b84af841186f0f59939765d654c84029107ca15dac270e8039879/fs/mnt/data/projects/kernelet/poc/kernel/core/comps/virtio/src/transport/mmio/bus/arch/x86.rs:163:8
+    |
+161 | impl MmioRegisterError {
+    | ---------------------- method in this implementation
+162 |     /// Returns `true` if it should terminate a linear MMIO scan.
+163 |     fn is_fatal(self) -> bool {
+    |        ^^^^^^^^
+
+warning: static `VIRTIO_PCI_DRIVER` is never used
+  --> /mnt/data/projects/kernelet/poc/target/osdk-inputs/2127e384186b84af841186f0f59939765d654c84029107ca15dac270e8039879/fs/mnt/data/projects/kernelet/poc/kernel/core/comps/virtio/src/transport/pci/mod.rs:17:19
+   |
+17 | pub(crate) static VIRTIO_PCI_DRIVER: Once<Arc<VirtioPciDriver>> = Once::new();
+   |                   ^^^^^^^^^^^^^^^^^
+
+warning: function `virtio_pci_init` is never used
+  --> /mnt/data/projects/kernelet/poc/target/osdk-inputs/2127e384186b84af841186f0f59939765d654c84029107ca15dac270e8039879/fs/mnt/data/projects/kernelet/poc/kernel/core/comps/virtio/src/transport/pci/mod.rs:19:15
+   |
+19 | pub(super) fn virtio_pci_init() {
+   |               ^^^^^^^^^^^^^^^
+
+warning: enum `VirtioPciCpabilityType` is never used
+  --> /mnt/data/projects/kernelet/poc/target/osdk-inputs/2127e384186b84af841186f0f59939765d654c84029107ca15dac270e8039879/fs/mnt/data/projects/kernelet/poc/kernel/core/comps/virtio/src/transport/pci/capability.rs:11:17
+   |
+11 | pub(super) enum VirtioPciCpabilityType {
+   |                 ^^^^^^^^^^^^^^^^^^^^^^
+
+warning: struct `VirtioPciCapabilityData` is never constructed
+  --> /mnt/data/projects/kernelet/poc/target/osdk-inputs/2127e384186b84af841186f0f59939765d654c84029107ca15dac270e8039879/fs/mnt/data/projects/kernelet/poc/kernel/core/comps/virtio/src/transport/pci/capability.rs:20:19
+   |
+20 | pub(super) struct VirtioPciCapabilityData {
+   |                   ^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: associated items `memory_bar`, `offset`, `length`, `typ`, `option_value`, and `new` are never used
+  --> /mnt/data/projects/kernelet/poc/target/osdk-inputs/2127e384186b84af841186f0f59939765d654c84029107ca15dac270e8039879/fs/mnt/data/projects/kernelet/poc/kernel/core/comps/virtio/src/transport/pci/capability.rs:29:19
+   |
+28 | impl VirtioPciCapabilityData {
+   | ---------------------------- associated items in this implementation
+29 |     pub(super) fn memory_bar(&self) -> Option<&IoMem> {
+   |                   ^^^^^^^^^^
+...
+33 |     pub(super) fn offset(&self) -> u32 {
+   |                   ^^^^^^
+...
+37 |     pub(super) fn length(&self) -> u32 {
+   |                   ^^^^^^
+...
+41 |     pub(super) fn typ(&self) -> VirtioPciCpabilityType {
+   |                   ^^^
+...
+45 |     pub(super) fn option_value(&self) -> Option<u32> {
+   |                   ^^^^^^^^^^^^
+...
+49 |     pub(super) fn new(bar_manager: &mut BarManager, vendor_cap: CapabilityVndrData) -> Self {
+   |                   ^^^
+
+warning: struct `VirtioPciCommonCfg` is never constructed
+  --> /mnt/data/projects/kernelet/poc/target/osdk-inputs/2127e384186b84af841186f0f59939765d654c84029107ca15dac270e8039879/fs/mnt/data/projects/kernelet/poc/kernel/core/comps/virtio/src/transport/pci/common_cfg.rs:11:19
+   |
+11 | pub(super) struct VirtioPciCommonCfg {
+   |                   ^^^^^^^^^^^^^^^^^^
+
+warning: associated function `new` is never used
+  --> /mnt/data/projects/kernelet/poc/target/osdk-inputs/2127e384186b84af841186f0f59939765d654c84029107ca15dac270e8039879/fs/mnt/data/projects/kernelet/poc/kernel/core/comps/virtio/src/transport/pci/common_cfg.rs:32:19
+   |
+31 | impl VirtioPciCommonCfg {
+   | ----------------------- associated function in this implementation
+32 |     pub(super) fn new(cap: &VirtioPciCapabilityData) -> SafePtr<Self, IoMem> {
+   |                   ^^^
+
+warning: method `write_u64` is never used
+  --> /mnt/data/projects/kernelet/poc/target/osdk-inputs/2127e384186b84af841186f0f59939765d654c84029107ca15dac270e8039879/fs/mnt/data/projects/kernelet/poc/kernel/core/comps/virtio/src/transport/pci/common_cfg.rs:53:8
+   |
+51 | pub(super) trait VirtioPciCfgU64Ext {
+   |                  ------------------ method in this trait
+52 |     /// Writes the low half followed by the high half.
+53 |     fn write_u64(&self, val: u64) -> Result<()>;
+   |        ^^^^^^^^^
+
+warning: struct `VirtioPciNotify` is never constructed
+  --> /mnt/data/projects/kernelet/poc/target/osdk-inputs/2127e384186b84af841186f0f59939765d654c84029107ca15dac270e8039879/fs/mnt/data/projects/kernelet/poc/kernel/core/comps/virtio/src/transport/pci/device.rs:32:8
+   |
+32 | struct VirtioPciNotify {
+   |        ^^^^^^^^^^^^^^^
+
+warning: struct `VirtioPciDevice` is never constructed
+  --> /mnt/data/projects/kernelet/poc/target/osdk-inputs/2127e384186b84af841186f0f59939765d654c84029107ca15dac270e8039879/fs/mnt/data/projects/kernelet/poc/kernel/core/comps/virtio/src/transport/pci/device.rs:39:19
+   |
+39 | pub(super) struct VirtioPciDevice {
+   |                   ^^^^^^^^^^^^^^^
+
+warning: associated function `new` is never used
+  --> /mnt/data/projects/kernelet/poc/target/osdk-inputs/2127e384186b84af841186f0f59939765d654c84029107ca15dac270e8039879/fs/mnt/data/projects/kernelet/poc/kernel/core/comps/virtio/src/transport/pci/device.rs:44:19
+   |
+43 | impl VirtioPciDevice {
+   | -------------------- associated function in this implementation
+44 |     pub(super) fn new(device_id: PciDeviceId) -> Self {
+   |                   ^^^
+
+warning: struct `VirtioPciModernTransport` is never constructed
+  --> /mnt/data/projects/kernelet/poc/target/osdk-inputs/2127e384186b84af841186f0f59939765d654c84029107ca15dac270e8039879/fs/mnt/data/projects/kernelet/poc/kernel/core/comps/virtio/src/transport/pci/device.rs:55:19
+   |
+55 | pub(super) struct VirtioPciModernTransport {
+   |                   ^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: associated function `new` is never used
+   --> /mnt/data/projects/kernelet/poc/target/osdk-inputs/2127e384186b84af841186f0f59939765d654c84029107ca15dac270e8039879/fs/mnt/data/projects/kernelet/poc/kernel/core/comps/virtio/src/transport/pci/device.rs:296:19
+    |
+294 | impl VirtioPciModernTransport {
+    | ----------------------------- associated function in this implementation
+295 |     #[expect(clippy::result_large_err)]
+296 |     pub(super) fn new(
+    |                   ^^^
+
+warning: struct `VirtioPciDriver` is never constructed
+  --> /mnt/data/projects/kernelet/poc/target/osdk-inputs/2127e384186b84af841186f0f59939765d654c84029107ca15dac270e8039879/fs/mnt/data/projects/kernelet/poc/kernel/core/comps/virtio/src/transport/pci/driver.rs:18:19
+   |
+18 | pub(crate) struct VirtioPciDriver {
+   |                   ^^^^^^^^^^^^^^^
+
+warning: associated items `pop_device_transport` and `new` are never used
+  --> /mnt/data/projects/kernelet/poc/target/osdk-inputs/2127e384186b84af841186f0f59939765d654c84029107ca15dac270e8039879/fs/mnt/data/projects/kernelet/poc/kernel/core/comps/virtio/src/transport/pci/driver.rs:23:19
+   |
+22 | impl VirtioPciDriver {
+   | -------------------- associated items in this implementation
+23 |     pub(crate) fn pop_device_transport(&self) -> Option<Box<dyn VirtioTransport>> {
+   |                   ^^^^^^^^^^^^^^^^^^^^
+...
+27 |     pub(super) fn new() -> Self {
+   |                   ^^^
+
+warning: associated function `new` is never used
+  --> /mnt/data/projects/kernelet/poc/target/osdk-inputs/2127e384186b84af841186f0f59939765d654c84029107ca15dac270e8039879/fs/mnt/data/projects/kernelet/poc/kernel/core/comps/virtio/src/transport/pci/legacy.rs:76:19
+   |
+72 | impl VirtioPciLegacyTransport {
+   | ----------------------------- associated function in this implementation
+...
+76 |     pub(super) fn new(
+   |                   ^^^
+
+warning: associated function `new` is never used
+  --> /mnt/data/projects/kernelet/poc/target/osdk-inputs/2127e384186b84af841186f0f59939765d654c84029107ca15dac270e8039879/fs/mnt/data/projects/kernelet/poc/kernel/core/comps/virtio/src/transport/pci/msix.rs:21:19
+   |
+20 | impl VirtioMsixManager {
+   | ---------------------- associated function in this implementation
+21 |     pub(super) fn new(mut msix: CapabilityMsixData) -> Self {
+   |                   ^^^
+
+   Compiling aster-core v0.1.0 (/mnt/data/projects/kernelet/poc/target/osdk-inputs/2127e384186b84af841186f0f59939765d654c84029107ca15dac270e8039879/fs/mnt/data/projects/kernelet/poc/kernel/core)
+warning: `aster-virtio` (lib) generated 20 warnings (1 duplicate)
+warning: function `register_subsystem` is never used
+  --> /mnt/data/projects/kernelet/poc/target/osdk-inputs/2127e384186b84af841186f0f59939765d654c84029107ca15dac270e8039879/fs/mnt/data/projects/kernelet/poc/kernel/core/src/fs/fs_impls/configfs/mod.rs:30:15
+   |
+30 | pub(crate) fn register_subsystem(subsystem: Arc<dyn SysBranchNode>) -> Result<()> {
+   |               ^^^^^^^^^^^^^^^^^^
+   |
+   = note: `#[warn(dead_code)]` (part of `#[warn(unused)]`) on by default
+
+warning: static `PANIC_ON_OOPS` is never used
+  --> /mnt/data/projects/kernelet/poc/target/osdk-inputs/2127e384186b84af841186f0f59939765d654c84029107ca15dac270e8039879/fs/mnt/data/projects/kernelet/poc/kernel/core/src/thread/oops.rs:25:8
+   |
+25 | static PANIC_ON_OOPS: AtomicBool = AtomicBool::new(true);
+   |        ^^^^^^^^^^^^^
+
+warning: field `data_offset` is never read
+   --> /mnt/data/projects/kernelet/poc/target/osdk-inputs/2127e384186b84af841186f0f59939765d654c84029107ca15dac270e8039879/fs/mnt/data/projects/kernelet/poc/kernel/core/src/vdso.rs:459:9
+    |
+454 | pub(crate) struct VdsoVmoLayout {
+    |                   ------------- field in this struct
+...
+459 |     pub data_offset: usize,
+    |         ^^^^^^^^^^^
+
+   Compiling aster-drm v0.1.0 (/mnt/data/projects/kernelet/poc/target/osdk-inputs/2127e384186b84af841186f0f59939765d654c84029107ca15dac270e8039879/fs/mnt/data/projects/kernelet/poc/kernel/comps/drm)
+   Compiling aster-i8042 v0.1.0 (/mnt/data/projects/kernelet/poc/target/osdk-inputs/2127e384186b84af841186f0f59939765d654c84029107ca15dac270e8039879/fs/mnt/data/projects/kernelet/poc/kernel/comps/i8042)
+warning: `aster-i8042` (lib) generated 1 warning (1 duplicate)
+   Compiling aster-simpledrm v0.1.0 (/mnt/data/projects/kernelet/poc/target/osdk-inputs/2127e384186b84af841186f0f59939765d654c84029107ca15dac270e8039879/fs/mnt/data/projects/kernelet/poc/kernel/comps/simpledrm)
+warning: `aster-simpledrm` (lib) generated 1 warning (1 duplicate)
+   Compiling asterinas v0.1.0 (/mnt/data/projects/kernelet/poc/target/osdk-inputs/2127e384186b84af841186f0f59939765d654c84029107ca15dac270e8039879/fs/mnt/data/projects/kernelet/poc/kernel)
+warning: `asterinas` (lib) generated 1 warning (1 duplicate)
+warning: `aster-drm` (lib) generated 1 warning (1 duplicate)
+warning: `aster-core` (lib) generated 4 warnings (1 duplicate)
+   Compiling asterinas-kernelet-bin v0.1.0 (/mnt/data/projects/kernelet/.cpu-local-validation-work/osdk-final-debug/asterinas-kernelet-base)
+warning: `asterinas-kernelet-bin` (bin "asterinas-kernelet-bin") generated 1 warning (1 duplicate)
+    Finished `release` profile [optimized] target(s) in 44.28s
+Kernelet unsafe-code audit: 53 exempted target crates:
+  acpi 5.2.0: ACPI table parsing maps and reads firmware memory through raw pointers
+    reviewed source: registry+https://github.com/rust-lang/crates.io-index; package tree sha256: db6588b1adfd411f4571a5bb51ea0f08520af245273f8301ed9ae92b049b30a7
+  alloc 0.0.0: Rust's alloc library implements heap-backed collections and allocation
+  allocator-api2 0.2.21: generic allocation and collection internals use raw pointers
+    reviewed source: registry+https://github.com/rust-lang/crates.io-index; package tree sha256: 750592adafb721cc1751b147df8d5271ab73ee67f05a60e2bced065907952f3b
+  asterinas-kernelet-bin 0.1.0: OSDK-generated panic handler crosses the OSTD extern Rust entry
+  bitvec 1.1.1: bit-level references and slices use aliasing and raw-pointer operations
+    reviewed source: registry+https://github.com/rust-lang/crates.io-index; package tree sha256: b7236e9c094a029c58e112132f1399c50b10783cb42043b96670573e4612258f
+  byteorder 1.5.0: byte-order conversions use unchecked byte reinterpretation
+    reviewed source: registry+https://github.com/rust-lang/crates.io-index; package tree sha256: cc0c62272dda8e2faef8c7201a7eb4041738a6ecf5288a9f6315e21c6f0e6202
+  compiler_builtins 0.1.160: compiler intrinsics and memory primitives supplied by the toolchain
+  core 0.0.0: Rust's core library implements primitive memory and pointer operations
+  deranged 0.5.8: bounded integer helpers use unchecked construction
+    reviewed source: registry+https://github.com/rust-lang/crates.io-index; package tree sha256: dc316d3f00f4ccf885175fbf7e5c684b56690ed9075e32d1d97ba5ad8bcb1be2
+  foldhash 0.2.0: hash implementation uses raw memory operations
+    reviewed source: registry+https://github.com/rust-lang/crates.io-index; package tree sha256: a59ed9d92d1d8f20a85fc897c944163499684358eeb89a4348ee4945b63a677d
+  gimli 0.28.1: DWARF reader uses unchecked pointer and byte decoding
+    reviewed source: registry+https://github.com/rust-lang/crates.io-index; package tree sha256: dcf2584891d23e643d1354ee1b01082746b71b7addfdb9da1f8b1dfd7f4d10e2
+  gimli 0.34.0: DWARF reader uses unchecked pointer and byte decoding
+    reviewed source: registry+https://github.com/rust-lang/crates.io-index; package tree sha256: b1c4ad0df252a5857fbe2e378b837e18dd404e58c1aeb3eaa600955471d8776d
+  hash32 0.3.1: hashing uses unchecked byte views of primitive values
+    reviewed source: registry+https://github.com/rust-lang/crates.io-index; package tree sha256: c460c4a7b6902ebc8c542f93083d0dcf5342056e81f493b1f3ffbbd664b3d4d4
+  hashbrown 0.14.5: hash table controls bucket allocation and raw-pointer storage
+    reviewed source: registry+https://github.com/rust-lang/crates.io-index; package tree sha256: 91dd98a7de8031f3c082454d2ff75de8196fe385e143f50f335de87f4635c432
+  hashbrown 0.16.1: hash table controls bucket allocation and raw-pointer storage
+    reviewed source: registry+https://github.com/rust-lang/crates.io-index; package tree sha256: c41a5454db43ea1f92954640229bbb05a6c3c8f72111b4a557b01659ae727bb7
+  heapless 0.8.0: fixed-capacity collections manage uninitialized array elements
+    reviewed source: registry+https://github.com/rust-lang/crates.io-index; package tree sha256: a6ec3aca53f2a2d29868a05b490e935576c3ac451dccb6c4c4fd5a85b0a02b32
+  intrusive-collections 0.9.7: intrusive list nodes are linked through raw pointers
+    reviewed source: registry+https://github.com/rust-lang/crates.io-index; package tree sha256: 5260c9c00b267fd64091617d9941cdc3e3e1ec712c99a5c15f98e77714e2c50e
+  inventory 0.3.24: linker inventory walks raw registration pointers
+    reviewed source: registry+https://github.com/rust-lang/crates.io-index; package tree sha256: dc67d07969010d04bfd363fe5d537982cc6a2babf3697b00dccd57f1a5d6f83a
+  konst 0.2.20: const-evaluation helpers use unchecked raw-pointer operations
+    reviewed source: registry+https://github.com/rust-lang/crates.io-index; package tree sha256: 869eaaf7ad8e5556e40444fa8b9ba0717f988e2ede998cbad49ee0d9f65ab1eb
+  konst_macro_rules 0.2.19: const-evaluation helpers use raw pointer conversions
+    reviewed source: registry+https://github.com/rust-lang/crates.io-index; package tree sha256: d60c2c30ca353e0436e885d8473890a08eae5becd5355729cbe4012732f12e32
+  lock_api 0.4.14: lock guards and interior mutability use unsafe synchronization primitives
+    reviewed source: registry+https://github.com/rust-lang/crates.io-index; package tree sha256: 886140900f7baa9250165801764e41bfe41b82d6a9948d9b00f1bd9de9d88fc2
+  log 0.4.33: global logger registration uses shared static state
+    reviewed source: registry+https://github.com/rust-lang/crates.io-index; package tree sha256: 7f951f5a1f5b389224bc99326191cb5a830ea1ed2295e088841a234b4805a252
+  lru 0.16.4: LRU links and unlinks cache entries through raw pointers
+    reviewed source: registry+https://github.com/rust-lang/crates.io-index; package tree sha256: dc33ef3aa648c15b7e9f836cd9dfcc33247e77c7f0cb171bf93f3dd23996e9d1
+  multiboot2 0.24.1: boot information parser reads raw memory and packed tables
+    reviewed source: registry+https://github.com/rust-lang/crates.io-index; package tree sha256: 28f858d621b09ca5ac9b04b87549ebfd1e519367a4447d76c0014448c9212d07
+  multiboot2-common 0.3.0: boot-tag parsing casts unaligned raw memory
+    reviewed source: registry+https://github.com/rust-lang/crates.io-index; package tree sha256: 5c350a1790a4093e8066fd572196cfffc29dc8b6a68fcad750849dd265e681c6
+  num-traits 0.2.19: numeric casts use unchecked conversion intrinsics
+    reviewed source: registry+https://github.com/rust-lang/crates.io-index; package tree sha256: 37b5b8fe98208ae520055298a7522af3693a892cd681016e4ff886f19779954c
+  once_cell 1.21.4: one-time initialization uses unsafe interior mutability
+    reviewed source: registry+https://github.com/rust-lang/crates.io-index; package tree sha256: ce9f93c7ba2eccff51c82dd85b447ae19c30bd0f57b73f143e5b36f4e2fa7371
+  ostd 0.19.0: reviewed vOSTD owns privileged instructions and unsafe machine mechanisms
+  ostd-pod 0.4.0: reviewed POD implementations establish byte-layout invariants
+  ostd-test 0.19.0: OSTD test registry reads linker-defined test arrays
+  polonius-the-crab 0.2.1: borrow helper uses lifetime casts in its macros
+    reviewed source: registry+https://github.com/rust-lang/crates.io-index; package tree sha256: 4e7205942afe27e9eadba0062b6d2df5154e9e65b3426388ae8ca6e87fe0a4cc
+  powerfmt 0.2.0: formatting internals manipulate raw byte buffers
+    reviewed source: registry+https://github.com/rust-lang/crates.io-index; package tree sha256: 6e469d1aacb02e065bd3d28633f25aed53a4ba18b6d77329e622a2add10a10eb
+  ppv-lite86 0.2.21: SIMD random-number routines use target intrinsics and raw vector casts
+    reviewed source: registry+https://github.com/rust-lang/crates.io-index; package tree sha256: 38c2dcf07650dbc4ae9fee825ceace9a7a7293314822f90544b899db478ec2ac
+  ptr_meta 0.3.1: pointer metadata constructors use raw-pointer operations
+    reviewed source: registry+https://github.com/rust-lang/crates.io-index; package tree sha256: f07085f9837089fc324995936de432b74085b86221e0c182c30c271801ef201d
+  rand 0.9.5: random distribution implementations use SIMD and unchecked sampling internals
+    reviewed source: registry+https://github.com/rust-lang/crates.io-index; package tree sha256: 968068144303d8e434c9ec563861f3714e9ebb4a18ca1b1781b77e01ebb8422f
+  raw-cpuid 10.7.0: processor capability reads use the CPUID instruction
+    reviewed source: registry+https://github.com/rust-lang/crates.io-index; package tree sha256: be7ad07de20249d3e1fba8fd1bc8f8af5a132892256d984bb2b68da4b94de230
+  scopeguard 1.2.0: scope-exit guard moves a value from ManuallyDrop
+    reviewed source: registry+https://github.com/rust-lang/crates.io-index; package tree sha256: b5f1cab3a19ee5c176947aa5b173088aa9821eabf6ecfdc319f231f5f4b9d65f
+  serde_core 1.0.228: serialization internals use unchecked pointer casts
+    reviewed source: registry+https://github.com/rust-lang/crates.io-index; package tree sha256: db7f694977ad9ef136aede92fc6e0ba6cb89418a00d6df68fdc7aba65bc3eea4
+  smallvec 1.15.2: inline vector storage manages uninitialized elements
+    reviewed source: registry+https://github.com/rust-lang/crates.io-index; package tree sha256: df60adf186eedcd8f2528aaf767de6a5a3000af78e96a6ee06ff5304c7b001db
+  spin 0.9.9: spin locks implement synchronization with unsafe interior mutability
+    reviewed source: registry+https://github.com/rust-lang/crates.io-index; package tree sha256: d9c6f28cfcdb07bea5536a6d50ed0a378862b08eee17811bc6ccd44dd49dd69c
+  stable_deref_trait 1.2.1: unsafe trait implementations certify stable dereference
+    reviewed source: registry+https://github.com/rust-lang/crates.io-index; package tree sha256: 9b9d5271bef35b291900bf6686a784b327a178034a222be7442c87e5c2661a01
+  time 0.3.53: date-time internals use unchecked value construction and pointer operations
+    reviewed source: registry+https://github.com/rust-lang/crates.io-index; package tree sha256: 8f0281b4813add8c9001062bbe600a21bf5e6324aa4de87b62e3c53d327174e6
+  uefi-raw 0.12.0: UEFI ABI exposes unsafe firmware functions and raw pointers
+    reviewed source: registry+https://github.com/rust-lang/crates.io-index; package tree sha256: 986447af2cd288d6947a0afb42fa3914e9ffd45f17c71950c3f85c3e6b1af91c
+  uguid 2.2.1: GUID representation uses unchecked byte conversion
+    reviewed source: registry+https://github.com/rust-lang/crates.io-index; package tree sha256: 9c72e3fd2f7941996308e2d64b746a16c3e7b032b284030536262fcaa098a7ba
+  unwinding 0.2.10: reviewed OSTD vendored unwinder interprets frame metadata and restores non-FP kernel state
+  volatile 0.4.6: volatile memory accesses use raw pointers
+    reviewed source: registry+https://github.com/rust-lang/crates.io-index; package tree sha256: 66edd26572e10716671324828b9a17b39b2d863f3e685c665f7318c8c37072e6
+  volatile 0.6.1: volatile memory accesses use raw pointers
+    reviewed source: registry+https://github.com/rust-lang/crates.io-index; package tree sha256: 519db1c8c1e55ab89d174017ff18ce57ed98389c9e269e36d0845721c8e8e377
+  wyz 0.5.1: bit-vector support implements aliasing and raw-pointer access
+    reviewed source: registry+https://github.com/rust-lang/crates.io-index; package tree sha256: af60007b6885546fbf46e8788ca3dd2da62706a66ca89d02cfc2941b2e68d8ab
+  x86 0.52.0: architecture primitives used only by OSTD; the wrapper rejects imports from all other Image crates
+    reviewed source: registry+https://github.com/rust-lang/crates.io-index; package tree sha256: f3d6d875b9480882cf703a615192aa036ff2822f2fe0692903e8e1f8c1ba4bb6
+  x86_64 0.15.5: architecture primitives used only by OSTD; the wrapper rejects imports from all other Image crates
+    reviewed source: registry+https://github.com/rust-lang/crates.io-index; package tree sha256: dcb3d5e42c49f449b1a018ab781e4dbf777e762ca43e7a48c67355b982350bfa
+  xmas-elf 0.10.0: ELF parser reads unaligned binary headers through raw pointers
+    reviewed source: registry+https://github.com/rust-lang/crates.io-index; package tree sha256: bd049be10a83a3e2d83eaf12addf01d5cb38fbaca450638f06590be8bcd6798a
+  zero 0.1.3: zero-initialization primitives write through raw pointers
+    reviewed source: registry+https://github.com/rust-lang/crates.io-index; package tree sha256: 457d0cb4314691d302b4ade959960329394d7e6b6d77d785e5c49859b9518680
+  zerocopy 0.8.54: byte-layout traits and slice casts use raw memory access
+    reviewed source: registry+https://github.com/rust-lang/crates.io-index; package tree sha256: ed583d4678be7caa23bab214ce109d24842146c227fbebfd4c065fb80fe6601d
+Kernelet image: /mnt/data/projects/kernelet/poc/target/kernelet-unsafe-audit-3ca09e6d066ee3cf/kernelet-image.elf
+Kernelet image path written to /mnt/data/projects/kernelet/.cpu-local-validation-work/osdk-final-debug/kernelet-image-path.txt

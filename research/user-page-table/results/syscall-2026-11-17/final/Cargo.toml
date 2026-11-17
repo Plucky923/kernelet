@@ -1,0 +1,31 @@
+[workspace]
+
+[package]
+name = "asterinas-kernelet-bin"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies.asterinas]
+path = "/mnt/data/projects/kernelet/research/user-page-table/.syscall-cost-work/arity-target/osdk-inputs/45cd17aa1e2978c5f374e992ac95308999098d6823ab90e1aecc13090e1ce370/fs/mnt/data/projects/kernelet/poc/kernel"
+default-features = false
+
+[profile.dev]
+panic = "unwind"
+
+[profile.release]
+lto = "thin"
+panic = "unwind"
+
+[profile.release-lto]
+inherits = "release"
+lto = true
+panic = "abort"
+codegen-units = 1
+
+[features]
+coverage = ["asterinas/coverage"]
+cvm_guest = ["asterinas/cvm_guest"]
+default = ["cvm_guest"]
+kernelet = ["asterinas/kernelet"]
+pvh_boot = ["asterinas/pvh_boot"]
+riscv_sv39_mode = ["asterinas/riscv_sv39_mode"]

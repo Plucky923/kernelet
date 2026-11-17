@@ -1,0 +1,5 @@
+{
+  "diagnostic_only": true,
+  "error": "L R0: streaming invariant failure in L R0 selfcheck.vdso: non-zero exit code: rc=1; vDSO fallback syscalls=200000 > max 0",
+  "scope": "Linux guest environment probe before rebuilding stale Asterinas artifacts"
+}

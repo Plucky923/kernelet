@@ -1,0 +1,102 @@
+   Compiling regex-automata v0.4.9
+   Compiling predicates-core v1.0.9
+   Compiling doc-comment v0.3.3
+   Compiling difflib v0.4.0
+   Compiling termtree v0.5.1
+   Compiling assert_cmd v2.0.17
+   Compiling wait-timeout v0.2.1
+   Compiling predicates-tree v1.0.12
+   Compiling predicates v3.1.3
+   Compiling regex v1.11.1
+   Compiling bstr v1.12.0
+   Compiling env_filter v0.1.3
+   Compiling env_logger v0.11.8
+   Compiling inferno v0.11.21
+   Compiling cargo-osdk v0.19.0 (/mnt/data/projects/kernelet/poc/osdk)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 5.94s
+     Running unittests src/main.rs (osdk/target/debug/deps/cargo_osdk-08a4724e0cde0afe)
+
+running 73 tests
+test kernelet::abi::tests::field_offsets_tile_the_table ... ok
+test base_crate::tests::rendered_kernelet_linker_script_carries_the_hash ... ok
+test commands::build::tests::kernelet_image_path_file_records_built_elf_path ... ok
+test kernelet::audit::tests::absolute_exception_address_fails ... ok
+test kernelet::audit::tests::actual_linked_artifacts_pass_production_audits ... ignored, requires a linked Guest artifact and an independently computed source hash
+test kernelet::audit::tests::another_executable_segment_cannot_escape_decoder_coverage ... ok
+test kernelet::audit::floating_point::tests::ordinary_code_cannot_write_control_registers_or_msrs ... ok
+test kernelet::audit::floating_point::tests::image_local_invlpg_and_fsbase_access_remain_allowed ... ok
+test kernelet::audit::floating_point::tests::state_wrapper_names_must_match_exactly ... ok
+test kernelet::audit::floating_point::tests::fixed_ostd_return_stubs_keep_their_physical_control_exception ... ok
+test kernelet::audit::tests::cpu_access_table_bounds_must_match_linker_symbols ... ok
+test kernelet::audit::tests::empty_stub_range_fails ... ok
+test kernelet::audit::tests::et_exec_fails ... ok
+test kernelet::audit::tests::entry_table_cpu_local_bounds_mismatch_fails ... ok
+test kernelet::audit::tests::file_backed_section_inside_cpu_local_bounds_fails ... ok
+test kernelet::audit::tests::floating_point_opcode_bytes_inside_an_immediate_pass ... ok
+test kernelet::audit::tests::invalid_x86_64_instruction_fails_closed ... ok
+test kernelet::audit::tests::indirect_entry_without_endbr_fails ... ok
+test kernelet::audit::floating_point::tests::physical_control_width_aliases_cannot_escape_the_decoder_policy ... ok
+test kernelet::audit::floating_point::tests::fpu_state_wrappers_allow_only_their_legacy_state_operation ... ok
+test kernelet::audit::tests::missing_or_failed_decoder_fails_closed ... ok
+test kernelet::audit::tests::oversized_state_wrapper_cannot_claim_another_function ... ok
+test kernelet::audit::floating_point::tests::signal_delivery_can_read_initial_user_features_without_other_state_access ... ok
+test kernelet::audit::tests::non_executable_yield_target_fails ... ok
+test kernelet::audit::tests::non_executable_user_event_target_fails ... ok
+test kernelet::audit::tests::oversized_writable_template_fails ... ok
+test kernelet::audit::tests::cpu_access_range_must_be_nonempty_text_disjoint_from_stubs ... ok
+test kernelet::audit::tests::returning_stub_cannot_restore_flags_from_pushfq ... ok
+test kernelet::audit::tests::relocation_into_entry_table_fails ... ok
+test kernelet::audit::tests::relocation_into_text_fails ... ok
+test kernelet::audit::floating_point::tests::fpu_state_wrappers_require_exact_operand_and_whole_instruction_bounds ... ok
+test kernelet::audit::tests::source_hash_mismatch_fails ... ok
+test kernelet::audit::tests::stub_range_must_include_the_complete_exit_prefix ... ok
+test kernelet::audit::tests::task_switch_without_stack_limit_publication_fails ... ok
+test kernelet::audit::tests::undefined_symbol_fails ... ok
+test kernelet::audit::tests::writable_text_segment_fails ... ok
+test kernelet::audit::tests::user_event_entry_without_endbr_fails ... ok
+test kernelet::elf::tests::malformed_file_ranges_return_errors_without_panicking ... ok
+test kernelet::elf::tests::malformed_load_and_symbol_tables_return_errors_before_allocation ... ok
+test kernelet::external_sources::tests::generated_marker_is_ignored_but_source_edits_and_symlinks_are_not ... ok
+test kernelet::external_sources::tests::same_named_path_dependency_has_no_unsafe_exemption ... ok
+test kernelet::external_sources::tests::same_version_sources_require_an_exact_reviewed_tree ... ok
+test kernelet::rustc_wrapper::tests::cargo_lint_cap_cannot_disable_the_target_forbid ... ok
+test kernelet::audit::tests::ordinary_floating_point_and_vector_instructions_fail ... ok
+test kernelet::rustc_wrapper::tests::external_version_change_requires_review ... ok
+test kernelet::rustc_wrapper::tests::force_warn_cannot_override_the_image_unsafe_prohibition ... ok
+test kernelet::rustc_wrapper::tests::kernel_crate_cannot_claim_an_external_exception ... ok
+test kernelet::rustc_wrapper::tests::non_utf8_target_cannot_be_misclassified_as_host ... ok
+test kernelet::audit::tests::valid_image_passes ... ok
+test kernelet::rustc_wrapper::tests::physical_architecture_dependencies_are_ostd_only_even_when_renamed ... ok
+test kernelet::rustc_wrapper::tests::target_and_crate_options_accept_both_cargo_forms ... ok
+test kernelet::rustc_wrapper::tests::toolchain_package_name_does_not_exempt_an_external_path ... ok
+test kernelet::rustc_wrapper::tests::vendored_unwinder_requires_reviewed_version_and_exact_ostd_path ... ok
+test kernelet::snapshot::tests::capture_production_workspace_without_compiling ... ignored, requires explicit production workspace and snapshot output
+test kernelet::snapshot::tests::copied_sources_keep_dirty_bytes_after_original_edits ... ok
+test kernelet::audit::tests::virtual_interrupt_dispatcher_without_entry_marker_fails ... ok
+test kernelet::snapshot::tests::live_external_symlinks_are_rejected ... ok
+test kernelet::audit::tests::executable_padding_cannot_hide_floating_point_or_other_code ... ok
+test kernelet::audit::tests::wrong_entry_table_size_fails ... ok
+test kernelet::audit::floating_point::tests::ordinary_safe_dependency_code_cannot_change_physical_interrupts ... ok
+test kernelet::audit::tests::user_state_operations_require_the_exact_function_and_whole_instruction_bounds ... ok
+test kernelet::tests::image_build_uses_selected_action_options_instead_of_global_defaults ... ok
+test kernelet::audit::floating_point::tests::fpu_state_wrappers_reject_ordinary_fp_and_other_state_operations ... ok
+test kernelet::rustc_wrapper::tests::only_the_supported_explicit_target_gets_image_audit_privileges ... ok
+test kernelet::audit::tests::physical_control_in_ordinary_image_code_fails_artifact_admission ... ok
+     Locking 1 package to latest Rust 1.99.0-nightly compatible version
+test kernelet::audit::tests::unwinder_control_words_have_no_state_wrapper_exception ... ok
+test kernelet::audit::floating_point::tests::user_gs_write_requires_the_fixed_msr_and_adjacent_sequence ... ok
+test kernelet::rustc_wrapper::tests::explicit_host_probes_require_compiler_and_cargo_host_identity ... ok
+test base_crate::tests::changed_kernelet_inputs_prevent_base_crate_reuse ... ok
+test base_crate::tests::changed_kernelet_source_hash_prevents_base_crate_reuse ... ok
+test base_crate::tests::unchanged_kernelet_base_crate_preserves_generated_files ... ok
+test base_crate::tests::kernelet_base_crate_has_no_boot_allocators ... ok
+test kernelet::snapshot::tests::frozen_inputs_include_dirty_and_external_path_dependencies ... ok
+
+test result: ok. 71 passed; 0 failed; 2 ignored; 0 measured; 23 filtered out; finished in 3.56s
+
+     Running tests/integration.rs (osdk/target/debug/deps/integration-4893a729392375ee)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 22 filtered out; finished in 0.00s
+

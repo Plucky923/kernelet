@@ -1,0 +1,12 @@
+make: Entering directory '/mnt/data/projects/kernelet/poc/eval/.build/linux-perf-pti'
+  CC [M]  /mnt/data/projects/kernelet/research/user-page-table/.syscall-cost-work/endovisor-mitigations/main.o
+  CC [M]  /mnt/data/projects/kernelet/research/user-page-table/.syscall-cost-work/endovisor-mitigations/image.o
+  CC [M]  /mnt/data/projects/kernelet/research/user-page-table/.syscall-cost-work/endovisor-mitigations/grant.o
+  CC [M]  /mnt/data/projects/kernelet/research/user-page-table/.syscall-cost-work/endovisor-mitigations/space.o
+  CC [M]  /mnt/data/projects/kernelet/research/user-page-table/.syscall-cost-work/endovisor-mitigations/carrier.o
+  CC [M]  /mnt/data/projects/kernelet/research/user-page-table/.syscall-cost-work/endovisor-mitigations/watch.o
+  AS [M]  /mnt/data/projects/kernelet/research/user-page-table/.syscall-cost-work/endovisor-mitigations/switch.o
+  LD [M]  /mnt/data/projects/kernelet/research/user-page-table/.syscall-cost-work/endovisor-mitigations/endovisor.o
+  MODPOST /mnt/data/projects/kernelet/research/user-page-table/.syscall-cost-work/endovisor-mitigations/Module.symvers
+  LD [M]  /mnt/data/projects/kernelet/research/user-page-table/.syscall-cost-work/endovisor-mitigations/endovisor.ko
+make: Leaving directory '/mnt/data/projects/kernelet/poc/eval/.build/linux-perf-pti'

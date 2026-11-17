@@ -1,0 +1,49 @@
+{
+  "sources_before": {
+    "poc/eval/host/schema.py": "aba5b2043e09eadde7bc0949dd2771b7465a2be35a21b356491fe6d8e4981c19",
+    "poc/eval/host/qemu_driver.py": "2765bc2988292fb942b8a54c20b605e46e6e8115d586c363bc17a28daf261359",
+    "poc/eval/host/invariants.py": "8e901d01d51e5f692ca2b66a7b337012ebdd0857c7ac72b3908a83c8747b8fb6",
+    "poc/eval/host/parsers.py": "d528538f6e7847192c98d92fd9f46becd413511ac518c64fa997143a53fafe18"
+  },
+  "logs": [
+    {
+      "target": "K",
+      "path": "research/user-page-table/overhead-review/syscall-path-validation/qemu-release-direct-syscall.log",
+      "sha256": "0b5a025a39f970c8eff8df7a098271c7f661ab3c28883b4ae3250f1bc10bfeb0",
+      "case_frames": 0,
+      "stats_frames": 1,
+      "accepted": false,
+      "error": "K round 1: orphan STATS_JSON before EVAL_CASE_JSON",
+      "changed_while_reading": false
+    },
+    {
+      "target": "K_vma",
+      "path": "research/user-page-table/overhead-review/syscall-path-validation/qemu-release-vma-safety.log",
+      "sha256": "2deb3bb183646a67812154edcfb483b4a1ef4671742e202b59d97e7598792bd8",
+      "case_frames": 0,
+      "stats_frames": 1,
+      "accepted": false,
+      "error": "K_vma round 1: orphan STATS_JSON before EVAL_CASE_JSON",
+      "changed_while_reading": false
+    }
+  ],
+  "archive": {
+    "path": "poc/eval/.build/host-eval-initramfs.cpio.gz",
+    "sha256": "a6139c5037144537621cc006861e29bd5a35a4d0a45ae3b9c0425f02eee1b891",
+    "payload_path": "poc/eval/.build/eval-payload.cpio",
+    "payload_sha256": "7497ce18273f2a2b1fb336acc856d64a24c35ee1ed7ffa0e3a9a580fb2c7f99a",
+    "embedded_payload_sha256": "7497ce18273f2a2b1fb336acc856d64a24c35ee1ed7ffa0e3a9a580fb2c7f99a",
+    "embedded_bytes": 60193792,
+    "payload_matches": true,
+    "archive_stable": true,
+    "payload_stable": true
+  },
+  "sources_after": {
+    "poc/eval/host/schema.py": "aba5b2043e09eadde7bc0949dd2771b7465a2be35a21b356491fe6d8e4981c19",
+    "poc/eval/host/qemu_driver.py": "2765bc2988292fb942b8a54c20b605e46e6e8115d586c363bc17a28daf261359",
+    "poc/eval/host/invariants.py": "8e901d01d51e5f692ca2b66a7b337012ebdd0857c7ac72b3908a83c8747b8fb6",
+    "poc/eval/host/parsers.py": "d528538f6e7847192c98d92fd9f46becd413511ac518c64fa997143a53fafe18"
+  },
+  "sources_stable": true,
+  "passed": false
+}

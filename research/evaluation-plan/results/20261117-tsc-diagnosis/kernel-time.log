@@ -1,0 +1,30 @@
+[   70.514222] plucky kernel: Linux version 7.2.8-9-omarchy (linux-omarchy@omarchy) (gcc (GCC) 16.2.1 20260810, GNU ld (GNU Binutils) 2.47) #1 SMP PREEMPT_DYNAMIC Sat, 17 Oct 2026 22:09:33 +0000
+[   70.515117] plucky kernel: DMI: LENOVO 82JQ/LNVNB161216, BIOS GKCN65WW 01/16/2024
+[   70.515144] plucky kernel: tsc: Fast TSC calibration using PIT
+[   70.515157] plucky kernel: tsc: Detected 3194.216 MHz processor
+[   70.517296] plucky kernel: PM: hibernation: Registered nosave memory: [mem 0x00000000-0x00000fff]
+[   70.517312] plucky kernel: PM: hibernation: Registered nosave memory: [mem 0x0009f000-0x000fffff]
+[   70.517328] plucky kernel: PM: hibernation: Registered nosave memory: [mem 0x09a00000-0x09dfffff]
+[   70.517345] plucky kernel: PM: hibernation: Registered nosave memory: [mem 0x09f00000-0x09f0efff]
+[   70.517362] plucky kernel: PM: hibernation: Registered nosave memory: [mem 0xb53ab000-0xb53eafff]
+[   70.517378] plucky kernel: PM: hibernation: Registered nosave memory: [mem 0xb53f7000-0xb53f7fff]
+[   70.517394] plucky kernel: PM: hibernation: Registered nosave memory: [mem 0xbab69000-0xbbd68fff]
+[   70.517410] plucky kernel: PM: hibernation: Registered nosave memory: [mem 0xc9f7f000-0xcdf9cfff]
+[   70.517429] plucky kernel: PM: hibernation: Registered nosave memory: [mem 0xcdf9e000-0xcdffefff]
+[   70.517447] plucky kernel: PM: hibernation: Registered nosave memory: [mem 0xce000000-0xffffffff]
+[   70.517498] plucky kernel: clocksource: refined-jiffies: mask: 0xffffffff max_cycles: 0xffffffff, max_idle_ns: 1910969940391419 ns
+[   70.518484] plucky kernel: clocksource: jiffies: mask: 0xffffffff max_cycles: 0xffffffff, max_idle_ns: 1911260446275000 ns
+[   70.518550] plucky kernel: clocksource: hpet: mask: 0xffffffff max_cycles: 0xffffffff, max_idle_ns: 133484873504 ns
+[   70.518686] plucky kernel: clocksource: tsc-early: mask: 0xffffffffffffffff max_cycles: 0x2e0af1c0398, max_idle_ns: 440795225912 ns
+[   70.519652] plucky kernel: TSC synchronization [CPU#0 -> CPU#2]:
+[   70.519670] plucky kernel: Measured 9025100516 cycles TSC warp between CPUs, turning off TSC clock.
+[   70.519688] plucky kernel: tsc: Marking TSC unstable due to check_tsc_sync_source failed
+[   70.542768] plucky kernel: clocksource: Switched to clocksource hpet
+[   70.546323] plucky kernel: clocksource: acpi_pm: mask: 0xffffff max_cycles: 0xffffff, max_idle_ns: 2085701024 ns
+[   70.569924] plucky kernel: microcode: Current revision: 0x0a500012
+[   70.569940] plucky kernel: microcode: Updated early from: 0x0a50000f
+[   70.593494] plucky kernel: PM: Image not found (code -22)
+[   71.170122] plucky kernel: kvm_amd: TSC scaling supported
+[ 3353.430020] plucky kernel: PM: suspend entry (deep)
+[ 3362.296319] plucky kernel: PM: suspend exit
+[174299.336039] plucky kernel: kvm: SMP vm created on host with unstable TSC; guest TSC will not be reliable

@@ -1,0 +1,334 @@
+{
+  "baseline": {
+    "event": {
+      "size_bytes": 930,
+      "calls": [
+        "6cc2a8:\te8 93 c2 ff ff       \tcall   6c8540 <ostd::kernelet::entry::user_event_record>",
+        "6cc360:\te8 cb c6 ff ff       \tcall   6c8a30 <ostd::arch::irq::ops::enable_local>",
+        "6cc376:\te8 d5 eb cb ff       \tcall   38af50 <<aster_core::thread::Thread as ostd::user::kernelet_events::UserEventHandler>::has_kernel_event>",
+        "6cc390:\te8 6b 38 cc ff       \tcall   38fc00 <__ostd_user_handle>",
+        "6cc3a1:\te8 ca ea cb ff       \tcall   38ae70 <<aster_core::thread::Thread as ostd::user::kernelet_events::UserEventHandler>::should_exit>",
+        "6cc3aa:\te8 11 9e ff ff       \tcall   6c61c0 <ostd::task::exit_current_task>",
+        "6cc3cf:\te8 3c 99 00 00       \tcall   6d5d10 <ostd::task::scheduler::might_preempt>",
+        "6cc420:\te8 5b b1 02 00       \tcall   6f7580 <memcpy>",
+        "6cc464:\te8 07 39 cc ff       \tcall   38fd70 <__ostd_user_pre_user_run>",
+        "6cc47e:\tff 50 68             \tcall   *0x68(%rax)",
+        "6cc494:\te8 57 c7 fd ff       \tcall   6a8bf0 <core::panicking::panic_fmt>",
+        "6cc55d:\te8 de a2 fd ff       \tcall   6a6840 <core::option::expect_failed>",
+        "6cc587:\te8 b4 a2 fd ff       \tcall   6a6840 <core::option::expect_failed>",
+        "6cc5de:\te8 99 ba 01 00       \tcall   6e807c <core::panicking::assert_failed::<u32, u32>>",
+        "6cc5f8:\te8 f3 c5 fd ff       \tcall   6a8bf0 <core::panicking::panic_fmt>",
+        "6cc606:\te8 75 a2 fd ff       \tcall   6a6880 <core::option::unwrap_failed>",
+        "6cc616:\te8 b5 11 01 00       \tcall   6dd7d0 <<ostd::irq::guard::DisabledLocalIrqGuard as core::ops::drop::Drop>::drop>",
+        "6cc61b:\te8 6f c5 fd ff       \tcall   6a8b8f <core::panicking::panic_cannot_unwind>",
+        "6cc624:\te8 d2 c3 fd ff       \tcall   6a89fb <core::panicking::panic_in_cleanup>",
+        "6cc62d:\te8 5d c5 fd ff       \tcall   6a8b8f <core::panicking::panic_cannot_unwind>"
+      ],
+      "access_blocks": [
+        {
+          "address": "241521",
+          "gs_reads": 1,
+          "instructions": "\n/mnt/data/projects/kernelet/research/user-page-table/overhead-review/direct-handler-validation/kernelet-image.elf:     file format elf64-x86-64\n\n\nDisassembly of section .text:\n\n0000000000241521 <__kernelet_cpu_access_start+0x41300>:\n  241521:\t4c 8b 05 78 b8 7f 00 \tmov    0x7fb878(%rip),%r8        # a3cda0 <KERNELET_BOOT_ARGS>\n  241528:\t45 8b 88 bc 00 00 00 \tmov    0xbc(%r8),%r9d\n  24152f:\t65 4d 8b 09          \tmov    %gs:(%r9),%r9\n  241533:\t49 c1 e9 10          \tshr    $0x10,%r9\n  241537:\t45 0f b7 c9          \tmovzwl %r9w,%r9d\n  24153b:\t4d 69 c9 80 00 00 00 \timul   $0x80,%r9,%r9\n  241542:\t4f 8d 84 08 00 10 00 00 \tlea    0x1000(%r8,%r9,1),%r8\n  24154a:\t4d 8b 40 68          \tmov    0x68(%r8),%r8\n  24154e:\t49 8b 34 38          \tmov    (%r8,%rdi,1),%rsi\n  241552:\te9 d1 ad 48 00       \tjmp    6cc328 <user_event_entry+0x98>\n"
+        },
+        {
+          "address": "241557",
+          "gs_reads": 1,
+          "instructions": "\n/mnt/data/projects/kernelet/research/user-page-table/overhead-review/direct-handler-validation/kernelet-image.elf:     file format elf64-x86-64\n\n\nDisassembly of section .text:\n\n0000000000241557 <__kernelet_cpu_access_start+0x41336>:\n  241557:\t48 8b 05 42 b8 7f 00 \tmov    0x7fb842(%rip),%rax        # a3cda0 <KERNELET_BOOT_ARGS>\n  24155e:\t8b 88 bc 00 00 00    \tmov    0xbc(%rax),%ecx\n  241564:\t65 48 8b 09          \tmov    %gs:(%rcx),%rcx\n  241568:\t48 c1 e9 10          \tshr    $0x10,%rcx\n  24156c:\t0f b7 c9             \tmovzwl %cx,%ecx\n  24156f:\t48 69 c9 80 00 00 00 \timul   $0x80,%rcx,%rcx\n  241576:\t48 8d 84 08 00 10 00 00 \tlea    0x1000(%rax,%rcx,1),%rax\n  24157e:\t48 89 c2             \tmov    %rax,%rdx\n  241581:\te9 33 ae 48 00       \tjmp    6cc3b9 <user_event_entry+0x129>\n"
+        },
+        {
+          "address": "241586",
+          "gs_reads": 1,
+          "instructions": "\n/mnt/data/projects/kernelet/research/user-page-table/overhead-review/direct-handler-validation/kernelet-image.elf:     file format elf64-x86-64\n\n\nDisassembly of section .text:\n\n0000000000241586 <__kernelet_cpu_access_start+0x41365>:\n  241586:\t48 8b 0d 13 b8 7f 00 \tmov    0x7fb813(%rip),%rcx        # a3cda0 <KERNELET_BOOT_ARGS>\n  24158d:\t8b 91 bc 00 00 00    \tmov    0xbc(%rcx),%edx\n  241593:\t65 48 8b 12          \tmov    %gs:(%rdx),%rdx\n  241597:\t48 c1 ea 10          \tshr    $0x10,%rdx\n  24159b:\t0f b7 d2             \tmovzwl %dx,%edx\n  24159e:\t48 69 d2 80 00 00 00 \timul   $0x80,%rdx,%rdx\n  2415a5:\t48 8d 8c 11 00 10 00 00 \tlea    0x1000(%rcx,%rdx,1),%rcx\n  2415ad:\t8b 41 54             \tmov    0x54(%rcx),%eax\n  2415b0:\te9 24 ae 48 00       \tjmp    6cc3d9 <user_event_entry+0x149>\n"
+        },
+        {
+          "address": "2415b5",
+          "gs_reads": 1,
+          "instructions": "\n/mnt/data/projects/kernelet/research/user-page-table/overhead-review/direct-handler-validation/kernelet-image.elf:     file format elf64-x86-64\n\n\nDisassembly of section .text:\n\n00000000002415b5 <__kernelet_cpu_access_start+0x41394>:\n  2415b5:\t48 8b 15 e4 b7 7f 00 \tmov    0x7fb7e4(%rip),%rdx        # a3cda0 <KERNELET_BOOT_ARGS>\n  2415bc:\t8b b2 bc 00 00 00    \tmov    0xbc(%rdx),%esi\n  2415c2:\t65 48 8b 36          \tmov    %gs:(%rsi),%rsi\n  2415c6:\t48 c1 ee 10          \tshr    $0x10,%rsi\n  2415ca:\t0f b7 f6             \tmovzwl %si,%esi\n  2415cd:\t48 69 f6 80 00 00 00 \timul   $0x80,%rsi,%rsi\n  2415d4:\t48 8d 94 32 00 10 00 00 \tlea    0x1000(%rdx,%rsi,1),%rdx\n  2415dc:\t89 4a 54             \tmov    %ecx,0x54(%rdx)\n  2415df:\te9 03 ae 48 00       \tjmp    6cc3e7 <user_event_entry+0x157>\n"
+        }
+      ]
+    },
+    "first": {
+      "size_bytes": 500,
+      "calls": [
+        "6cc0a2:\te8 89 a6 ff ff       \tcall   6c6730 <ostd::task::processor::after_switching_to>",
+        "6cc0cc:\te8 6f c4 ff ff       \tcall   6c8540 <ostd::kernelet::entry::user_event_record>",
+        "6cc0fb:\te8 c0 3b cc ff       \tcall   38fcc0 <__ostd_user_init>",
+        "6cc10c:\te8 5f ed cb ff       \tcall   38ae70 <<aster_core::thread::Thread as ostd::user::kernelet_events::UserEventHandler>::should_exit>",
+        "6cc115:\te8 a6 a0 ff ff       \tcall   6c61c0 <ostd::task::exit_current_task>",
+        "6cc13a:\te8 d1 9b 00 00       \tcall   6d5d10 <ostd::task::scheduler::might_preempt>",
+        "6cc18b:\te8 f0 b3 02 00       \tcall   6f7580 <memcpy>",
+        "6cc1cf:\te8 9c 3b cc ff       \tcall   38fd70 <__ostd_user_pre_user_run>",
+        "6cc1e5:\tff 50 68             \tcall   *0x68(%rax)",
+        "6cc1fb:\te8 f0 c9 fd ff       \tcall   6a8bf0 <core::panicking::panic_fmt>",
+        "6cc215:\te8 26 a6 fd ff       \tcall   6a6840 <core::option::expect_failed>",
+        "6cc23e:\te8 39 be 01 00       \tcall   6e807c <core::panicking::assert_failed::<u32, u32>>",
+        "6cc258:\te8 93 c9 fd ff       \tcall   6a8bf0 <core::panicking::panic_fmt>",
+        "6cc268:\te8 63 15 01 00       \tcall   6dd7d0 <<ostd::irq::guard::DisabledLocalIrqGuard as core::ops::drop::Drop>::drop>",
+        "6cc26d:\te8 1d c9 fd ff       \tcall   6a8b8f <core::panicking::panic_cannot_unwind>",
+        "6cc276:\te8 80 c7 fd ff       \tcall   6a89fb <core::panicking::panic_in_cleanup>",
+        "6cc27f:\te8 0b c9 fd ff       \tcall   6a8b8f <core::panicking::panic_cannot_unwind>"
+      ],
+      "access_blocks": [
+        {
+          "address": "241460",
+          "gs_reads": 1,
+          "instructions": "\n/mnt/data/projects/kernelet/research/user-page-table/overhead-review/direct-handler-validation/kernelet-image.elf:     file format elf64-x86-64\n\n\nDisassembly of section .text:\n\n0000000000241460 <__kernelet_cpu_access_start+0x4123f>:\n  241460:\t48 8b 15 39 b9 7f 00 \tmov    0x7fb939(%rip),%rdx        # a3cda0 <KERNELET_BOOT_ARGS>\n  241467:\t8b b2 bc 00 00 00    \tmov    0xbc(%rdx),%esi\n  24146d:\t65 48 8b 36          \tmov    %gs:(%rsi),%rsi\n  241471:\t48 c1 ee 10          \tshr    $0x10,%rsi\n  241475:\t0f b7 f6             \tmovzwl %si,%esi\n  241478:\t48 69 f6 80 00 00 00 \timul   $0x80,%rsi,%rsi\n  24147f:\t48 8d 94 32 00 10 00 00 \tlea    0x1000(%rdx,%rsi,1),%rdx\n  241487:\t48 8b 52 68          \tmov    0x68(%rdx),%rdx\n  24148b:\t48 8b 04 0a          \tmov    (%rdx,%rcx,1),%rax\n  24148f:\te9 26 ac 48 00       \tjmp    6cc0ba <first_user_task_entry+0x2a>\n"
+        },
+        {
+          "address": "241494",
+          "gs_reads": 1,
+          "instructions": "\n/mnt/data/projects/kernelet/research/user-page-table/overhead-review/direct-handler-validation/kernelet-image.elf:     file format elf64-x86-64\n\n\nDisassembly of section .text:\n\n0000000000241494 <__kernelet_cpu_access_start+0x41273>:\n  241494:\t48 8b 05 05 b9 7f 00 \tmov    0x7fb905(%rip),%rax        # a3cda0 <KERNELET_BOOT_ARGS>\n  24149b:\t8b 88 bc 00 00 00    \tmov    0xbc(%rax),%ecx\n  2414a1:\t65 48 8b 09          \tmov    %gs:(%rcx),%rcx\n  2414a5:\t48 c1 e9 10          \tshr    $0x10,%rcx\n  2414a9:\t0f b7 c9             \tmovzwl %cx,%ecx\n  2414ac:\t48 69 c9 80 00 00 00 \timul   $0x80,%rcx,%rcx\n  2414b3:\t48 8d 84 08 00 10 00 00 \tlea    0x1000(%rax,%rcx,1),%rax\n  2414bb:\t48 89 c2             \tmov    %rax,%rdx\n  2414be:\te9 61 ac 48 00       \tjmp    6cc124 <first_user_task_entry+0x94>\n"
+        },
+        {
+          "address": "2414c3",
+          "gs_reads": 1,
+          "instructions": "\n/mnt/data/projects/kernelet/research/user-page-table/overhead-review/direct-handler-validation/kernelet-image.elf:     file format elf64-x86-64\n\n\nDisassembly of section .text:\n\n00000000002414c3 <__kernelet_cpu_access_start+0x412a2>:\n  2414c3:\t48 8b 0d d6 b8 7f 00 \tmov    0x7fb8d6(%rip),%rcx        # a3cda0 <KERNELET_BOOT_ARGS>\n  2414ca:\t8b 91 bc 00 00 00    \tmov    0xbc(%rcx),%edx\n  2414d0:\t65 48 8b 12          \tmov    %gs:(%rdx),%rdx\n  2414d4:\t48 c1 ea 10          \tshr    $0x10,%rdx\n  2414d8:\t0f b7 d2             \tmovzwl %dx,%edx\n  2414db:\t48 69 d2 80 00 00 00 \timul   $0x80,%rdx,%rdx\n  2414e2:\t48 8d 8c 11 00 10 00 00 \tlea    0x1000(%rcx,%rdx,1),%rcx\n  2414ea:\t8b 41 54             \tmov    0x54(%rcx),%eax\n  2414ed:\te9 52 ac 48 00       \tjmp    6cc144 <first_user_task_entry+0xb4>\n"
+        },
+        {
+          "address": "2414f2",
+          "gs_reads": 1,
+          "instructions": "\n/mnt/data/projects/kernelet/research/user-page-table/overhead-review/direct-handler-validation/kernelet-image.elf:     file format elf64-x86-64\n\n\nDisassembly of section .text:\n\n00000000002414f2 <__kernelet_cpu_access_start+0x412d1>:\n  2414f2:\t48 8b 15 a7 b8 7f 00 \tmov    0x7fb8a7(%rip),%rdx        # a3cda0 <KERNELET_BOOT_ARGS>\n  2414f9:\t8b b2 bc 00 00 00    \tmov    0xbc(%rdx),%esi\n  2414ff:\t65 48 8b 36          \tmov    %gs:(%rsi),%rsi\n  241503:\t48 c1 ee 10          \tshr    $0x10,%rsi\n  241507:\t0f b7 f6             \tmovzwl %si,%esi\n  24150a:\t48 69 f6 80 00 00 00 \timul   $0x80,%rsi,%rsi\n  241511:\t48 8d 94 32 00 10 00 00 \tlea    0x1000(%rdx,%rsi,1),%rdx\n  241519:\t89 4a 54             \tmov    %ecx,0x54(%rdx)\n  24151c:\te9 31 ac 48 00       \tjmp    6cc152 <first_user_task_entry+0xc2>\n"
+        }
+      ]
+    },
+    "enable": {
+      "size_bytes": 249,
+      "calls": [
+        "6c8a6d:\te8 4e 03 01 00       \tcall   6d8dc0 <<ostd::irq::level::InterruptLevel>::current>",
+        "6c8a7a:\te8 11 d8 ff ff       \tcall   6c6290 <ostd::task::virq_delivery_deferred>",
+        "6c8aa6:\te8 65 d2 00 00       \tcall   6d5d10 <ostd::task::scheduler::might_preempt>",
+        "6c8b24:\te8 c7 00 fe ff       \tcall   6a8bf0 <core::panicking::panic_fmt>"
+      ],
+      "access_blocks": [
+        {
+          "address": "240f2b",
+          "gs_reads": 1,
+          "instructions": "\n/mnt/data/projects/kernelet/research/user-page-table/overhead-review/direct-handler-validation/kernelet-image.elf:     file format elf64-x86-64\n\n\nDisassembly of section .text:\n\n0000000000240f2b <__kernelet_cpu_access_start+0x40d0a>:\n  240f2b:\t48 8b 0d 6e be 7f 00 \tmov    0x7fbe6e(%rip),%rcx        # a3cda0 <KERNELET_BOOT_ARGS>\n  240f32:\t8b 91 bc 00 00 00    \tmov    0xbc(%rcx),%edx\n  240f38:\t65 48 8b 12          \tmov    %gs:(%rdx),%rdx\n  240f3c:\t48 c1 ea 10          \tshr    $0x10,%rdx\n  240f40:\t0f b7 d2             \tmovzwl %dx,%edx\n  240f43:\t48 69 d2 80 00 00 00 \timul   $0x80,%rdx,%rdx\n  240f4a:\t48 8d 8c 11 00 10 00 00 \tlea    0x1000(%rcx,%rdx,1),%rcx\n  240f52:\t89 41 54             \tmov    %eax,0x54(%rcx)\n  240f55:\te9 e2 7a 48 00       \tjmp    6c8a3c <ostd::arch::irq::ops::enable_local+0xc>\n"
+        },
+        {
+          "address": "240f5a",
+          "gs_reads": 1,
+          "instructions": "\n/mnt/data/projects/kernelet/research/user-page-table/overhead-review/direct-handler-validation/kernelet-image.elf:     file format elf64-x86-64\n\n\nDisassembly of section .text:\n\n0000000000240f5a <__kernelet_cpu_access_start+0x40d39>:\n  240f5a:\t48 8b 05 3f be 7f 00 \tmov    0x7fbe3f(%rip),%rax        # a3cda0 <KERNELET_BOOT_ARGS>\n  240f61:\t8b 88 bc 00 00 00    \tmov    0xbc(%rax),%ecx\n  240f67:\t65 48 8b 09          \tmov    %gs:(%rcx),%rcx\n  240f6b:\t48 c1 e9 10          \tshr    $0x10,%rcx\n  240f6f:\t0f b7 c9             \tmovzwl %cx,%ecx\n  240f72:\t48 69 c9 80 00 00 00 \timul   $0x80,%rcx,%rcx\n  240f79:\t48 8d 84 08 00 10 00 00 \tlea    0x1000(%rax,%rcx,1),%rax\n  240f81:\t48 89 c2             \tmov    %rax,%rdx\n  240f84:\te9 b8 7a 48 00       \tjmp    6c8a41 <ostd::arch::irq::ops::enable_local+0x11>\n"
+        },
+        {
+          "address": "240f89",
+          "gs_reads": 1,
+          "instructions": "\n/mnt/data/projects/kernelet/research/user-page-table/overhead-review/direct-handler-validation/kernelet-image.elf:     file format elf64-x86-64\n\n\nDisassembly of section .text:\n\n0000000000240f89 <__kernelet_cpu_access_start+0x40d68>:\n  240f89:\t48 8b 05 10 be 7f 00 \tmov    0x7fbe10(%rip),%rax        # a3cda0 <KERNELET_BOOT_ARGS>\n  240f90:\t8b 88 bc 00 00 00    \tmov    0xbc(%rax),%ecx\n  240f96:\t65 48 8b 09          \tmov    %gs:(%rcx),%rcx\n  240f9a:\t48 c1 e9 10          \tshr    $0x10,%rcx\n  240f9e:\t0f b7 c9             \tmovzwl %cx,%ecx\n  240fa1:\t48 69 c9 80 00 00 00 \timul   $0x80,%rcx,%rcx\n  240fa8:\t48 8d 84 08 00 10 00 00 \tlea    0x1000(%rax,%rcx,1),%rax\n  240fb0:\t48 89 c2             \tmov    %rax,%rdx\n  240fb3:\te9 9a 7a 48 00       \tjmp    6c8a52 <ostd::arch::irq::ops::enable_local+0x22>\n"
+        },
+        {
+          "address": "240fb8",
+          "gs_reads": 1,
+          "instructions": "\n/mnt/data/projects/kernelet/research/user-page-table/overhead-review/direct-handler-validation/kernelet-image.elf:     file format elf64-x86-64\n\n\nDisassembly of section .text:\n\n0000000000240fb8 <__kernelet_cpu_access_start+0x40d97>:\n  240fb8:\t48 8b 05 e1 bd 7f 00 \tmov    0x7fbde1(%rip),%rax        # a3cda0 <KERNELET_BOOT_ARGS>\n  240fbf:\t8b 88 bc 00 00 00    \tmov    0xbc(%rax),%ecx\n  240fc5:\t65 48 8b 09          \tmov    %gs:(%rcx),%rcx\n  240fc9:\t48 c1 e9 10          \tshr    $0x10,%rcx\n  240fcd:\t0f b7 c9             \tmovzwl %cx,%ecx\n  240fd0:\t48 69 c9 80 00 00 00 \timul   $0x80,%rcx,%rcx\n  240fd7:\t48 8d 84 08 00 10 00 00 \tlea    0x1000(%rax,%rcx,1),%rax\n  240fdf:\t48 89 c2             \tmov    %rax,%rdx\n  240fe2:\te9 7b 7a 48 00       \tjmp    6c8a62 <ostd::arch::irq::ops::enable_local+0x32>\n"
+        },
+        {
+          "address": "240fe7",
+          "gs_reads": 1,
+          "instructions": "\n/mnt/data/projects/kernelet/research/user-page-table/overhead-review/direct-handler-validation/kernelet-image.elf:     file format elf64-x86-64\n\n\nDisassembly of section .text:\n\n0000000000240fe7 <__kernelet_cpu_access_start+0x40dc6>:\n  240fe7:\t48 8b 0d b2 bd 7f 00 \tmov    0x7fbdb2(%rip),%rcx        # a3cda0 <KERNELET_BOOT_ARGS>\n  240fee:\t8b 91 bc 00 00 00    \tmov    0xbc(%rcx),%edx\n  240ff4:\t65 48 8b 12          \tmov    %gs:(%rdx),%rdx\n  240ff8:\t48 c1 ea 10          \tshr    $0x10,%rdx\n  240ffc:\t0f b7 d2             \tmovzwl %dx,%edx\n  240fff:\t48 69 d2 80 00 00 00 \timul   $0x80,%rdx,%rdx\n  241006:\t48 8d 8c 11 00 10 00 00 \tlea    0x1000(%rcx,%rdx,1),%rcx\n  24100e:\t48 8b 49 68          \tmov    0x68(%rcx),%rcx\n  241012:\t48 8b 34 01          \tmov    (%rcx,%rax,1),%rsi\n  241016:\te9 7f 7a 48 00       \tjmp    6c8a9a <ostd::arch::irq::ops::enable_local+0x6a>\n"
+        },
+        {
+          "address": "24101b",
+          "gs_reads": 1,
+          "instructions": "\n/mnt/data/projects/kernelet/research/user-page-table/overhead-review/direct-handler-validation/kernelet-image.elf:     file format elf64-x86-64\n\n\nDisassembly of section .text:\n\n000000000024101b <__kernelet_cpu_access_start+0x40dfa>:\n  24101b:\t48 8b 05 7e bd 7f 00 \tmov    0x7fbd7e(%rip),%rax        # a3cda0 <KERNELET_BOOT_ARGS>\n  241022:\t8b 88 bc 00 00 00    \tmov    0xbc(%rax),%ecx\n  241028:\t65 48 8b 09          \tmov    %gs:(%rcx),%rcx\n  24102c:\t48 c1 e9 10          \tshr    $0x10,%rcx\n  241030:\t0f b7 c9             \tmovzwl %cx,%ecx\n  241033:\t48 69 c9 80 00 00 00 \timul   $0x80,%rcx,%rcx\n  24103a:\t48 8d 84 08 00 10 00 00 \tlea    0x1000(%rax,%rcx,1),%rax\n  241042:\t48 89 c2             \tmov    %rax,%rdx\n  241045:\te9 66 7a 48 00       \tjmp    6c8ab0 <ostd::arch::irq::ops::enable_local+0x80>\n"
+        },
+        {
+          "address": "24104a",
+          "gs_reads": 1,
+          "instructions": "\n/mnt/data/projects/kernelet/research/user-page-table/overhead-review/direct-handler-validation/kernelet-image.elf:     file format elf64-x86-64\n\n\nDisassembly of section .text:\n\n000000000024104a <__kernelet_cpu_access_start+0x40e29>:\n  24104a:\t48 8b 0d 4f bd 7f 00 \tmov    0x7fbd4f(%rip),%rcx        # a3cda0 <KERNELET_BOOT_ARGS>\n  241051:\t8b 91 bc 00 00 00    \tmov    0xbc(%rcx),%edx\n  241057:\t65 48 8b 12          \tmov    %gs:(%rdx),%rdx\n  24105b:\t48 c1 ea 10          \tshr    $0x10,%rdx\n  24105f:\t0f b7 d2             \tmovzwl %dx,%edx\n  241062:\t48 69 d2 80 00 00 00 \timul   $0x80,%rdx,%rdx\n  241069:\t48 8d 8c 11 00 10 00 00 \tlea    0x1000(%rcx,%rdx,1),%rcx\n  241071:\t48 89 ce             \tmov    %rcx,%rsi\n  241074:\te9 53 7a 48 00       \tjmp    6c8acc <ostd::arch::irq::ops::enable_local+0x9c>\n"
+        },
+        {
+          "address": "241079",
+          "gs_reads": 1,
+          "instructions": "\n/mnt/data/projects/kernelet/research/user-page-table/overhead-review/direct-handler-validation/kernelet-image.elf:     file format elf64-x86-64\n\n\nDisassembly of section .text:\n\n0000000000241079 <__kernelet_cpu_access_start+0x40e58>:\n  241079:\t48 8b 0d 20 bd 7f 00 \tmov    0x7fbd20(%rip),%rcx        # a3cda0 <KERNELET_BOOT_ARGS>\n  241080:\t8b 91 bc 00 00 00    \tmov    0xbc(%rcx),%edx\n  241086:\t65 48 8b 12          \tmov    %gs:(%rdx),%rdx\n  24108a:\t48 c1 ea 10          \tshr    $0x10,%rdx\n  24108e:\t0f b7 d2             \tmovzwl %dx,%edx\n  241091:\t48 69 d2 80 00 00 00 \timul   $0x80,%rdx,%rdx\n  241098:\t48 8d 8c 11 00 10 00 00 \tlea    0x1000(%rcx,%rdx,1),%rcx\n  2410a0:\t48 8b 49 68          \tmov    0x68(%rcx),%rcx\n  2410a4:\t8b 34 01             \tmov    (%rcx,%rax,1),%esi\n  2410a7:\te9 5b 7a 48 00       \tjmp    6c8b07 <ostd::arch::irq::ops::enable_local+0xd7>\n"
+        }
+      ]
+    },
+    "preempt_drop": {
+      "size_bytes": 106,
+      "calls": [
+        "6cede2:\te8 e9 97 ff ff       \tcall   6c85d0 <ostd::kernelet::entry::leave_preempt_guard>",
+        "6cee04:\te8 27 9c ff ff       \tcall   6c8a30 <ostd::arch::irq::ops::enable_local>",
+        "6cee0c:\te8 0f 80 02 00       \tcall   6f6e20 <_Unwind_Resume>",
+        "6cee15:\te8 e1 9b fd ff       \tcall   6a89fb <core::panicking::panic_in_cleanup>"
+      ],
+      "access_blocks": [
+        {
+          "address": "241b83",
+          "gs_reads": 1,
+          "instructions": "\n/mnt/data/projects/kernelet/research/user-page-table/overhead-review/direct-handler-validation/kernelet-image.elf:     file format elf64-x86-64\n\n\nDisassembly of section .text:\n\n0000000000241b83 <__kernelet_cpu_access_start+0x41962>:\n  241b83:\t48 8b 05 16 b2 7f 00 \tmov    0x7fb216(%rip),%rax        # a3cda0 <KERNELET_BOOT_ARGS>\n  241b8a:\t8b 88 bc 00 00 00    \tmov    0xbc(%rax),%ecx\n  241b90:\t65 48 8b 09          \tmov    %gs:(%rcx),%rcx\n  241b94:\t48 c1 e9 10          \tshr    $0x10,%rcx\n  241b98:\t0f b7 c9             \tmovzwl %cx,%ecx\n  241b9b:\t48 69 c9 80 00 00 00 \timul   $0x80,%rcx,%rcx\n  241ba2:\t48 8d 84 08 00 10 00 00 \tlea    0x1000(%rax,%rcx,1),%rax\n  241baa:\t8b 68 54             \tmov    0x54(%rax),%ebp\n  241bad:\te9 0a d2 48 00       \tjmp    6cedbc <<ostd::task::preempt::guard::DisabledPreemptGuard as core::ops::drop::Drop>::drop+0xc>\n"
+        },
+        {
+          "address": "241bb2",
+          "gs_reads": 1,
+          "instructions": "\n/mnt/data/projects/kernelet/research/user-page-table/overhead-review/direct-handler-validation/kernelet-image.elf:     file format elf64-x86-64\n\n\nDisassembly of section .text:\n\n0000000000241bb2 <__kernelet_cpu_access_start+0x41991>:\n  241bb2:\t48 8b 0d e7 b1 7f 00 \tmov    0x7fb1e7(%rip),%rcx        # a3cda0 <KERNELET_BOOT_ARGS>\n  241bb9:\t8b 91 bc 00 00 00    \tmov    0xbc(%rcx),%edx\n  241bbf:\t65 48 8b 12          \tmov    %gs:(%rdx),%rdx\n  241bc3:\t48 c1 ea 10          \tshr    $0x10,%rdx\n  241bc7:\t0f b7 d2             \tmovzwl %dx,%edx\n  241bca:\t48 69 d2 80 00 00 00 \timul   $0x80,%rdx,%rdx\n  241bd1:\t48 8d 8c 11 00 10 00 00 \tlea    0x1000(%rcx,%rdx,1),%rcx\n  241bd9:\t89 41 54             \tmov    %eax,0x54(%rcx)\n  241bdc:\te9 e9 d1 48 00       \tjmp    6cedca <<ostd::task::preempt::guard::DisabledPreemptGuard as core::ops::drop::Drop>::drop+0x1a>\n"
+        },
+        {
+          "address": "241be1",
+          "gs_reads": 1,
+          "instructions": "\n/mnt/data/projects/kernelet/research/user-page-table/overhead-review/direct-handler-validation/kernelet-image.elf:     file format elf64-x86-64\n\n\nDisassembly of section .text:\n\n0000000000241be1 <__kernelet_cpu_access_start+0x419c0>:\n  241be1:\t48 8b 15 b8 b1 7f 00 \tmov    0x7fb1b8(%rip),%rdx        # a3cda0 <KERNELET_BOOT_ARGS>\n  241be8:\t8b b2 bc 00 00 00    \tmov    0xbc(%rdx),%esi\n  241bee:\t65 48 8b 36          \tmov    %gs:(%rsi),%rsi\n  241bf2:\t48 c1 ee 10          \tshr    $0x10,%rsi\n  241bf6:\t0f b7 f6             \tmovzwl %si,%esi\n  241bf9:\t48 69 f6 80 00 00 00 \timul   $0x80,%rsi,%rsi\n  241c00:\t48 8d 94 32 00 10 00 00 \tlea    0x1000(%rdx,%rsi,1),%rdx\n  241c08:\t48 8b 52 68          \tmov    0x68(%rdx),%rdx\n  241c0c:\t29 0c 02             \tsub    %ecx,(%rdx,%rax,1)\n  241c0f:\te9 ce d1 48 00       \tjmp    6cede2 <<ostd::task::preempt::guard::DisabledPreemptGuard as core::ops::drop::Drop>::drop+0x32>\n"
+        }
+      ]
+    }
+  },
+  "candidate": {
+    "event": {
+      "size_bytes": 1025,
+      "calls": [
+        "6be1b8:\te8 93 3d 00 00       \tcall   6c1f50 <ostd::arch::irq::ops::enable_local>",
+        "6be1ce:\te8 0d 4e de ff       \tcall   4a2fe0 <<aster_core::thread::Thread as ostd::user::kernelet_events::UserEventHandler>::has_kernel_event>",
+        "6be1e8:\te8 03 a1 de ff       \tcall   4a82f0 <__ostd_user_handle>",
+        "6be1f9:\te8 02 4d de ff       \tcall   4a2f00 <<aster_core::thread::Thread as ostd::user::kernelet_events::UserEventHandler>::should_exit>",
+        "6be202:\te8 79 8a ff ff       \tcall   6b6c80 <ostd::task::exit_current_task>",
+        "6be227:\te8 34 1b 00 00       \tcall   6bfd60 <ostd::task::scheduler::might_preempt>",
+        "6be26a:\te8 f1 9e 02 00       \tcall   6e8160 <memcpy>",
+        "6be2ae:\te8 ad a1 de ff       \tcall   4a8460 <__ostd_user_pre_user_run>",
+        "6be2c8:\tff 50 68             \tcall   *0x68(%rax)",
+        "6be2de:\te8 fd b4 fd ff       \tcall   6997e0 <core::panicking::panic_fmt>",
+        "6be3a7:\te8 84 90 fd ff       \tcall   697430 <core::option::expect_failed>",
+        "6be3d1:\te8 0a b4 fd ff       \tcall   6997e0 <core::panicking::panic_fmt>",
+        "6be3ee:\te8 3d 90 fd ff       \tcall   697430 <core::option::expect_failed>",
+        "6be41e:\te8 bd b3 fd ff       \tcall   6997e0 <core::panicking::panic_fmt>",
+        "6be447:\te8 08 38 01 00       \tcall   6d1c54 <core::panicking::assert_failed::<u32, u32>>",
+        "6be461:\te8 7a b3 fd ff       \tcall   6997e0 <core::panicking::panic_fmt>",
+        "6be46f:\te8 fc 8f fd ff       \tcall   697470 <core::option::unwrap_failed>",
+        "6be47c:\te8 7f dc ff ff       \tcall   6bc100 <core::ptr::drop_glue::<ostd::irq::guard::DisabledLocalIrqGuard>>",
+        "6be487:\te8 5f b1 fd ff       \tcall   6995eb <core::panicking::panic_in_cleanup>",
+        "6be495:\te8 b6 3e 01 00       \tcall   6d2350 <<ostd::irq::guard::DisabledLocalIrqGuard as core::ops::drop::Drop>::drop>",
+        "6be49a:\te8 e0 b2 fd ff       \tcall   69977f <core::panicking::panic_cannot_unwind>",
+        "6be4a3:\te8 43 b1 fd ff       \tcall   6995eb <core::panicking::panic_in_cleanup>",
+        "6be4ac:\te8 ce b2 fd ff       \tcall   69977f <core::panicking::panic_cannot_unwind>"
+      ],
+      "access_blocks": [
+        {
+          "address": "2378d7",
+          "gs_reads": 1,
+          "instructions": "\n/mnt/data/projects/kernelet/.cpu-local-validation-work/candidate.elf:     file format elf64-x86-64\n\n\nDisassembly of section .text:\n\n00000000002378d7 <__kernelet_cpu_access_start+0x376b6>:\n  2378d7:\t48 8b 0d b2 55 80 00 \tmov    0x8055b2(%rip),%rcx        # a3ce90 <KERNELET_BOOT_ARGS>\n  2378de:\t8b b1 bc 00 00 00    \tmov    0xbc(%rcx),%esi\n  2378e4:\t65 48 8b 36          \tmov    %gs:(%rsi),%rsi\n  2378e8:\t48 c1 ee 10          \tshr    $0x10,%rsi\n  2378ec:\t0f b7 f6             \tmovzwl %si,%esi\n  2378ef:\t48 69 f6 80 00 00 00 \timul   $0x80,%rsi,%rsi\n  2378f6:\t48 8d 8c 31 00 10 00 00 \tlea    0x1000(%rcx,%rsi,1),%rcx\n  2378fe:\t48 8b 41 68          \tmov    0x68(%rcx),%rax\n  237902:\t48 89 ca             \tmov    %rcx,%rdx\n  237905:\te9 c3 67 48 00       \tjmp    6be0cd <user_event_entry+0x1d>\n"
+        },
+        {
+          "address": "23790a",
+          "gs_reads": 1,
+          "instructions": "\n/mnt/data/projects/kernelet/.cpu-local-validation-work/candidate.elf:     file format elf64-x86-64\n\n\nDisassembly of section .text:\n\n000000000023790a <__kernelet_cpu_access_start+0x376e9>:\n  23790a:\t48 8b 05 7f 55 80 00 \tmov    0x80557f(%rip),%rax        # a3ce90 <KERNELET_BOOT_ARGS>\n  237911:\t8b 88 bc 00 00 00    \tmov    0xbc(%rax),%ecx\n  237917:\t65 48 8b 09          \tmov    %gs:(%rcx),%rcx\n  23791b:\t48 c1 e9 10          \tshr    $0x10,%rcx\n  23791f:\t0f b7 c9             \tmovzwl %cx,%ecx\n  237922:\t48 69 c9 80 00 00 00 \timul   $0x80,%rcx,%rcx\n  237929:\t48 8d 84 08 00 10 00 00 \tlea    0x1000(%rax,%rcx,1),%rax\n  237931:\t48 89 c2             \tmov    %rax,%rdx\n  237934:\te9 d8 68 48 00       \tjmp    6be211 <user_event_entry+0x161>\n"
+        },
+        {
+          "address": "237939",
+          "gs_reads": 1,
+          "instructions": "\n/mnt/data/projects/kernelet/.cpu-local-validation-work/candidate.elf:     file format elf64-x86-64\n\n\nDisassembly of section .text:\n\n0000000000237939 <__kernelet_cpu_access_start+0x37718>:\n  237939:\t48 8b 05 50 55 80 00 \tmov    0x805550(%rip),%rax        # a3ce90 <KERNELET_BOOT_ARGS>\n  237940:\t8b 88 bc 00 00 00    \tmov    0xbc(%rax),%ecx\n  237946:\t65 48 8b 09          \tmov    %gs:(%rcx),%rcx\n  23794a:\t48 c1 e9 10          \tshr    $0x10,%rcx\n  23794e:\t0f b7 c9             \tmovzwl %cx,%ecx\n  237951:\t48 69 c9 80 00 00 00 \timul   $0x80,%rcx,%rcx\n  237958:\t48 8d 84 08 00 10 00 00 \tlea    0x1000(%rax,%rcx,1),%rax\n  237960:\t8b 50 54             \tmov    0x54(%rax),%edx\n  237963:\t85 d2                \ttest   %edx,%edx\n  237965:\t75 07                \tjne    23796e <__kernelet_cpu_access_start+0x3774d>\n  237967:\tc7 40 54 01 00 00 00 \tmovl   $0x1,0x54(%rax)\n  23796e:\te9 be 68 48 00       \tjmp    6be231 <user_event_entry+0x181>\n"
+        }
+      ]
+    },
+    "first": {
+      "size_bytes": 618,
+      "calls": [
+        "6bde53:\te8 68 92 ff ff       \tcall   6b70c0 <ostd::task::processor::after_switching_to>",
+        "6bdebe:\te8 8d 40 00 00       \tcall   6c1f50 <ostd::arch::irq::ops::enable_local>",
+        "6bdef3:\te8 b8 a4 de ff       \tcall   4a83b0 <__ostd_user_init>",
+        "6bdf04:\te8 f7 4f de ff       \tcall   4a2f00 <<aster_core::thread::Thread as ostd::user::kernelet_events::UserEventHandler>::should_exit>",
+        "6bdf0d:\te8 6e 8d ff ff       \tcall   6b6c80 <ostd::task::exit_current_task>",
+        "6bdf32:\te8 29 1e 00 00       \tcall   6bfd60 <ostd::task::scheduler::might_preempt>",
+        "6bdf75:\te8 e6 a1 02 00       \tcall   6e8160 <memcpy>",
+        "6bdfb9:\te8 a2 a4 de ff       \tcall   4a8460 <__ostd_user_pre_user_run>",
+        "6bdfcf:\tff 50 68             \tcall   *0x68(%rax)",
+        "6bdfe5:\te8 f6 b7 fd ff       \tcall   6997e0 <core::panicking::panic_fmt>",
+        "6bdfff:\te8 2c 94 fd ff       \tcall   697430 <core::option::expect_failed>",
+        "6be019:\te8 c2 b7 fd ff       \tcall   6997e0 <core::panicking::panic_fmt>",
+        "6be042:\te8 0d 3c 01 00       \tcall   6d1c54 <core::panicking::assert_failed::<u32, u32>>",
+        "6be05c:\te8 7f b7 fd ff       \tcall   6997e0 <core::panicking::panic_fmt>",
+        "6be06c:\te8 8f e0 ff ff       \tcall   6bc100 <core::ptr::drop_glue::<ostd::irq::guard::DisabledLocalIrqGuard>>",
+        "6be077:\te8 6f b5 fd ff       \tcall   6995eb <core::panicking::panic_in_cleanup>",
+        "6be085:\te8 c6 42 01 00       \tcall   6d2350 <<ostd::irq::guard::DisabledLocalIrqGuard as core::ops::drop::Drop>::drop>",
+        "6be08a:\te8 f0 b6 fd ff       \tcall   69977f <core::panicking::panic_cannot_unwind>",
+        "6be093:\te8 53 b5 fd ff       \tcall   6995eb <core::panicking::panic_in_cleanup>",
+        "6be09c:\te8 de b6 fd ff       \tcall   69977f <core::panicking::panic_cannot_unwind>",
+        "6be0a5:\te8 d5 b6 fd ff       \tcall   69977f <core::panicking::panic_cannot_unwind>"
+      ],
+      "access_blocks": [
+        {
+          "address": "237801",
+          "gs_reads": 1,
+          "instructions": "\n/mnt/data/projects/kernelet/.cpu-local-validation-work/candidate.elf:     file format elf64-x86-64\n\n\nDisassembly of section .text:\n\n0000000000237801 <__kernelet_cpu_access_start+0x375e0>:\n  237801:\t48 8b 0d 88 56 80 00 \tmov    0x805688(%rip),%rcx        # a3ce90 <KERNELET_BOOT_ARGS>\n  237808:\t8b 91 bc 00 00 00    \tmov    0xbc(%rcx),%edx\n  23780e:\t65 48 8b 12          \tmov    %gs:(%rdx),%rdx\n  237812:\t48 c1 ea 10          \tshr    $0x10,%rdx\n  237816:\t0f b7 d2             \tmovzwl %dx,%edx\n  237819:\t48 69 d2 80 00 00 00 \timul   $0x80,%rdx,%rdx\n  237820:\t48 8d 8c 11 00 10 00 00 \tlea    0x1000(%rcx,%rdx,1),%rcx\n  237828:\t8b 41 54             \tmov    0x54(%rcx),%eax\n  23782b:\t85 c0                \ttest   %eax,%eax\n  23782d:\t75 07                \tjne    237836 <__kernelet_cpu_access_start+0x37615>\n  23782f:\tc7 41 54 01 00 00 00 \tmovl   $0x1,0x54(%rcx)\n  237836:\te9 22 66 48 00       \tjmp    6bde5d <first_user_task_entry+0x1d>\n"
+        },
+        {
+          "address": "23783b",
+          "gs_reads": 1,
+          "instructions": "\n/mnt/data/projects/kernelet/.cpu-local-validation-work/candidate.elf:     file format elf64-x86-64\n\n\nDisassembly of section .text:\n\n000000000023783b <__kernelet_cpu_access_start+0x3761a>:\n  23783b:\t48 8b 0d 4e 56 80 00 \tmov    0x80564e(%rip),%rcx        # a3ce90 <KERNELET_BOOT_ARGS>\n  237842:\t8b b1 bc 00 00 00    \tmov    0xbc(%rcx),%esi\n  237848:\t65 48 8b 36          \tmov    %gs:(%rsi),%rsi\n  23784c:\t48 c1 ee 10          \tshr    $0x10,%rsi\n  237850:\t0f b7 f6             \tmovzwl %si,%esi\n  237853:\t48 69 f6 80 00 00 00 \timul   $0x80,%rsi,%rsi\n  23785a:\t48 8d 8c 31 00 10 00 00 \tlea    0x1000(%rcx,%rsi,1),%rcx\n  237862:\t48 8b 79 68          \tmov    0x68(%rcx),%rdi\n  237866:\t48 89 ca             \tmov    %rcx,%rdx\n  237869:\te9 fc 65 48 00       \tjmp    6bde6a <first_user_task_entry+0x2a>\n"
+        },
+        {
+          "address": "23786e",
+          "gs_reads": 1,
+          "instructions": "\n/mnt/data/projects/kernelet/.cpu-local-validation-work/candidate.elf:     file format elf64-x86-64\n\n\nDisassembly of section .text:\n\n000000000023786e <__kernelet_cpu_access_start+0x3764d>:\n  23786e:\t48 8b 05 1b 56 80 00 \tmov    0x80561b(%rip),%rax        # a3ce90 <KERNELET_BOOT_ARGS>\n  237875:\t8b 88 bc 00 00 00    \tmov    0xbc(%rax),%ecx\n  23787b:\t65 48 8b 09          \tmov    %gs:(%rcx),%rcx\n  23787f:\t48 c1 e9 10          \tshr    $0x10,%rcx\n  237883:\t0f b7 c9             \tmovzwl %cx,%ecx\n  237886:\t48 69 c9 80 00 00 00 \timul   $0x80,%rcx,%rcx\n  23788d:\t48 8d 84 08 00 10 00 00 \tlea    0x1000(%rax,%rcx,1),%rax\n  237895:\t48 89 c2             \tmov    %rax,%rdx\n  237898:\te9 7f 66 48 00       \tjmp    6bdf1c <first_user_task_entry+0xdc>\n"
+        },
+        {
+          "address": "23789d",
+          "gs_reads": 1,
+          "instructions": "\n/mnt/data/projects/kernelet/.cpu-local-validation-work/candidate.elf:     file format elf64-x86-64\n\n\nDisassembly of section .text:\n\n000000000023789d <__kernelet_cpu_access_start+0x3767c>:\n  23789d:\t48 8b 05 ec 55 80 00 \tmov    0x8055ec(%rip),%rax        # a3ce90 <KERNELET_BOOT_ARGS>\n  2378a4:\t8b 88 bc 00 00 00    \tmov    0xbc(%rax),%ecx\n  2378aa:\t65 48 8b 09          \tmov    %gs:(%rcx),%rcx\n  2378ae:\t48 c1 e9 10          \tshr    $0x10,%rcx\n  2378b2:\t0f b7 c9             \tmovzwl %cx,%ecx\n  2378b5:\t48 69 c9 80 00 00 00 \timul   $0x80,%rcx,%rcx\n  2378bc:\t48 8d 84 08 00 10 00 00 \tlea    0x1000(%rax,%rcx,1),%rax\n  2378c4:\t8b 50 54             \tmov    0x54(%rax),%edx\n  2378c7:\t85 d2                \ttest   %edx,%edx\n  2378c9:\t75 07                \tjne    2378d2 <__kernelet_cpu_access_start+0x376b1>\n  2378cb:\tc7 40 54 01 00 00 00 \tmovl   $0x1,0x54(%rax)\n  2378d2:\te9 65 66 48 00       \tjmp    6bdf3c <first_user_task_entry+0xfc>\n"
+        }
+      ]
+    },
+    "enable": {
+      "size_bytes": 239,
+      "calls": [
+        "6c1f83:\te8 08 59 01 00       \tcall   6d7890 <<ostd::irq::level::InterruptLevel>::current>",
+        "6c1f90:\te8 ab 4d ff ff       \tcall   6b6d40 <ostd::task::virq_delivery_deferred>",
+        "6c1fbc:\te8 9f dd ff ff       \tcall   6bfd60 <ostd::task::scheduler::might_preempt>",
+        "6c203a:\te8 a1 77 fd ff       \tcall   6997e0 <core::panicking::panic_fmt>"
+      ],
+      "access_blocks": [
+        {
+          "address": "2385e5",
+          "gs_reads": 1,
+          "instructions": "\n/mnt/data/projects/kernelet/.cpu-local-validation-work/candidate.elf:     file format elf64-x86-64\n\n\nDisassembly of section .text:\n\n00000000002385e5 <__kernelet_cpu_access_start+0x383c4>:\n  2385e5:\t48 8b 05 a4 48 80 00 \tmov    0x8048a4(%rip),%rax        # a3ce90 <KERNELET_BOOT_ARGS>\n  2385ec:\t8b 88 bc 00 00 00    \tmov    0xbc(%rax),%ecx\n  2385f2:\t65 48 8b 09          \tmov    %gs:(%rcx),%rcx\n  2385f6:\t48 c1 e9 10          \tshr    $0x10,%rcx\n  2385fa:\t0f b7 c9             \tmovzwl %cx,%ecx\n  2385fd:\t48 69 c9 80 00 00 00 \timul   $0x80,%rcx,%rcx\n  238604:\t48 8d 84 08 00 10 00 00 \tlea    0x1000(%rax,%rcx,1),%rax\n  23860c:\tc7 40 54 00 00 00 00 \tmovl   $0x0,0x54(%rax)\n  238613:\t48 8b 10             \tmov    (%rax),%rdx\n  238616:\te9 3f 99 48 00       \tjmp    6c1f5a <ostd::arch::irq::ops::enable_local+0xa>\n"
+        },
+        {
+          "address": "23861b",
+          "gs_reads": 1,
+          "instructions": "\n/mnt/data/projects/kernelet/.cpu-local-validation-work/candidate.elf:     file format elf64-x86-64\n\n\nDisassembly of section .text:\n\n000000000023861b <__kernelet_cpu_access_start+0x383fa>:\n  23861b:\t48 8b 05 6e 48 80 00 \tmov    0x80486e(%rip),%rax        # a3ce90 <KERNELET_BOOT_ARGS>\n  238622:\t8b 88 bc 00 00 00    \tmov    0xbc(%rax),%ecx\n  238628:\t65 48 8b 09          \tmov    %gs:(%rcx),%rcx\n  23862c:\t48 c1 e9 10          \tshr    $0x10,%rcx\n  238630:\t0f b7 c9             \tmovzwl %cx,%ecx\n  238633:\t48 69 c9 80 00 00 00 \timul   $0x80,%rcx,%rcx\n  23863a:\t48 8d 84 08 00 10 00 00 \tlea    0x1000(%rax,%rcx,1),%rax\n  238642:\t48 89 c2             \tmov    %rax,%rdx\n  238645:\te9 1e 99 48 00       \tjmp    6c1f68 <ostd::arch::irq::ops::enable_local+0x18>\n"
+        },
+        {
+          "address": "23864a",
+          "gs_reads": 1,
+          "instructions": "\n/mnt/data/projects/kernelet/.cpu-local-validation-work/candidate.elf:     file format elf64-x86-64\n\n\nDisassembly of section .text:\n\n000000000023864a <__kernelet_cpu_access_start+0x38429>:\n  23864a:\t48 8b 05 3f 48 80 00 \tmov    0x80483f(%rip),%rax        # a3ce90 <KERNELET_BOOT_ARGS>\n  238651:\t8b 88 bc 00 00 00    \tmov    0xbc(%rax),%ecx\n  238657:\t65 48 8b 09          \tmov    %gs:(%rcx),%rcx\n  23865b:\t48 c1 e9 10          \tshr    $0x10,%rcx\n  23865f:\t0f b7 c9             \tmovzwl %cx,%ecx\n  238662:\t48 69 c9 80 00 00 00 \timul   $0x80,%rcx,%rcx\n  238669:\t48 8d 84 08 00 10 00 00 \tlea    0x1000(%rax,%rcx,1),%rax\n  238671:\t48 89 c2             \tmov    %rax,%rdx\n  238674:\te9 ff 98 48 00       \tjmp    6c1f78 <ostd::arch::irq::ops::enable_local+0x28>\n"
+        },
+        {
+          "address": "238679",
+          "gs_reads": 1,
+          "instructions": "\n/mnt/data/projects/kernelet/.cpu-local-validation-work/candidate.elf:     file format elf64-x86-64\n\n\nDisassembly of section .text:\n\n0000000000238679 <__kernelet_cpu_access_start+0x38458>:\n  238679:\t48 8b 0d 10 48 80 00 \tmov    0x804810(%rip),%rcx        # a3ce90 <KERNELET_BOOT_ARGS>\n  238680:\t8b 91 bc 00 00 00    \tmov    0xbc(%rcx),%edx\n  238686:\t65 48 8b 12          \tmov    %gs:(%rdx),%rdx\n  23868a:\t48 c1 ea 10          \tshr    $0x10,%rdx\n  23868e:\t0f b7 d2             \tmovzwl %dx,%edx\n  238691:\t48 69 d2 80 00 00 00 \timul   $0x80,%rdx,%rdx\n  238698:\t48 8d 8c 11 00 10 00 00 \tlea    0x1000(%rcx,%rdx,1),%rcx\n  2386a0:\t48 8b 49 68          \tmov    0x68(%rcx),%rcx\n  2386a4:\t48 8b 34 01          \tmov    (%rcx,%rax,1),%rsi\n  2386a8:\te9 03 99 48 00       \tjmp    6c1fb0 <ostd::arch::irq::ops::enable_local+0x60>\n"
+        },
+        {
+          "address": "2386ad",
+          "gs_reads": 1,
+          "instructions": "\n/mnt/data/projects/kernelet/.cpu-local-validation-work/candidate.elf:     file format elf64-x86-64\n\n\nDisassembly of section .text:\n\n00000000002386ad <__kernelet_cpu_access_start+0x3848c>:\n  2386ad:\t48 8b 05 dc 47 80 00 \tmov    0x8047dc(%rip),%rax        # a3ce90 <KERNELET_BOOT_ARGS>\n  2386b4:\t8b 88 bc 00 00 00    \tmov    0xbc(%rax),%ecx\n  2386ba:\t65 48 8b 09          \tmov    %gs:(%rcx),%rcx\n  2386be:\t48 c1 e9 10          \tshr    $0x10,%rcx\n  2386c2:\t0f b7 c9             \tmovzwl %cx,%ecx\n  2386c5:\t48 69 c9 80 00 00 00 \timul   $0x80,%rcx,%rcx\n  2386cc:\t48 8d 84 08 00 10 00 00 \tlea    0x1000(%rax,%rcx,1),%rax\n  2386d4:\t48 89 c2             \tmov    %rax,%rdx\n  2386d7:\te9 ea 98 48 00       \tjmp    6c1fc6 <ostd::arch::irq::ops::enable_local+0x76>\n"
+        },
+        {
+          "address": "2386dc",
+          "gs_reads": 1,
+          "instructions": "\n/mnt/data/projects/kernelet/.cpu-local-validation-work/candidate.elf:     file format elf64-x86-64\n\n\nDisassembly of section .text:\n\n00000000002386dc <__kernelet_cpu_access_start+0x384bb>:\n  2386dc:\t48 8b 0d ad 47 80 00 \tmov    0x8047ad(%rip),%rcx        # a3ce90 <KERNELET_BOOT_ARGS>\n  2386e3:\t8b 91 bc 00 00 00    \tmov    0xbc(%rcx),%edx\n  2386e9:\t65 48 8b 12          \tmov    %gs:(%rdx),%rdx\n  2386ed:\t48 c1 ea 10          \tshr    $0x10,%rdx\n  2386f1:\t0f b7 d2             \tmovzwl %dx,%edx\n  2386f4:\t48 69 d2 80 00 00 00 \timul   $0x80,%rdx,%rdx\n  2386fb:\t48 8d 8c 11 00 10 00 00 \tlea    0x1000(%rcx,%rdx,1),%rcx\n  238703:\t48 89 ce             \tmov    %rcx,%rsi\n  238706:\te9 d7 98 48 00       \tjmp    6c1fe2 <ostd::arch::irq::ops::enable_local+0x92>\n"
+        },
+        {
+          "address": "23870b",
+          "gs_reads": 1,
+          "instructions": "\n/mnt/data/projects/kernelet/.cpu-local-validation-work/candidate.elf:     file format elf64-x86-64\n\n\nDisassembly of section .text:\n\n000000000023870b <__kernelet_cpu_access_start+0x384ea>:\n  23870b:\t48 8b 0d 7e 47 80 00 \tmov    0x80477e(%rip),%rcx        # a3ce90 <KERNELET_BOOT_ARGS>\n  238712:\t8b 91 bc 00 00 00    \tmov    0xbc(%rcx),%edx\n  238718:\t65 48 8b 12          \tmov    %gs:(%rdx),%rdx\n  23871c:\t48 c1 ea 10          \tshr    $0x10,%rdx\n  238720:\t0f b7 d2             \tmovzwl %dx,%edx\n  238723:\t48 69 d2 80 00 00 00 \timul   $0x80,%rdx,%rdx\n  23872a:\t48 8d 8c 11 00 10 00 00 \tlea    0x1000(%rcx,%rdx,1),%rcx\n  238732:\t48 8b 49 68          \tmov    0x68(%rcx),%rcx\n  238736:\t8b 34 01             \tmov    (%rcx,%rax,1),%esi\n  238739:\te9 df 98 48 00       \tjmp    6c201d <ostd::arch::irq::ops::enable_local+0xcd>\n"
+        }
+      ]
+    },
+    "preempt_drop": {
+      "size_bytes": 123,
+      "calls": [
+        "6b7603:\te8 28 fe fd ff       \tcall   697430 <core::option::expect_failed>",
+        "6b7615:\te8 36 a9 00 00       \tcall   6c1f50 <ostd::arch::irq::ops::enable_local>",
+        "6b761d:\te8 de 03 03 00       \tcall   6e7a00 <_Unwind_Resume>",
+        "6b7626:\te8 c0 1f fe ff       \tcall   6995eb <core::panicking::panic_in_cleanup>"
+      ],
+      "access_blocks": [
+        {
+          "address": "2372ad",
+          "gs_reads": 1,
+          "instructions": "\n/mnt/data/projects/kernelet/.cpu-local-validation-work/candidate.elf:     file format elf64-x86-64\n\n\nDisassembly of section .text:\n\n00000000002372ad <__kernelet_cpu_access_start+0x3708c>:\n  2372ad:\t48 8b 05 dc 5b 80 00 \tmov    0x805bdc(%rip),%rax        # a3ce90 <KERNELET_BOOT_ARGS>\n  2372b4:\t8b 88 bc 00 00 00    \tmov    0xbc(%rax),%ecx\n  2372ba:\t65 48 8b 09          \tmov    %gs:(%rcx),%rcx\n  2372be:\t48 c1 e9 10          \tshr    $0x10,%rcx\n  2372c2:\t0f b7 c9             \tmovzwl %cx,%ecx\n  2372c5:\t48 69 c9 80 00 00 00 \timul   $0x80,%rcx,%rcx\n  2372cc:\t48 8d 84 08 00 10 00 00 \tlea    0x1000(%rax,%rcx,1),%rax\n  2372d4:\t8b 68 54             \tmov    0x54(%rax),%ebp\n  2372d7:\t85 ed                \ttest   %ebp,%ebp\n  2372d9:\t75 07                \tjne    2372e2 <__kernelet_cpu_access_start+0x370c1>\n  2372db:\tc7 40 54 01 00 00 00 \tmovl   $0x1,0x54(%rax)\n  2372e2:\te9 d5 02 48 00       \tjmp    6b75bc <<ostd::task::preempt::guard::DisabledPreemptGuard as core::ops::drop::Drop>::drop+0xc>\n"
+        },
+        {
+          "address": "2372e7",
+          "gs_reads": 1,
+          "instructions": "\n/mnt/data/projects/kernelet/.cpu-local-validation-work/candidate.elf:     file format elf64-x86-64\n\n\nDisassembly of section .text:\n\n00000000002372e7 <__kernelet_cpu_access_start+0x370c6>:\n  2372e7:\t48 8b 15 a2 5b 80 00 \tmov    0x805ba2(%rip),%rdx        # a3ce90 <KERNELET_BOOT_ARGS>\n  2372ee:\t8b b2 bc 00 00 00    \tmov    0xbc(%rdx),%esi\n  2372f4:\t65 48 8b 36          \tmov    %gs:(%rsi),%rsi\n  2372f8:\t48 c1 ee 10          \tshr    $0x10,%rsi\n  2372fc:\t0f b7 f6             \tmovzwl %si,%esi\n  2372ff:\t48 69 f6 80 00 00 00 \timul   $0x80,%rsi,%rsi\n  237306:\t48 8d 94 32 00 10 00 00 \tlea    0x1000(%rdx,%rsi,1),%rdx\n  23730e:\t48 8b 7a 68          \tmov    0x68(%rdx),%rdi\n  237312:\t48 89 d0             \tmov    %rdx,%rax\n  237315:\te9 b5 02 48 00       \tjmp    6b75cf <<ostd::task::preempt::guard::DisabledPreemptGuard as core::ops::drop::Drop>::drop+0x1f>\n"
+        }
+      ]
+    }
+  }
+}

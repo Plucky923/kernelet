@@ -1,0 +1,1 @@
+cryptdevice=PARTUUID=bbbbbb0d-a6ef-4976-966f-2e4ae452a1b1:root root=/dev/mapper/root zswap.enabled=0 rootflags=subvol=@ rw rootfstype=btrfs resume=/dev/mapper/root resume_offset=1960986 systemd.tty.term.console=dumb initramfs_async=0 quiet splash loglevel=0 systemd.show_status=false rd.udev.log_level=0 vt.global_cursor_default=0

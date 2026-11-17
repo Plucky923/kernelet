@@ -1,0 +1,176 @@
+{
+  "validated_at_utc": "2026-11-17T06:36:40.520404+00:00",
+  "proposal_head": "ee1b2267e6178c6afaf22d73ad961f0c227ec8db",
+  "image_path": "/mnt/data/projects/kernelet/poc/target/kernelet-unsafe-audit-3ca09e6d066ee3cf/kernelet-image.elf",
+  "image_sha256": "17c004a17bfa9dc0da04b46cc79e3a1e309db78d1de4bf5d64b2fa36b3728ab5",
+  "kernel_sha256": "63891070fcdc17736dbff1e94774f89d2bf6f8d96bc2b7256c95476f49f02ee0",
+  "module_sha256": "dc4e2f4b4e8c0457bc6a01902544cb14ea36a5d0cf3f6abaf61a48ff22bf935c",
+  "initramfs_sha256": "6d7ebbb2a4ebc23dc510ef8380f3701485fa87b80cebaffd850afd24d1310d07",
+  "source_sha256": {
+    "ostd/libs/ostd-macros/src/lib.rs": "a9a179571bdeea0c3e1bd3a9b3dcf230d0bb7409b9ad14724f6b0231794c5ab0",
+    "ostd/libs/ostd-macros/src/user_event.rs": "638e414d411b1860984b0d4756c55aa0fbd8466bf85054a85046809f34f40b43",
+    "ostd/src/lib.rs": "57ecc901a660b59a2263e3985acb53c45f59ac5fca7b51d22febc0f98388c24f",
+    "ostd/src/user.rs": "43688beadab51e2d58db8ba4172ba1e0036f5e365fba28e2c5dc3788e795c266",
+    "ostd/src/task/mod.rs": "e767bdde66e2d6123bf510eabcb060acd8d3e61dd70bd4e35c378e483542c022",
+    "ostd/src/arch/x86/irq/mod.rs": "bd66ff4fc50b9bd6005b96e64043eed27c8561d652acd9540af076113d013e26",
+    "kernel/core/src/thread/task.rs": "c9eb5c42ffd048bf4e406c1fc5a11114acc4e0ce8670af7623c58f0a69a27009",
+    "kernel/core/src/thread/mod.rs": "6409bca50f9d5d1a5dc54e4cf9c3d3b1406b3abf0ce5d6101dd13309939a26b8",
+    "kernel/libs/aster-bigtcp/src/packet.rs": "477285acb95bd85813a00371d453adf11d1249a4c84c407e051718db843cf557"
+  },
+  "snapshot_ids": [
+    "7a13a32ae6aea6eef5286082f322688c44186c808f45e121c139119becfa71ee"
+  ],
+  "results": {
+    "smp_pthreads_cpus": {
+      "value": "2",
+      "unit": "cpus"
+    },
+    "smp_fork_cpus": {
+      "value": "2",
+      "unit": "cpus"
+    },
+    "smp_check": {
+      "value": "1",
+      "unit": "bool"
+    },
+    "getpid_ns": {
+      "value": "128.58",
+      "unit": "ns"
+    },
+    "reg_preserve_getpid": {
+      "value": "1",
+      "unit": "bool"
+    },
+    "reg_preserve_nanosleep": {
+      "value": "1",
+      "unit": "bool"
+    },
+    "fpu_sse_getpid_ns": {
+      "value": "128.43",
+      "unit": "ns"
+    },
+    "fpu_sse_getpid_ok": {
+      "value": "1",
+      "unit": "bool"
+    },
+    "fpu_avx_getpid_ns": {
+      "value": "129.13",
+      "unit": "ns"
+    },
+    "fpu_avx_getpid_ok": {
+      "value": "1",
+      "unit": "bool"
+    },
+    "fpu_switch_sse_aba_ns": {
+      "value": "1474.71",
+      "unit": "ns"
+    },
+    "fpu_switch_sse_aba_ns_ok": {
+      "value": "1",
+      "unit": "bool"
+    },
+    "fpu_switch_avx_aba_ns": {
+      "value": "1540.08",
+      "unit": "ns"
+    },
+    "fpu_switch_avx_aba_ns_ok": {
+      "value": "1",
+      "unit": "bool"
+    },
+    "rt_sigreturn_valid": {
+      "value": "1",
+      "unit": "bool"
+    },
+    "rt_sigreturn_bad_mxcsr": {
+      "value": "1",
+      "unit": "bool"
+    },
+    "rt_sigreturn_bad_xcomp_bv": {
+      "value": "1",
+      "unit": "bool"
+    },
+    "suite_done": {
+      "value": "1",
+      "unit": "bool"
+    }
+  },
+  "entry_calls": [
+    "6cc2a8:\te8 93 c2 ff ff       \tcall   6c8540 <ostd::kernelet::entry::user_event_record>",
+    "6cc360:\te8 cb c6 ff ff       \tcall   6c8a30 <ostd::arch::irq::ops::enable_local>",
+    "6cc376:\te8 d5 eb cb ff       \tcall   38af50 <<aster_core::thread::Thread as ostd::user::kernelet_events::UserEventHandler>::has_kernel_event>",
+    "6cc390:\te8 6b 38 cc ff       \tcall   38fc00 <__ostd_user_handle>",
+    "6cc3a1:\te8 ca ea cb ff       \tcall   38ae70 <<aster_core::thread::Thread as ostd::user::kernelet_events::UserEventHandler>::should_exit>",
+    "6cc3aa:\te8 11 9e ff ff       \tcall   6c61c0 <ostd::task::exit_current_task>",
+    "6cc3cf:\te8 3c 99 00 00       \tcall   6d5d10 <ostd::task::scheduler::might_preempt>",
+    "6cc420:\te8 5b b1 02 00       \tcall   6f7580 <memcpy>",
+    "6cc464:\te8 07 39 cc ff       \tcall   38fd70 <__ostd_user_pre_user_run>",
+    "6cc47e:\tff 50 68             \tcall   *0x68(%rax)",
+    "6cc494:\te8 57 c7 fd ff       \tcall   6a8bf0 <core::panicking::panic_fmt>",
+    "6cc55d:\te8 de a2 fd ff       \tcall   6a6840 <core::option::expect_failed>",
+    "6cc587:\te8 b4 a2 fd ff       \tcall   6a6840 <core::option::expect_failed>",
+    "6cc5de:\te8 99 ba 01 00       \tcall   6e807c <core::panicking::assert_failed::<u32, u32>>",
+    "6cc5f8:\te8 f3 c5 fd ff       \tcall   6a8bf0 <core::panicking::panic_fmt>",
+    "6cc606:\te8 75 a2 fd ff       \tcall   6a6880 <core::option::unwrap_failed>",
+    "6cc616:\te8 b5 11 01 00       \tcall   6dd7d0 <<ostd::irq::guard::DisabledLocalIrqGuard as core::ops::drop::Drop>::drop>",
+    "6cc61b:\te8 6f c5 fd ff       \tcall   6a8b8f <core::panicking::panic_cannot_unwind>",
+    "6cc624:\te8 d2 c3 fd ff       \tcall   6a89fb <core::panicking::panic_in_cleanup>",
+    "6cc62d:\te8 5d c5 fd ff       \tcall   6a8b8f <core::panicking::panic_cannot_unwind>"
+  ],
+  "qemu_memlock_soft_limit": 0,
+  "commands": [
+    [
+      "make",
+      "-C",
+      "/mnt/data/projects/kernelet/.direct-handler-validation-work/endovisor",
+      "LINUX_DIR=/mnt/data/projects/kernelet/prototype/.build/linux-6.12"
+    ],
+    [
+      "make",
+      "-C",
+      "/mnt/data/projects/kernelet/poc/linux/bench",
+      "OUT_DIR=/mnt/data/projects/kernelet/.direct-handler-validation-work/bench",
+      "bins"
+    ],
+    [
+      "make",
+      "-C",
+      "/mnt/data/projects/kernelet/poc/linux/runner",
+      "OUT_DIR=/mnt/data/projects/kernelet/.direct-handler-validation-work/runner"
+    ],
+    [
+      "bash",
+      "/mnt/data/projects/kernelet/poc/linux/bench/pack_initramfs.sh"
+    ],
+    [
+      "/home/plucky/.local/bin/qemu-system-x86_64",
+      "-enable-kvm",
+      "-cpu",
+      "host",
+      "-smp",
+      "2",
+      "-m",
+      "1024M",
+      "-nic",
+      "none",
+      "-no-reboot",
+      "-display",
+      "none",
+      "-monitor",
+      "none",
+      "-serial",
+      "file:/mnt/data/projects/kernelet/.direct-handler-validation-work/qemu-syscall.log",
+      "-kernel",
+      "/mnt/data/projects/kernelet/prototype/.build/linux-6.12/arch/x86/boot/bzImage",
+      "-initrd",
+      "/mnt/data/projects/kernelet/.direct-handler-validation-work/bench/host-initramfs.cpio.gz",
+      "-append",
+      "console=ttyS0 panic=-1 nokaslr mitigations=off poc_mode=poc-syscall poc_pt_mode=direct poc_vcpus=2 poc_grant_mb=256"
+    ],
+    [
+      "objdump",
+      "-drwC",
+      "--disassemble=user_event_entry",
+      "/mnt/data/projects/kernelet/poc/target/kernelet-unsafe-audit-3ca09e6d066ee3cf/kernelet-image.elf"
+    ]
+  ]
+}

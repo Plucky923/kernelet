@@ -1,0 +1,18 @@
+{
+  "component": "linux_perf_pti",
+  "input_sha256": "a72336b5748c0a5ab12d594b62ea93694841c2722412aa268fd4fa90689ee538",
+  "toolchain": "gcc (GCC) 16.2.1 20260810",
+  "outputs_sha256": {
+    "linux_perf_pti_bzimage": "62623935fa4e18dbb89a701969ad9d403b62e02511ab5ebf80acbbc5c1de32b3",
+    "linux_perf_pti_config": "cd84017d04bf0efa2bcc1b0cefcee9691cbe41370ecff87b4771d8e45218da91",
+    "linux_perf_pti_symvers": "09ae5bff1288e9a9b64fad22bd474c2c37eca43b12d840ad0b4c21897154509c",
+    "linux_perf_pti_system_map": "547de9b1aa6e71a7e7b4c01899d0afbea6120e129842e0b7ba4e2f38a1a3459c"
+  },
+  "outputs_rel": {
+    "linux_perf_pti_bzimage": "linux-perf-pti/arch/x86/boot/bzImage",
+    "linux_perf_pti_config": "linux-perf-pti/.config",
+    "linux_perf_pti_symvers": "linux-perf-pti/Module.symvers",
+    "linux_perf_pti_system_map": "linux-perf-pti/System.map"
+  },
+  "built_utc": "2026-11-17T12:00:47.763096+00:00"
+}

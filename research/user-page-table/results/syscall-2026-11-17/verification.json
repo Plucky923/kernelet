@@ -1,0 +1,213 @@
+{
+  "final-ab": {
+    "valid_boots": 30,
+    "valid_windows": 270,
+    "tsc_monotonic_ghz_range": [
+      3.193750362697415,
+      3.1942143764221385
+    ],
+    "summary": [
+      {
+        "label": "L",
+        "boots": [
+          39.41614,
+          39.362192,
+          39.428737,
+          39.465464,
+          39.733719
+        ],
+        "median_ns": 39.428737,
+        "min_ns": 39.362192,
+        "max_ns": 39.733719
+      },
+      {
+        "label": "K0",
+        "boots": [
+          99.379438,
+          99.078539,
+          98.988885,
+          98.457614,
+          98.511365
+        ],
+        "median_ns": 98.988885,
+        "min_ns": 98.457614,
+        "max_ns": 99.379438
+      },
+      {
+        "label": "K1",
+        "boots": [
+          100.584713,
+          98.504203,
+          100.200194,
+          100.305395,
+          98.85
+        ],
+        "median_ns": 100.200194,
+        "min_ns": 98.504203,
+        "max_ns": 100.584713
+      },
+      {
+        "label": "K2",
+        "boots": [
+          97.929427,
+          98.272424,
+          97.899583,
+          98.241683,
+          98.106182
+        ],
+        "median_ns": 98.106182,
+        "min_ns": 97.899583,
+        "max_ns": 98.272424
+      },
+      {
+        "label": "K3",
+        "boots": [
+          97.621141,
+          97.351218,
+          97.694546,
+          94.639281,
+          94.081019
+        ],
+        "median_ns": 97.351218,
+        "min_ns": 94.081019,
+        "max_ns": 97.694546
+      },
+      {
+        "label": "K4",
+        "boots": [
+          97.346945,
+          96.795292,
+          94.126959,
+          97.270423,
+          97.531268
+        ],
+        "median_ns": 97.270423,
+        "min_ns": 94.126959,
+        "max_ns": 97.531268
+      }
+    ]
+  },
+  "mitigations-off": {
+    "valid_boots": 10,
+    "valid_windows": 90,
+    "tsc_monotonic_ghz_range": [
+      3.1940492551179225,
+      3.1942139322873775
+    ],
+    "summary": [
+      {
+        "label": "L",
+        "boots": [
+          37.169964,
+          37.006058,
+          37.05721,
+          36.948104,
+          37.07314
+        ],
+        "median_ns": 37.05721,
+        "min_ns": 36.948104,
+        "max_ns": 37.169964
+      },
+      {
+        "label": "K",
+        "boots": [
+          97.844665,
+          94.4844,
+          93.940597,
+          94.414312,
+          98.224225
+        ],
+        "median_ns": 94.4844,
+        "min_ns": 93.940597,
+        "max_ns": 98.224225
+      }
+    ]
+  },
+  "mitigations-auto": {
+    "valid_boots": 10,
+    "valid_windows": 90,
+    "tsc_monotonic_ghz_range": [
+      3.1938281717367616,
+      3.1942139870901403
+    ],
+    "summary": [
+      {
+        "label": "L",
+        "boots": [
+          93.540163,
+          93.836965,
+          93.525551,
+          93.277165,
+          93.873045
+        ],
+        "median_ns": 93.540163,
+        "min_ns": 93.277165,
+        "max_ns": 93.873045
+      },
+      {
+        "label": "K",
+        "boots": [
+          143.36299,
+          143.666913,
+          144.046313,
+          144.122267,
+          144.045018
+        ],
+        "median_ns": 144.045018,
+        "min_ns": 143.36299,
+        "max_ns": 144.122267
+      }
+    ]
+  },
+  "tool-validation": {
+    "valid_boots": 2,
+    "valid_windows": 18,
+    "tsc_monotonic_ghz_range": [
+      3.194030342584329,
+      3.194204855093713
+    ],
+    "summary": [
+      {
+        "label": "L",
+        "boots": [
+          39.323317
+        ],
+        "median_ns": 39.323317,
+        "min_ns": 39.323317,
+        "max_ns": 39.323317
+      },
+      {
+        "label": "K",
+        "boots": [
+          97.59894
+        ],
+        "median_ns": 97.59894,
+        "min_ns": 97.59894,
+        "max_ns": 97.59894
+      }
+    ]
+  },
+  "rejected_boot_recorded": true,
+  "primary_comparison": {
+    "median_reduction_ns": 1.7184620000000024,
+    "median_reduction_percent": 1.7360151091710978,
+    "final_minus_linux_ns": 57.841685999999996,
+    "final_over_linux_ratio": 2.4669931223006203
+  },
+  "mitigation_comparison": {
+    "linux_auto_minus_off_ns": 56.48295300000001,
+    "kernelet_auto_minus_off_ns": 49.560618000000005,
+    "off_kernelet_minus_linux_ns": 57.427189999999996,
+    "auto_kernelet_minus_linux_ns": 50.50485499999999
+  },
+  "functional_cases": [
+    "audit",
+    "direct-events",
+    "direct-safety",
+    "direct-smp-fpu",
+    "kill",
+    "lifecycle",
+    "vma-events",
+    "vma-safety"
+  ]
+}

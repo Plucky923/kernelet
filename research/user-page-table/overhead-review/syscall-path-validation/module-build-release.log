@@ -1,0 +1,11 @@
+make: Entering directory '/mnt/data/projects/kernelet/prototype/.build/linux-6.12'
+  CC [M]  /mnt/data/projects/kernelet/.syscall-overhead-work/module-release/main.o
+  CC [M]  /mnt/data/projects/kernelet/.syscall-overhead-work/module-release/image.o
+  CC [M]  /mnt/data/projects/kernelet/.syscall-overhead-work/module-release/grant.o
+  CC [M]  /mnt/data/projects/kernelet/.syscall-overhead-work/module-release/space.o
+  CC [M]  /mnt/data/projects/kernelet/.syscall-overhead-work/module-release/carrier.o
+  CC [M]  /mnt/data/projects/kernelet/.syscall-overhead-work/module-release/watch.o
+  LD [M]  /mnt/data/projects/kernelet/.syscall-overhead-work/module-release/endovisor.o
+  MODPOST /mnt/data/projects/kernelet/.syscall-overhead-work/module-release/Module.symvers
+  LD [M]  /mnt/data/projects/kernelet/.syscall-overhead-work/module-release/endovisor.ko
+make: Leaving directory '/mnt/data/projects/kernelet/prototype/.build/linux-6.12'

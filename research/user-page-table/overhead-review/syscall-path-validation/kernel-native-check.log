@@ -1,0 +1,449 @@
+    Blocking waiting for file lock on package cache
+    Blocking waiting for file lock on package cache
+warning: unnecessary qualification
+  --> ostd/libs/unwinding/src/unwinder/arch/x86_64.rs:82:20
+   |
+82 | impl ops::IndexMut<gimli::Register> for Context {
+   |                    ^^^^^^^^^^^^^^^
+   |
+   = note: requested on the command line with `-W unused-qualifications`
+help: remove the unnecessary path segments
+   |
+82 - impl ops::IndexMut<gimli::Register> for Context {
+82 + impl ops::IndexMut<Register> for Context {
+   |
+
+warning: unnecessary qualification
+  --> ostd/libs/unwinding/src/unwinder/find_fde/gnu_eh_frame_hdr.rs:33:36
+   |
+33 |                     .parse(&bases, core::mem::size_of::<usize>() as _)
+   |                                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+help: remove the unnecessary path segments
+   |
+33 -                     .parse(&bases, core::mem::size_of::<usize>() as _)
+33 +                     .parse(&bases, size_of::<usize>() as _)
+   |
+
+warning: unnecessary qualification
+  --> ostd/libs/unwinding/src/personality.rs:30:13
+   |
+30 |         Err(gimli::Error::UnknownPointerEncoding(eh_pe))
+   |             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+help: remove the unnecessary path segments
+   |
+30 -         Err(gimli::Error::UnknownPointerEncoding(eh_pe))
+30 +         Err(Error::UnknownPointerEncoding(eh_pe))
+   |
+
+warning: unnecessary qualification
+  --> ostd/libs/unwinding/src/personality.rs:57:58
+   |
+57 |         constants::DW_EH_PE_absptr => input.read_address(mem::size_of::<usize>() as _),
+   |                                                          ^^^^^^^^^^^^^^^^^^^^^
+   |
+help: remove the unnecessary path segments
+   |
+57 -         constants::DW_EH_PE_absptr => input.read_address(mem::size_of::<usize>() as _),
+57 +         constants::DW_EH_PE_absptr => input.read_address(size_of::<usize>() as _),
+   |
+
+warning: unreachable `pub` item
+ --> ostd/libs/unwinding/src/unwinder/arch/mod.rs:4:9
+  |
+4 | pub use x86_64::*;
+  | ---     ^^^^^^
+  | |
+  | help: consider restricting its visibility: `pub(super)`
+  |
+  = help: or consider exporting it for use by other crates
+  = note: requested on the command line with `-W unreachable-pub`
+
+warning: unreachable `pub` item
+  --> ostd/libs/unwinding/src/unwinder/arch/x86_64.rs:41:1
+   |
+41 | pub const MAX_REG_RULES: usize = 17;
+   | ---^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   | |
+   | help: consider restricting its visibility: `pub(crate)`
+   |
+   = help: or consider exporting it for use by other crates
+
+warning: unreachable `pub` item
+  --> ostd/libs/unwinding/src/unwinder/arch/x86_64.rs:45:1
+   |
+45 | pub struct Context {
+   | ---^^^^^^^^^^^^^^^
+   | |
+   | help: consider restricting its visibility: `pub(crate)`
+   |
+   = help: or consider exporting it for use by other crates
+
+warning: unreachable `pub` item
+  --> ostd/libs/unwinding/src/unwinder/arch/x86_64.rs:95:1
+   |
+95 | pub extern "C-unwind" fn save_context(f: extern "C" fn(&mut Context, *mut ()), ptr: *mut ()) {
+   | ---^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   | |
+   | help: consider restricting its visibility: `pub(crate)`
+   |
+   = help: or consider exporting it for use by other crates
+
+warning: unreachable `pub` item
+   --> ostd/libs/unwinding/src/unwinder/arch/x86_64.rs:132:1
+    |
+132 | pub unsafe fn restore_context(ctx: &Context) -> ! {
+    | ---^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    | |
+    | help: consider restricting its visibility: `pub(crate)`
+    |
+    = help: or consider exporting it for use by other crates
+
+warning: unreachable `pub` item
+  --> ostd/libs/unwinding/src/unwinder/find_fde/mod.rs:24:1
+   |
+24 | pub struct FDESearchResult {
+   | ---^^^^^^^^^^^^^^^^^^^^^^^
+   | |
+   | help: consider restricting its visibility: `pub(super)`
+   |
+   = help: or consider exporting it for use by other crates
+
+warning: unreachable `pub` item
+  --> ostd/libs/unwinding/src/unwinder/find_fde/mod.rs:30:1
+   |
+30 | pub trait FDEFinder {
+   | ---^^^^^^^^^^^^^^^^
+   | |
+   | help: consider restricting its visibility: `pub(super)`
+   |
+   = help: or consider exporting it for use by other crates
+
+warning: unreachable `pub` item
+  --> ostd/libs/unwinding/src/unwinder/find_fde/mod.rs:34:1
+   |
+34 | pub struct GlobalFinder(());
+   | ---^^^^^^^^^^^^^^^^^^^^
+   | |
+   | help: consider restricting its visibility: `pub(super)`
+   |
+   = help: or consider exporting it for use by other crates
+
+warning: unreachable `pub` item
+  --> ostd/libs/unwinding/src/unwinder/find_fde/mod.rs:62:1
+   |
+62 | pub fn get_finder() -> &'static GlobalFinder {
+   | ---^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   | |
+   | help: consider restricting its visibility: `pub(super)`
+   |
+   = help: or consider exporting it for use by other crates
+
+warning: unreachable `pub` item
+ --> ostd/libs/unwinding/src/unwinder/find_fde/gnu_eh_frame_hdr.rs:6:1
+  |
+6 | pub struct StaticFinder(());
+  | ---^^^^^^^^^^^^^^^^^^^^
+  | |
+  | help: consider restricting its visibility: `pub(super)`
+  |
+  = help: or consider exporting it for use by other crates
+
+warning: unreachable `pub` item
+ --> ostd/libs/unwinding/src/unwinder/find_fde/gnu_eh_frame_hdr.rs:8:1
+  |
+8 | pub fn get_finder() -> &'static StaticFinder {
+  | ---^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  | |
+  | help: consider restricting its visibility: `pub(super)`
+  |
+  = help: or consider exporting it for use by other crates
+
+warning: unreachable `pub` item
+  --> ostd/libs/unwinding/src/unwinder/frame.rs:41:1
+   |
+41 | pub struct Frame {
+   | ---^^^^^^^^^^^^^
+   | |
+   | help: consider restricting its visibility: `pub(super)`
+   |
+   = help: or consider exporting it for use by other crates
+
+warning: unreachable `pub` item
+  --> ostd/libs/unwinding/src/unwinder/frame.rs:47:5
+   |
+47 |     pub fn from_context(ctx: &Context, signal: bool) -> Result<Option<Self>, gimli::Error> {
+   |     ---^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   |     |
+   |     help: consider restricting its visibility: `pub(super)`
+
+warning: unreachable `pub` item
+   --> ostd/libs/unwinding/src/unwinder/frame.rs:129:5
+    |
+129 |     pub fn adjust_stack_for_args(&self, ctx: &mut Context) {
+    |     ---^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |     |
+    |     help: consider restricting its visibility: `pub(super)`
+
+warning: unreachable `pub` item
+   --> ostd/libs/unwinding/src/unwinder/frame.rs:134:5
+    |
+134 |     pub fn unwind(&self, ctx: &Context) -> Result<Context, gimli::Error> {
+    |     ---^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |     |
+    |     help: consider restricting its visibility: `pub(super)`
+
+warning: unreachable `pub` item
+   --> ostd/libs/unwinding/src/unwinder/frame.rs:174:5
+    |
+174 |     pub fn bases(&self) -> &BaseAddresses {
+    |     ---^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |     |
+    |     help: consider restricting its visibility: `pub(super)`
+
+warning: unreachable `pub` item
+   --> ostd/libs/unwinding/src/unwinder/frame.rs:178:5
+    |
+178 |     pub fn personality(&self) -> Option<PersonalityRoutine> {
+    |     ---^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |     |
+    |     help: consider restricting its visibility: `pub(super)`
+
+warning: unreachable `pub` item
+   --> ostd/libs/unwinding/src/unwinder/frame.rs:186:5
+    |
+186 |     pub fn lsda(&self) -> usize {
+    |     ---^^^^^^^^^^^^^^^^^^^^^^^^
+    |     |
+    |     help: consider restricting its visibility: `pub(super)`
+
+warning: unreachable `pub` item
+   --> ostd/libs/unwinding/src/unwinder/frame.rs:194:5
+    |
+194 |     pub fn initial_address(&self) -> usize {
+    |     ---^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |     |
+    |     help: consider restricting its visibility: `pub(super)`
+
+warning: unreachable `pub` item
+   --> ostd/libs/unwinding/src/unwinder/frame.rs:198:5
+    |
+198 |     pub fn is_signal_trampoline(&self) -> bool {
+    |     ---^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |     |
+    |     help: consider restricting its visibility: `pub(super)`
+
+warning: unreachable `pub` item
+  --> ostd/libs/unwinding/src/arch.rs:17:9
+   |
+17 | pub use x86_64::*;
+   | ---     ^^^^^^
+   | |
+   | help: consider restricting its visibility: `pub(crate)`
+   |
+   = help: or consider exporting it for use by other crates
+
+warning: unreachable `pub` item
+ --> ostd/libs/unwinding/src/arch.rs:5:5
+  |
+5 |     pub struct Arch;
+  |     ---^^^^^^^^^^^^
+  |     |
+  |     help: consider restricting its visibility: `pub(crate)`
+  |
+  = help: or consider exporting it for use by other crates
+
+warning: unreachable `pub` item
+ --> ostd/libs/unwinding/src/arch.rs:9:9
+  |
+9 |         pub const SP: Register = X86_64::RSP;
+  |         ---^^^^^^^^^^^^^^^^^^^
+  |         |
+  |         help: consider restricting its visibility: `pub(crate)`
+
+warning: unreachable `pub` item
+  --> ostd/libs/unwinding/src/arch.rs:10:9
+   |
+10 |         pub const RA: Register = X86_64::RA;
+   |         ---^^^^^^^^^^^^^^^^^^^
+   |         |
+   |         help: consider restricting its visibility: `pub(crate)`
+
+warning: unreachable `pub` item
+  --> ostd/libs/unwinding/src/arch.rs:12:9
+   |
+12 |         pub const UNWIND_DATA_REG: (Register, Register) = (X86_64::RAX, X86_64::RDX);
+   |         ---^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   |         |
+   |         help: consider restricting its visibility: `pub(crate)`
+
+warning: unreachable `pub` item
+  --> ostd/libs/unwinding/src/arch.rs:13:9
+   |
+13 |         pub const UNWIND_PRIVATE_DATA_SIZE: usize = 6;
+   |         ---^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   |         |
+   |         help: consider restricting its visibility: `pub(crate)`
+
+warning: unreachable `pub` item
+ --> ostd/libs/unwinding/src/util.rs:3:1
+  |
+3 | pub type StaticSlice = EndianSlice<'static, NativeEndian>;
+  | ---^^^^^^^^^^^^^^^^^
+  | |
+  | help: consider restricting its visibility: `pub(crate)`
+  |
+  = help: or consider exporting it for use by other crates
+
+warning: unreachable `pub` item
+ --> ostd/libs/unwinding/src/util.rs:5:1
+  |
+5 | pub unsafe fn get_unlimited_slice<'a>(start: *const u8) -> &'a [u8] {
+  | ---^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  | |
+  | help: consider restricting its visibility: `pub(crate)`
+  |
+  = help: or consider exporting it for use by other crates
+
+warning: unreachable `pub` item
+  --> ostd/libs/unwinding/src/util.rs:13:1
+   |
+13 | pub unsafe fn deref_pointer(ptr: Pointer) -> usize {
+   | ---^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   | |
+   | help: consider restricting its visibility: `pub(crate)`
+   |
+   = help: or consider exporting it for use by other crates
+
+warning: unreachable `pub` item
+  --> ostd/libs/unwinding/src/util.rs:25:1
+   |
+25 | pub type c_int = i32;
+   | ---^^^^^^^^^^^
+   | |
+   | help: consider restricting its visibility: `pub(crate)`
+   |
+   = help: or consider exporting it for use by other crates
+
+warning: unreachable `pub` item
+  --> ostd/libs/unwinding/src/util.rs:39:1
+   |
+39 | pub fn abort() -> ! {
+   | ---^^^^^^^^^^^^^^^^
+   | |
+   | help: consider restricting its visibility: `pub(crate)`
+   |
+   = help: or consider exporting it for use by other crates
+
+warning: `unwinding` (lib) generated 35 warnings (run `cargo fix --lib -p unwinding` to apply 35 suggestions)
+    Checking ostd v0.19.0 (/mnt/data/projects/kernelet/poc/ostd)
+warning: unused import: `super::fragmentation::PacketAssemblerSet`
+  --> vendor/smoltcp/src/iface/interface/mod.rs:35:5
+   |
+35 | use super::fragmentation::PacketAssemblerSet;
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = note: `#[warn(unused_imports)]` (part of `#[warn(unused)]`) on by default
+
+warning: unused import: `IFACE_MAX_SIXLOWPAN_ADDRESS_CONTEXT_COUNT`
+  --> vendor/smoltcp/src/iface/interface/mod.rs:41:43
+   |
+41 | use crate::config::{IFACE_MAX_ADDR_COUNT, IFACE_MAX_SIXLOWPAN_ADDRESS_CONTEXT_COUNT};
+   |                                           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: unused variable: `frag`
+  --> vendor/smoltcp/src/iface/interface/ipv4.rs:91:9
+   |
+91 |         frag: &'a mut FragmentsBuffer,
+   |         ^^^^ help: if this is intentional, prefix it with an underscore: `_frag`
+   |
+   = note: `#[warn(unused_variables)]` (part of `#[warn(unused)]`) on by default
+
+warning: unused variable: `repr`
+    --> vendor/smoltcp/src/iface/interface/mod.rs:1210:26
+     |
+1210 |             IpRepr::Ipv4(repr) => {
+     |                          ^^^^ help: if this is intentional, prefix it with an underscore: `_repr`
+
+warning: methods `link_local_ipv6_address` and `mldv2_report_packet` are never used
+   --> vendor/smoltcp/src/iface/interface/ipv6.rs:171:8
+    |
+ 21 | impl InterfaceInner {
+    | ------------------- methods in this implementation
+...
+171 |     fn link_local_ipv6_address(&self) -> Option<Ipv6Address> {
+    |        ^^^^^^^^^^^^^^^^^^^^^^^
+...
+526 |     pub(super) fn mldv2_report_packet<'any>(
+    |                   ^^^^^^^^^^^^^^^^^^^
+    |
+    = note: `#[warn(dead_code)]` (part of `#[warn(unused)]`) on by default
+
+warning: hiding a lifetime that's elided elsewhere is confusing
+   --> vendor/smoltcp/src/storage/assembler.rs:330:22
+    |
+330 |     pub fn iter_data(&self, first_offset: usize) -> AssemblerIter {
+    |                      ^^^^^                          ^^^^^^^^^^^^^ the same lifetime is hidden here
+    |                      |
+    |                      the lifetime is elided here
+    |
+    = help: the same lifetime is referred to in inconsistent ways, making the signature confusing
+    = note: `#[warn(mismatched_lifetime_syntaxes)]` on by default
+help: use `'_` for type paths
+    |
+330 |     pub fn iter_data(&self, first_offset: usize) -> AssemblerIter<'_> {
+    |                                                                  ++++
+
+warning: `smoltcp` (lib) generated 6 warnings (run `cargo fix --lib -p smoltcp` to apply 5 suggestions)
+warning: unused label
+   --> ostd/src/mm/dma/util.rs:121:22
+    |
+121 |     let priv_flags = 'priv_flags: {
+    |                      ^^^^^^^^^^^
+    |
+    = note: `#[warn(unused_labels)]` (part of `#[warn(unused)]`) on by default
+
+warning: unused variable: `num_cpus`
+   --> ostd/src/arch/x86/boot/smp.rs:117:84
+    |
+117 | pub(crate) unsafe fn bringup_all_aps(info_ptr: *const PerApRawInfo, pt_ptr: Paddr, num_cpus: u32) {
+    |                                                                                    ^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_num_cpus`
+    |
+    = note: `#[warn(unused_variables)]` (part of `#[warn(unused)]`) on by default
+
+warning: `ostd` (lib) generated 2 warnings (run `cargo fix --lib -p ostd` to apply 1 suggestion)
+    Checking osdk-heap-allocator v0.19.0 (/mnt/data/projects/kernelet/poc/osdk/deps/heap-allocator)
+    Checking aster-pci v0.1.0 (/mnt/data/projects/kernelet/poc/kernel/core/comps/pci)
+    Checking aster-console v0.1.0 (/mnt/data/projects/kernelet/poc/kernel/core/comps/console)
+    Checking aster-fuse v0.1.0 (/mnt/data/projects/kernelet/poc/kernel/libs/aster-fuse)
+    Checking aster-cmdline v0.1.0 (/mnt/data/projects/kernelet/poc/kernel/core/comps/cmdline)
+    Checking aster-input v0.1.0 (/mnt/data/projects/kernelet/poc/kernel/core/comps/input)
+    Checking ring-buffer v0.1.0 (/mnt/data/projects/kernelet/poc/kernel/libs/ring-buffer)
+    Checking osdk-frame-allocator v0.19.0 (/mnt/data/projects/kernelet/poc/osdk/deps/frame-allocator)
+    Checking aster-framebuffer v0.1.0 (/mnt/data/projects/kernelet/poc/kernel/core/comps/framebuffer)
+    Checking xarray v0.1.0 (/mnt/data/projects/kernelet/poc/kernel/libs/xarray)
+    Checking aster-logger v0.1.0 (/mnt/data/projects/kernelet/poc/kernel/core/comps/logger)
+    Checking aster-util v0.1.0 (/mnt/data/projects/kernelet/poc/kernel/libs/aster-util)
+    Checking aster-softirq v0.1.0 (/mnt/data/projects/kernelet/poc/kernel/core/comps/softirq)
+    Checking device-id v0.1.0 (/mnt/data/projects/kernelet/poc/kernel/libs/device-id)
+    Checking aster-systree v0.1.0 (/mnt/data/projects/kernelet/poc/kernel/core/comps/systree)
+    Checking aster-time v0.1.0 (/mnt/data/projects/kernelet/poc/kernel/core/comps/time)
+    Checking dma-pool v0.1.0 (/mnt/data/projects/kernelet/poc/kernel/libs/dma-pool)
+    Checking aster-device v0.1.0 (/mnt/data/projects/kernelet/poc/kernel/core/comps/device)
+    Checking aster-block v0.1.0 (/mnt/data/projects/kernelet/poc/kernel/core/comps/block)
+    Checking aster-bigtcp v0.1.0 (/mnt/data/projects/kernelet/poc/kernel/libs/aster-bigtcp)
+    Checking aster-nvme v0.1.0 (/mnt/data/projects/kernelet/poc/kernel/core/comps/nvme)
+    Checking aster-network v0.1.0 (/mnt/data/projects/kernelet/poc/kernel/core/comps/network)
+    Checking aster-virtio v0.1.0 (/mnt/data/projects/kernelet/poc/kernel/core/comps/virtio)
+    Checking aster-core v0.1.0 (/mnt/data/projects/kernelet/poc/kernel/core)
+warning: function `register_subsystem` is never used
+  --> kernel/core/src/fs/fs_impls/configfs/mod.rs:30:15
+   |
+30 | pub(crate) fn register_subsystem(subsystem: Arc<dyn SysBranchNode>) -> Result<()> {
+   |               ^^^^^^^^^^^^^^^^^^
+   |
+   = note: `#[warn(dead_code)]` (part of `#[warn(unused)]`) on by default
+
+warning: `aster-core` (lib) generated 1 warning
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 8.79s

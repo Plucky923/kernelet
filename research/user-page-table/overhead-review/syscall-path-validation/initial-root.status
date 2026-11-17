@@ -1,0 +1,6 @@
+ M book/src/SUMMARY.md
+ M prototype/linux/patches/0001-carrier-hooks.patch
+?? book/src/design-proposals/2026-11-13-direct-page-table-updates-in-vostd.md
+?? book/src/design-proposals/2026-11-16-allocate-the-kernelet-heap-from-the-grant.md
+?? book/src/design-proposals/2026-11-16-principles-of-api-virtualization.md
+?? book/src/images/

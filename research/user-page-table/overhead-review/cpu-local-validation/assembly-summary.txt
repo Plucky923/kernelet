@@ -1,0 +1,8 @@
+baseline event 930 bytes 4 protected call sites
+baseline first 500 bytes 4 protected call sites
+baseline enable 249 bytes 8 protected call sites
+baseline preempt_drop 106 bytes 3 protected call sites
+candidate event 1025 bytes 3 protected call sites
+candidate first 618 bytes 4 protected call sites
+candidate enable 239 bytes 7 protected call sites
+candidate preempt_drop 123 bytes 2 protected call sites

@@ -1,0 +1,53 @@
+{
+  "started_utc": "2026-11-17T09:59:10.105965+00:00",
+  "command": [
+    "qemu-system-x86_64",
+    "-enable-kvm",
+    "-cpu",
+    "host",
+    "-smp",
+    "2",
+    "-m",
+    "1024M",
+    "-kernel",
+    "/mnt/data/projects/kernelet/prototype/.build/linux-6.12/arch/x86/boot/bzImage",
+    "-initrd",
+    "/mnt/data/projects/kernelet/.syscall-overhead-work/host-release.cpio.gz",
+    "-append",
+    "console=ttyS0 panic=-1 nokaslr mitigations=off kernelet_mode=native-lifecycle kernelet_pt_mode=direct kernelet_vcpus=2 kernelet_grant_mb=256 kernelet_attach=exec",
+    "-display",
+    "none",
+    "-serial",
+    "stdio",
+    "-monitor",
+    "none",
+    "-no-reboot",
+    "-nic",
+    "none"
+  ],
+  "image_sha256": "d2567c78f6eda9b20c03b72e5e047cfaba2929034af9ee4edcae071c8bf25c5f",
+  "module_sha256": "ff2b256c6c7702b35f675f449da8f20550d235c436d7802875024eee9fed1040",
+  "kernel_sha256": "114963b3e3bda3901938272763ec9ec8e8640ad7143865350b5fd310d8fa93df",
+  "initrd_sha256": "f5b29aaa848b951c6329afd7673394296030e545338b5eae7cd33e46cb593924",
+  "rlimit_memlock_soft": 0,
+  "exit_code": 0,
+  "results": {
+    "register_readonly_output": "1",
+    "register_capacity_rollback": "1",
+    "unregister_privilege": "1",
+    "task_capacity_overflow": "1",
+    "attach_requires_private_state": "1",
+    "attach_descriptor_exhaustion": "1",
+    "repeated_cleanup": "1",
+    "suite_done": "1"
+  },
+  "checks": {
+    "qemu_exit_zero": true,
+    "host_complete": true,
+    "host_result": true,
+    "module_unloaded": true,
+    "no_host_fault": true,
+    "suite_complete": true,
+    "all_boolean_results_pass": true
+  }
+}

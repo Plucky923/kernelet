@@ -1,0 +1,11 @@
+{
+  "source_files_checked": 2579,
+  "final_qemu_boots_passed": 14,
+  "osdk_snapshots": {
+    "release": "bff0e5dcfaf99ec9b3d996b6910e37f16ad0a7f0b4b8f6a8edfc7a08dab5600f",
+    "debug": "bff0e5dcfaf99ec9b3d996b6910e37f16ad0a7f0b4b8f6a8edfc7a08dab5600f"
+  },
+  "artifact_identity": "all final runs match the retained artifacts",
+  "module_sources": "both profiles match current C sources",
+  "rust_sources": "reviewed files match both immutable build snapshots"
+}

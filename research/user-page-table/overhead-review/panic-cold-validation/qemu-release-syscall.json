@@ -1,0 +1,50 @@
+{
+  "started_utc": "2026-11-17T08:00:45.937428+00:00",
+  "command": [
+    "qemu-system-x86_64",
+    "-enable-kvm",
+    "-cpu",
+    "host",
+    "-smp",
+    "2",
+    "-m",
+    "1024M",
+    "-kernel",
+    "/mnt/data/projects/kernelet/prototype/.build/linux-6.12/arch/x86/boot/bzImage",
+    "-initrd",
+    "/mnt/data/projects/kernelet/.panic-cold-validation-work/host-release.cpio.gz",
+    "-append",
+    "console=ttyS0 panic=-1 nokaslr mitigations=off poc_mode=poc-syscall poc_pt_mode=direct poc_vcpus=2 poc_grant_mb=256",
+    "-display",
+    "none",
+    "-serial",
+    "stdio",
+    "-monitor",
+    "none",
+    "-no-reboot",
+    "-nic",
+    "none"
+  ],
+  "memlock_soft": 0,
+  "qemu_exit_code": 0,
+  "checks": {
+    "qemu_exit_zero": true,
+    "host_completed": true,
+    "guest_results": true,
+    "carrier_exit": true
+  },
+  "results": {
+    "smp_check": "1",
+    "reg_preserve_getpid": "1",
+    "reg_preserve_nanosleep": "1",
+    "fpu_sse_getpid_ok": "1",
+    "fpu_avx_getpid_ok": "1",
+    "fpu_switch_sse_aba_ns_ok": "1",
+    "fpu_switch_avx_aba_ns_ok": "1",
+    "rt_sigreturn_valid": "1",
+    "rt_sigreturn_bad_mxcsr": "1",
+    "rt_sigreturn_bad_xcomp_bv": "1",
+    "suite_done": "1"
+  },
+  "carrier_exit": "RUN_POC exit_kind=exit exit_code=0 grant_create_us=26765 exit_msg=\"\""
+}

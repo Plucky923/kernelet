@@ -1,0 +1,1442 @@
+--- a/poc/linux/bench/bench_syscall_fpu.c
++++ b/poc/linux/bench/bench_syscall_fpu.c
+@@ -28,6 +28,7 @@
+ 
+ #define GETPID_WARMUP 50000
+ #define GETPID_ITERS  1000000
++#define GETPID_SAMPLES 9
+ #define FPU_ABA_TRIPS 50000
+ #define SMP_ROUNDS    1000
+ 
+@@ -35,8 +36,20 @@
+ {
+ 	struct timespec ts;
+ 
+-	clock_gettime(CLOCK_MONOTONIC, &ts);
++	if (clock_gettime(CLOCK_MONOTONIC, &ts) != 0) {
++		perror("clock_gettime");
++		exit(EXIT_FAILURE);
++	}
+ 	return (uint64_t)ts.tv_sec * 1000000000ULL + (uint64_t)ts.tv_nsec;
++}
++
++static int current_cpu(void)
++{
++	unsigned int cpu;
++
++	if (syscall(SYS_getcpu, &cpu, NULL, NULL) != 0)
++		return -1;
++	return (int)cpu;
+ }
+ 
+ static int pin_to_cpu(int cpu)
+@@ -48,11 +61,11 @@
+ 	if (sched_setaffinity(0, sizeof(set), &set) != 0)
+ 		return -1;
+ 	sched_yield();
+-	if (sched_getcpu() != cpu) {
++	if (current_cpu() != cpu) {
+ 		struct timespec ts = { .tv_sec = 0, .tv_nsec = 200000L };
+ 		nanosleep(&ts, NULL);
+ 	}
+-	return 0;
++	return current_cpu() == cpu ? 0 : -1;
+ }
+ 
+ static void restore_all_cpus(long nproc)
+@@ -113,7 +126,7 @@
+ 	for (int i = 0; i < SMP_ROUNDS; i++) {
+ 		while (atomic_load_explicit(&sh->turn, memory_order_acquire) != id)
+ 			sched_yield();
+-		int c = sched_getcpu();
++		int c = current_cpu();
+ 		if (c >= 0)
+ 			atomic_store_explicit(&sh->cpu_seen[id], c, memory_order_relaxed);
+ 		atomic_fetch_add_explicit(&sh->pings, 1, memory_order_relaxed);
+@@ -207,7 +220,7 @@
+ 				for (int i = 0; i < SMP_ROUNDS; i++) {
+ 					while (atomic_load_explicit(&sh->turn, memory_order_acquire) != id)
+ 						sched_yield();
+-					int c = sched_getcpu();
++					int c = current_cpu();
+ 					if (c >= 0)
+ 						atomic_store_explicit(&sh->cpu_seen[id], c, memory_order_relaxed);
+ 					atomic_fetch_add_explicit(&sh->pings, 1, memory_order_relaxed);
+@@ -250,18 +263,20 @@
+ // ------------------------------------------------------------------
+ 
+ __attribute__((noinline))
+-static void raw_getpid_loop(int iters)
++static long raw_getpid_loop(int iters)
+ {
+ 	long cnt = iters;
++	long pid;
+ 	__asm__ __volatile__(
+ 		"1:\n\t"
+ 		"mov $39, %%eax\n\t"
+ 		"syscall\n\t"
+ 		"dec %[cnt]\n\t"
+ 		"jnz 1b\n\t"
+-		: [cnt] "+r"(cnt)
++		: [cnt] "+r"(cnt), "=&a"(pid)
+ 		:
+-		: "rax", "rcx", "r11", "cc", "memory");
++		: "rcx", "r11", "cc", "memory");
++	return pid;
+ }
+ 
+ struct reg_check_req {
+@@ -351,16 +366,71 @@
+ 	return ok;
+ }
+ 
++static uint64_t ordered_tsc(void)
++{
++	unsigned int lo, hi;
++
++	__asm__ __volatile__("lfence; rdtsc; lfence"
++			     : "=a"(lo), "=d"(hi) : : "memory");
++	return ((uint64_t)hi << 32) | lo;
++}
++
++static int compare_u64(const void *left, const void *right)
++{
++	uint64_t a = *(const uint64_t *)left;
++	uint64_t b = *(const uint64_t *)right;
++
++	return (a > b) - (a < b);
++}
++
+ static int run_getpid_bench(void)
+ {
+ 	uint64_t out[12];
++	uint64_t samples[GETPID_SAMPLES];
++	cpu_set_t original, actual;
++	long pid = syscall(SYS_getpid);
+ 	int ok = 1;
+ 
+-	raw_getpid_loop(GETPID_WARMUP);
+-	uint64_t t0 = now_ns();
+-	raw_getpid_loop(GETPID_ITERS);
+-	uint64_t dt = now_ns() - t0;
+-	printf("RESULT getpid_ns %.2f ns\n", (double)dt / (double)GETPID_ITERS);
++	if (sched_getaffinity(0, sizeof(original), &original) != 0 ||
++	    pin_to_cpu(0) != 0 ||
++	    sched_getaffinity(0, sizeof(actual), &actual) != 0 ||
++	    CPU_COUNT(&actual) != 1 || !CPU_ISSET(0, &actual) || pid <= 0) {
++		fprintf(stderr, "getpid benchmark requires a valid PID and CPU 0 affinity\n");
++		return 1;
++	}
++	for (int sample = 0; sample < GETPID_SAMPLES; sample++) {
++		if (raw_getpid_loop(GETPID_WARMUP) != pid || current_cpu() != 0) {
++			ok = 0;
++			break;
++		}
++		uint64_t ns_start = now_ns();
++		uint64_t tsc_start = ordered_tsc();
++		long observed = raw_getpid_loop(GETPID_ITERS);
++		uint64_t cycles = ordered_tsc() - tsc_start;
++		uint64_t elapsed_ns = now_ns() - ns_start;
++		int cpu = current_cpu();
++		int valid = observed == pid && cpu == 0 && elapsed_ns > 0;
++
++		printf("SYSCALL_SAMPLE {\"sample\":%d,\"iterations\":%d,"
++		       "\"elapsed_ns\":%llu,\"tsc_ticks\":%llu,\"cpu\":%d,"
++		       "\"pid\":%ld,\"valid\":%s}\n", sample, GETPID_ITERS,
++		       (unsigned long long)elapsed_ns, (unsigned long long)cycles,
++		       cpu, observed, valid ? "true" : "false");
++		if (!valid) {
++			ok = 0;
++			break;
++		}
++		samples[sample] = elapsed_ns;
++	}
++	if (sched_setaffinity(0, sizeof(original), &original) != 0)
++		ok = 0;
++	if (!ok) {
++		fprintf(stderr, "getpid benchmark validation failed\n");
++		return 1;
++	}
++	qsort(samples, GETPID_SAMPLES, sizeof(samples[0]), compare_u64);
++	printf("RESULT getpid_ns %.2f ns\n",
++	       (double)samples[GETPID_SAMPLES / 2] / GETPID_ITERS);
+ 
+ 	memset(out, 0, sizeof(out));
+ 	check_regs_syscall(SYS_getpid, 0x123456789abcdef0ULL, 0xfedcba9876543210ULL, out);
+@@ -795,7 +865,7 @@
+ 	struct aba_state st, exp, delta;
+ 
+ 	pin_to_cpu(0);
+-	if (sched_getcpu() != 0)
++	if (current_cpu() != 0)
+ 		atomic_fetch_add(&sh->errors, 1);
+ 	init_aba_state(&st, &delta, id);
+ 	exp = st;
+--- a/poc/linux/bench/host_init.c
++++ b/poc/linux/bench/host_init.c
+@@ -332,6 +332,49 @@
+ 	close(fd);
+ }
+ 
++static void report_file(const char *path)
++{
++	char value[512];
++	int fd = open(path, O_RDONLY | O_CLOEXEC);
++
++	if (fd < 0) {
++		outf("HOST_STATE %s unavailable: %s\n", path, strerror(errno));
++		return;
++	}
++	ssize_t len = read(fd, value, sizeof(value) - 1);
++	close(fd);
++	if (len < 0) {
++		outf("HOST_STATE %s read failed\n", path);
++		return;
++	}
++	value[len] = '\0';
++	outf("HOST_STATE %s %s", path, value);
++	if (len == 0 || value[len - 1] != '\n')
++		out("\n");
++}
++
++static void report_host_state(void)
++{
++	const char *directory = "/sys/devices/system/cpu/vulnerabilities";
++	DIR *dir = opendir(directory);
++	struct dirent *entry;
++
++	report_file("/sys/devices/system/clocksource/clocksource0/current_clocksource");
++	if (!dir) {
++		outf("HOST_STATE %s unavailable: %s\n", directory, strerror(errno));
++		return;
++	}
++	while ((entry = readdir(dir)) != NULL) {
++		char path[512];
++
++		if (entry->d_name[0] == '.')
++			continue;
++		snprintf(path, sizeof(path), "%s/%s", directory, entry->d_name);
++		report_file(path);
++	}
++	closedir(dir);
++}
++
+ int main(void)
+ {
+ 	char cmdline[2048] = "";
+@@ -341,6 +384,7 @@
+ 	char grant_mb[16] = "256";
+ 	char initramfs_path[128] = "";
+ 	char guest_cmd[256] = "";
++	char bench_suite[64] = "smp-syscall-fpu";
+ 	char mod_extra[256] = "";
+ 	char watch_arg[16] = "";
+ 	char image_path[128] = "/kernelet-image.elf";
+@@ -376,6 +420,7 @@
+ 	out("\n========================================\n");
+ 	out("INIT: Kernelet host init\n");
+ 	out("========================================\n");
++	report_host_state();
+ 
+ 	(void)get_cmdline_kv(cmdline, "kernelet_mode", mode, sizeof(mode));
+ 	(void)get_cmdline_kv(cmdline, "kernelet_pt_mode", pt_mode, sizeof(pt_mode));
+@@ -383,6 +428,7 @@
+ 	(void)get_cmdline_kv(cmdline, "kernelet_grant_mb", grant_mb, sizeof(grant_mb));
+ 	(void)get_cmdline_kv(cmdline, "kernelet_initramfs", initramfs_path, sizeof(initramfs_path));
+ 	(void)get_cmdline_kv(cmdline, "kernelet_guest_cmd", guest_cmd, sizeof(guest_cmd));
++	(void)get_cmdline_kv(cmdline, "kernelet_suite", bench_suite, sizeof(bench_suite));
+ 	(void)get_cmdline_kv(cmdline, "kernelet_mod_args", mod_extra, sizeof(mod_extra));
+ 	(void)get_cmdline_kv(cmdline, "kernelet_watch", watch_arg, sizeof(watch_arg));
+ 	(void)get_cmdline_kv(cmdline, "kernelet_image", image_path, sizeof(image_path));
+@@ -401,7 +447,7 @@
+ 
+ 	if (strcmp(mode, "native-syscall") == 0) {
+ 		char *argv[] = { (char *)"/tests/bench_syscall_fpu",
+-				 (char *)"--suite", (char *)"smp-syscall-fpu", NULL };
++				 (char *)"--suite", bench_suite, NULL };
+ 		result = run_argv(argv);
+ 	} else if (strcmp(mode, "native-mm") == 0) {
+ 		char *argv[] = { (char *)"/tests/bench_mm", NULL };
+--- a/poc/linux/endovisor/carrier.c
++++ b/poc/linux/endovisor/carrier.c
+@@ -1242,6 +1242,18 @@
+ 	svc_call(SVC_VCPU_ON_SPIN, 0, 0, 0, 0, 0, NULL);
+ }
+ 
++static noinline void audit_user_return(struct carrier *c)
++{
++	struct pt_regs *regs = c->user_regs;
++
++	if (c->from_syscall &&
++	    (regs->ip != regs->cx || regs->r11 != regs->flags ||
++	     regs->cs != __USER_CS || regs->ss != __USER_DS ||
++	     (regs->flags & (X86_EFLAGS_RF | X86_EFLAGS_TF)) ||
++	     regs->ip >= TASK_SIZE_MAX))
++		atomic64_inc(&c->sandbox->stats.non_sysret);
++}
++
+ void __noreturn do_user_run_on_linux(struct carrier *c)
+ {
+ 	struct sandbox *sandbox = c->sandbox;
+@@ -1293,14 +1305,8 @@
+ 	//    after the producer's `vrec->pending` write.
+ 	barrier();
+ 
+-	if (from_syscall &&
+-	    unlikely(regs->ip != regs->cx || regs->r11 != regs->flags ||
+-		     regs->cs != __USER_CS || regs->ss != __USER_DS ||
+-		     (regs->flags & (X86_EFLAGS_RF | X86_EFLAGS_TF)) ||
+-		     regs->ip >= TASK_SIZE_MAX ||
+-		     (((s64)regs->ip >> 47) != 0 && ((s64)regs->ip >> 47) != -1))) {
+-		atomic64_inc(&sandbox->stats.non_sysret);
+-	}
++	if (static_branch_unlikely(&endovisor_audit_key))
++		audit_user_return(c);
+ 
+ 	return_to_user(regs, from_syscall);
+ 	BUG();
+--- a/poc/linux/endovisor/main.c
++++ b/poc/linux/endovisor/main.c
+@@ -54,7 +54,7 @@
+ bool audit_enabled = false;
+ module_param_named(audit, audit_enabled, bool, 0444);
+ MODULE_PARM_DESC(audit,
+-		 "enable per-syscall carrier counter updates for audit runs (default 0)");
++		 "enable syscall counts and pre-return SYSRET eligibility diagnostics (default 0)");
+ 
+ int profile_hz = 0;
+ module_param_named(profile_hz, profile_hz, int, 0444);
+@@ -670,8 +670,9 @@
+ 	st->page_faults = atomic64_read(&sandbox->stats.page_faults);
+ 	st->virqs = atomic64_read(&sandbox->stats.virqs);
+ 	st->forced_yields = atomic64_read(&sandbox->stats.forced_yields);
+-	st->non_sysret = atomic64_read(&sandbox->stats.non_sysret);
+-	st->syscalls = (u64)atomic64_read(&sandbox->stats.syscalls) + live_syscalls;
++	st->non_sysret = audit_enabled ? atomic64_read(&sandbox->stats.non_sysret) : U64_MAX;
++	st->syscalls = audit_enabled ?
++		(u64)atomic64_read(&sandbox->stats.syscalls) + live_syscalls : U64_MAX;
+ 	st->grant_grains_allocated = READ_ONCE(sandbox->grant_grains_allocated);
+ 	st->grant_grains_freed = READ_ONCE(sandbox->grant_grains_freed);
+ }
+--- a/poc/linux/endovisor/switch.S
++++ b/poc/linux/endovisor/switch.S
+@@ -17,7 +17,6 @@
+  */
+ SYM_FUNC_START(enter_image)
+ 	movq	%rsi, %rsp
+-	andq	$-16, %rsp
+ 	movq	%rdi, %rax
+ 	movq	%rdx, %rdi
+ 	movq	%rcx, %rsi
+@@ -31,7 +30,6 @@
+  */
+ SYM_FUNC_START(jump_linux_stack)
+ 	movq	%rdi, %rsp
+-	andq	$-16, %rsp
+ 	movq	%rsi, %rax
+ 	movq	%rdx, %rdi
+ 	CALL_NOSPEC rax
+@@ -44,7 +42,6 @@
+  */
+ SYM_FUNC_START(jump_user_run)
+ 	movq	%rdi, %rsp
+-	andq	$-16, %rsp
+ 	movq	%rsi, %rdi
+ 	call	do_user_run_on_linux
+ 	ud2
+@@ -61,7 +58,6 @@
+ 	pushq	%rbp
+ 	movq	%rsp, %rbp
+ 	movq	%rdi, %rsp
+-	andq	$-16, %rsp
+ 	movq	%rsi, %rax
+ 	movq	%rdx, %rdi
+ 	CALL_NOSPEC rax
+@@ -87,7 +83,6 @@
+  * or `evict` redirects `regs->ip` (with `regs->sp = c->linux_sp`).
+  */
+ SYM_FUNC_START(exit_stub)
+-	andq	$-16, %rsp
+ 	call	evict_leave
+ 	ud2
+ SYM_FUNC_END(exit_stub)
+--- a/poc/linux/endovisor/endovisor.h
++++ b/poc/linux/endovisor/endovisor.h
+@@ -1,173 +1,679 @@
+-/* SPDX-License-Identifier: GPL-2.0 WITH Linux-syscall-note */
+-// Endovisor defines ioctls on `/dev/endovisor` and its sandbox
+-// descriptors for launching SMP Asterinas kernelets on Linux.
+-
+-#ifndef UAPI_ENDOVISOR_H
+-#define UAPI_ENDOVISOR_H
+-
+-#include <linux/ioctl.h>
++/* SPDX-License-Identifier: GPL-2.0 */
++// Internal declarations and ABI mirrors for `endovisor.ko`.
++
++#ifndef ENDOVISOR_INTERNAL_H
++#define ENDOVISOR_INTERNAL_H
++
++#include <linux/atomic.h>
++#include <linux/hashtable.h>
++#include <linux/hrtimer.h>
++#include <linux/jump_label.h>
++#include <linux/kernelet.h>
++#include <linux/list.h>
++#include <linux/mutex.h>
++#include <linux/preempt.h>
++#include <linux/rcupdate.h>
++#include <linux/refcount.h>
++#include <linux/spinlock.h>
+ #include <linux/types.h>
+-
+-#define IOC_MAGIC		'K'
+-
+-#define MAX_VCPUS		64
+-#define MAX_GRANT_MB	512
+-#define DEFAULT_MAX_TASKS	256
+-#define CMDLINE_MAX		1744
+-#define INITRAMFS_MAX	(128UL << 20)
+-#define IMAGE_MAX		(256UL << 20)
+-
+-#define PT_MODE_DIRECT	0
+-#define PT_MODE_VMA		1
+-
+-// Argument to `KIND_REGISTER`.
+-//
+-// `elf_ptr` and `elf_len` describe a self-contained x86-64 `ET_DYN` PIE image.
+-// On success, the ioctl stores the assigned identifier in `kind_id` and
+-// returns 0.
+-struct kind_register {
+-	__u64 elf_ptr;		// `const void *`, user pointer to ELF image
+-	__u64 elf_len;		// byte length of ELF image
+-	__u32 flags;		// must be 0
+-	__u32 kind_id;		// out: registered kind identifier
+-};
+-
+-// Argument to `SANDBOX_CREATE`.
+-//
+-// `grant_mb` is rounded up to a 2 MiB grain multiple (max `MAX_GRANT_MB`).
+-// `max_tasks` defaults to `DEFAULT_MAX_TASKS` (256) when `0`.
+-// `max_tasks + nr_vcpus + 1` must fit in `u32` after applying the default.
+-// `pt_mode` selects `PT_MODE_DIRECT` (0) or `PT_MODE_VMA` (1).
+-// Returns a sandbox file descriptor on success.
+-struct sandbox_create {
+-	__u32 kind_id;		// registered kind identifier
+-	__u32 nr_vcpus;		// 1..MAX_VCPUS
+-	__u32 grant_mb;		// grant size in MiB (up to 512; 0 defaults to 64)
+-	__u32 max_tasks;	// 0 uses DEFAULT_MAX_TASKS (256)
+-	__u32 pt_mode;		// PT_MODE_DIRECT (0) or PT_MODE_VMA (1)
+-	__u32 flags;		// must be 0
+-	__u64 cmdline_ptr;	// `const char *`, user pointer
+-	__u64 cmdline_len;	// byte length without trailing NUL
+-	__u64 initramfs_ptr;	// `const void *`, user pointer (or 0)
+-	__u64 initramfs_len;	// byte length (or 0)
+-};
+-
+-// Sandbox exit and diagnostic statistics returned by `SANDBOX_STATS`.
+-struct sandbox_stats {
+-	__u32 exit_kind;	// `0`: exit; `1`: panic; `2`: stack overflow; `3`: killed
+-	__u32 exit_code;	// image exit code or signal/reason, not a `wait(2)` status
+-	char exit_msg[256];	// NUL-terminated exit or panic message
+-	__u64 fpu_saves;
+-	__u64 fpu_restores;
+-	__u64 vm_creates;
+-	__u64 vm_destroys;
+-	__u64 vm_flushes;
+-	__u64 vm_maps;
+-	__u64 vm_protects;
+-	__u64 vm_unmaps;
+-	__u64 exceptions;
+-	__u64 page_faults;
+-	__u64 virqs;
+-	__u64 forced_yields;
+-	__u64 non_sysret;
+-	__u64 bench_vm_apply_cycles;
+-	__u64 syscalls;
+-	__u64 image_load_base;
+-	__u64 grant_grains_allocated;
+-	__u64 grant_grains_freed;
+-};
+-
+-// The ioctl for registering a raw x86-64 kernelet ELF image.
+-//
+-// Takes `struct kind_register` and copies its image bytes before validation.
+-// Returns `0` and writes `kind_id` only when registration succeeds.
+-// Invalid arguments or images return `EINVAL` or `ENOEXEC`;
+-// inaccessible buffers return `EFAULT`, and a full registry returns `ENOSPC`.
+-// Allocation failures return `ENOMEM`.
+-//
+-// # Security
+-// Requires `CAP_SYS_MODULE` and enabled module loading.
+-// Linux LSM load-data hooks must permit the supplied bytes.
+-// This raw-image interface rejects enforced signatures and module lockdown.
+-#define KIND_REGISTER	_IOWR(IOC_MAGIC, 0x01, struct kind_register)
+-
+-// The ioctl for creating a sandbox from a registered image kind.
+-//
+-// Takes `struct sandbox_create` and returns an `O_CLOEXEC` sandbox descriptor.
+-// `flags` must be `0`; the argument limits and defaults are defined above.
+-// Invalid arguments return `EINVAL`, an absent kind returns `ENOENT`,
+-// and exhausted registry or memory resources return `ENOSPC` or `ENOMEM`.
+-// Invalid command-line or initramfs buffers return `EFAULT`.
+-// Closing the last descriptor requests sandbox termination.
+-#define SANDBOX_CREATE	_IOW(IOC_MAGIC, 0x02, struct sandbox_create)
+-
+-// The ioctl for unregistering an image kind.
+-//
+-// Takes a pointer to a `u32` kind identifier and returns `0` on success.
+-// A missing kind returns `ENOENT`; a kind still used by a live sandbox
+-// returns `EBUSY`; an invalid identifier or pointer returns `EINVAL` or `EFAULT`.
+-//
+-// # Security
+-// Requires `CAP_SYS_MODULE` and enabled module loading.
+-#define KIND_UNREGISTER	_IOW(IOC_MAGIC, 0x03, __u32)
+-
+-// The ioctl for obtaining an executable descriptor for one virtual CPU.
+-//
+-// Takes a pointer to its `u32` index and returns an `O_CLOEXEC` descriptor
+-// that can be passed to `execveat` with `AT_EMPTY_PATH`.
+-// An invalid index returns `EINVAL`, an already claimed vCPU returns `EBUSY`,
+-// and a stopping sandbox returns `ESRCH`.
+-// Descriptor allocation and user-pointer errors are propagated.
+-#define SANDBOX_GET_VCPU_FD	_IOW(IOC_MAGIC, 0x10, __u32)
+-
+-// The ioctl for converting the calling task into a virtual CPU carrier.
+-//
+-// Takes a pointer to its `u32` index.
+-// The caller must be single-threaded and own unshared descriptor and signal-handler tables.
+-// Success discards the caller's user mappings and enters the kernelet;
+-// the original user program does not resume.
+-// Conversion releases the caller's Linux userspace registrations as on `exec`.
+-// Invalid indices or shared task state return `EINVAL`; an occupied vCPU
+-// returns `EBUSY`, and a stopping sandbox returns `ESRCH`.
+-// Failures before conversion preserve the original userspace context.
+-// Failures after conversion terminate the carrier.
+-#define SANDBOX_ATTACH_VCPU	_IOW(IOC_MAGIC, 0x11, __u32)
+-
+-// The ioctl for reading a sandbox's current exit information and counters.
+-//
+-// Writes `struct sandbox_stats` and returns `0`, or `EFAULT` for an invalid buffer.
+-// While the sandbox runs this is a live snapshot.
+-// Use `read` or wait for descriptor readability to obtain completed-exit statistics.
+-#define SANDBOX_STATS	_IOR(IOC_MAGIC, 0x12, struct sandbox_stats)
+-
+-// The ioctl for requesting termination of all sandbox carriers.
+-//
+-// Takes no argument and returns `0`; repeated requests are harmless.
+-// The first termination reason is retained.
+-// Descriptor readability reports completion; this operation only requests it.
+-#define SANDBOX_KILL	_IO(IOC_MAGIC, 0x13)
+-
+-#define ENDOVISOR_PROF_MAX_FRAMES	24
+-
+-// One captured instruction-pointer callchain sample from isolated `profile_hz` mode.
+-struct sandbox_prof_sample {
+-	__u32 nr_frames;	// valid entries in `frames` (leaf first at index 0)
+-	__u32 vcpu;		// carrier vCPU index
+-	__u64 frames[ENDOVISOR_PROF_MAX_FRAMES];
+-};
+-
+-// Arguments for `SANDBOX_PROF_DUMP`.
+-struct sandbox_prof_dump {
+-	__u64 buf_ptr;		// `struct sandbox_prof_sample *` user buffer
+-	__u32 capacity;		// max samples writable to `buf_ptr`
+-	__u32 count;		// out: samples copied (or total available if `capacity == 0`)
+-	__u64 dropped;		// out: samples dropped due to ring capacity
+-};
+-
+-// The ioctl for draining captured stack samples after isolated `profile_hz` runs.
+-//
+-// Writes up to `capacity` `struct sandbox_prof_sample` entries to `buf_ptr`,
+-// populates `count` and `dropped`, and returns `0`, or `EFAULT`/`EINVAL`.
+-#define SANDBOX_PROF_DUMP	_IOWR(IOC_MAGIC, 0x14, struct sandbox_prof_dump)
+-
+-#endif // UAPI_ENDOVISOR_H
++#include <linux/wait.h>
++#include <linux/workqueue.h>
++
++#include "uapi/endovisor.h"
++
++struct linux_binprm;
++
++// ------------------------------------------------------------------
++// Exact C <-> Rust ABI (`poc/ostd/src/kernelet/abi.rs`)
++// ------------------------------------------------------------------
++
++#define ENTRY_TABLE_OFFSET		0x1000UL
++#define ENTRY_TABLE_SIZE		144ULL
++#define EX_TABLE_ENTRY_SIZE		16ULL
++
++struct entry_table {
++	u64 size;
++	u64 vcpu_entry_offset;
++	u64 virq_entry_offset;
++	u64 cpu_local_start_offset;
++	u64 cpu_local_end_offset;
++	u8 source_hash[32];
++	u64 ex_table_start_offset;
++	u64 ex_table_end_offset;
++	u64 yield_entry_offset;
++	u64 exit_entry_offset;
++	u64 stub_range_start_offset;
++	u64 stub_range_end_offset;
++	u64 cpu_access_start_offset;
++	u64 cpu_access_end_offset;
++	u64 user_event_entry_offset;
++} __packed;
++
++#define KERNEL_HALF_START		256
++#define KERNEL_HALF_ENTRIES		(512 - KERNEL_HALF_START)
++
++struct boot_args {
++	u32 size;
++	u32 generation;
++	u8 source_hash[32];
++	u64 tsc_freq_hz;
++	u64 clock_origin_tsc;
++	u16 kernelet;
++	u16 num_vcpus;
++	u16 vcpu_host_cpu[MAX_VCPUS];
++	u32 cpu_slot_gs_offset;
++	u32 cpu_local_replica_bytes;
++	u64 linear_map_base;
++	u64 kernel_half_entries[KERNEL_HALF_ENTRIES];
++	u64 meta_base;
++	u32 grant_table;
++	u32 meta_section_index;
++	u32 meta_block_sections;
++	u32 meta_grain_bitmap;
++	u32 max_meta_sections;
++	u32 info_page;
++	u32 vcpu_records;
++	u32 max_tasks;
++	u32 fpu_area_bytes;
++	u32 cmdline_offset;
++	u32 cmdline_len;
++	u32 devices_offset;
++	u32 num_devices;
++	u8 pti_enabled;
++	u8 nx_supported;
++	u8 pgtable_levels;
++	u8 pt_mode;
++	u64 realtime_base_ns;
++	u64 monotonic_base_ns;
++	u64 initramfs_base;
++	u64 initramfs_len;
++};
++
++struct run_desc {
++	u64 paddr;
++	u32 grains;
++	u32 reserved;
++};
++
++struct info_page {
++	u32 runs;
++	u32 meta_blocks;
++	u64 max_paddr;
++	u32 dying;
++	u32 reserved;
++};
++
++struct vcpu_record {
++	u64 pending;
++	u64 pending_lines[4];
++	u64 tick_user;
++	u64 tick_kernel;
++	u64 tick_l2;
++	u64 stolen_ns;
++	u64 nonrunning_tsc;
++	u32 guards;
++	u32 irq_off;
++	u32 vcpu;
++	u32 irq_level;
++	u64 stack_limit;
++	u64 cpu_local_base;
++	u64 parked_ns;
++	u64 task_ticks;
++} __aligned(64);
++
++struct copy_fault_record {
++	u64 addr;
++	u64 error;
++	u32 pending;
++	u8 _pad[44];
++} __aligned(64);
++
++struct user_event_record {
++	u64 pt_regs;
++	u64 event_rsp;
++	u64 event_stack_limit;
++	u64 trap_num;
++	u64 error_code;
++	u64 fault_addr;
++	u64 _pad[2];
++} __aligned(64);
++
++struct mmio_result {
++	s64 status;
++	u64 value;
++};
++
++struct service_table {
++	u64 size;
++	s64 (*grains_request)(u32 count, u32 contiguous);
++	s64 (*pt_root_register)(u64 root_paddr);
++	s64 (*pt_root_unregister)(u64 root_paddr);
++	s64 (*pt_activate)(u64 root_paddr);
++	s64 (*tlb_shootdown)(u64 root_paddr, u64 start, u64 len);
++	u64 (*kstack_alloc)(void);
++	s64 (*kstack_free)(u64 vaddr);
++	s64 (*vcpu_boot)(u32 vcpu);
++	s64 (*vcpu_idle)(u64 deadline_ns);
++	s64 (*vcpu_kick)(u32 vcpu);
++	void (*vcpu_yield)(void);
++	void (*vcpu_on_spin)(void);
++	s32 (*user_run)(void *ctx);
++	struct mmio_result (*mmio_read)(u32 dev, u32 offset, u32 width);
++	s64 (*mmio_write)(u32 dev, u32 offset, u32 width, u64 value);
++	s64 (*log_write)(u32 level, const u8 *module, u32 module_len,
++			 const u8 *text, u32 text_len);
++	s64 (*oops)(const u8 *msg, u32 len);
++	void (*stop)(u32 kind, u32 code, const u8 *msg, u32 len) __noreturn;
++	struct mmio_result (*buffer)(u32 op, u64 token, u64 arg0,
++					 u64 arg1, u64 arg2);
++};
++
++// `UserEvent` discriminants passed to `user_event_entry(raw_event)`.
++#define USER_EVENT_SYSCALL		0ULL
++#define USER_EVENT_EXCEPTION	1ULL
++#define USER_EVENT_KERNEL_EVENT	2ULL
++
++// ABI negative status codes (returned negated).
++#define ABI_NOT_OWNED		2
++#define ABI_INVALID			3
++#define ABI_LIMIT			4
++#define ABI_STATE			5
++
++// Stop kinds.
++#define STOP_EXIT			0U
++#define STOP_PANIC			1U
++#define STOP_STACK_OVERFLOW		2U
++#define STOP_KILLED			3U
++
++// Virtual IRQ bits.
++#define VIRQ_TICK			(1ULL << 0)
++#define VIRQ_KICK			(1ULL << 1)
++#define VIRQ_LINES			(1ULL << 2)
++
++// `buffer` op codes (VMA baseline).
++#define BUFFER_VM_MAP			0x100U
++#define BUFFER_VM_PROTECT		0x101U
++#define BUFFER_VM_UNMAP			0x102U
++
++#define KLET_PROT_READ			(1U << 0)
++#define KLET_PROT_WRITE			(1U << 1)
++#define KLET_PROT_EXEC			(1U << 2)
++
++// Grant & metadata constants.
++#define GRAIN_ORDER			9
++#define GRAIN_SIZE			(2UL << 20)
++#define META_SECTION_BYTES		(128UL << 20)
++#define GRAINS_PER_SECTION		(META_SECTION_BYTES / GRAIN_SIZE)
++#define META_SLOT_BYTES		64UL
++#define META_REF_COUNT_OFFSET	40UL
++#define META_PAGES_PER_GRAIN	((GRAIN_SIZE / PAGE_SIZE) * META_SLOT_BYTES / PAGE_SIZE)
++#define NO_META_BLOCK		U32_MAX
++#define MAX_GRAINS_PER_REQUEST	32U
++#define MAX_GRAINS_TOTAL		(MAX_GRANT_MB / 2U)
++#define MAX_META_SECTIONS		MAX_GRAINS_TOTAL
++
++// Guarded stack pool constants (`KSTACK_MAPPING_BYTES == 256 KiB`).
++#define KSTACK_PAGES		64UL
++#define KSTACK_BYTES		(KSTACK_PAGES * PAGE_SIZE)
++#define KSTACK_STRIDE		(2UL * KSTACK_BYTES)
++#define UPCALL_STACK_RESERVE	(64UL * 1024)
++
++// Watch & idle timings.
++#define WATCH_INTERVAL_NS		(1000UL * 1000UL)
++#define IDLE_MAX_NS			WATCH_INTERVAL_NS
++#define IDLE_MIN_NS			(50UL * 1000UL)
++#define SWEEP_INTERVAL_NS		(1000UL * 1000UL)
++
++// Registry limits.
++#define MAX_KINDS			16
++#define MAX_SANDBOXES		16
++#define WINDOW_START		0x10000UL
++
++// Exec descriptor magic for `SANDBOX_GET_VCPU_FD`.
++#define EXEC_MAGIC			"KERNELET\0"
++#define EXEC_MAGIC_LEN		(sizeof(EXEC_MAGIC))
++
++struct exec_header {
++	char magic[EXEC_MAGIC_LEN];
++	u16 slot;
++	u32 vcpu;
++} __packed;
++
++// ------------------------------------------------------------------
++// Endovisor-internal types
++// ------------------------------------------------------------------
++
++struct image_segment {
++	u64 offset;
++	u64 filesz;
++	u64 memsz;
++	u32 flags;
++};
++
++struct image_reloc {
++	u64 offset;
++	s64 addend;
++};
++
++#define IMAGE_SEGMENTS		3
++
++struct image_kind {
++	bool used;
++	u8 *image;			// Template for RW segment initialization
++	size_t image_size;
++	struct page *filler_page;	// Shared zero page for alignment gaps
++	struct page **shared_pages;	// Non-NULL for shared RX/RO/gap pages
++	unsigned int nr_pages;
++	unsigned int nr_segments;
++	unsigned int nr_relocs;
++	struct image_segment segments[IMAGE_SEGMENTS];
++	struct image_reloc *relocs;
++	struct entry_table entry_table;
++	u64 entry_offset;
++	size_t text_size;
++	size_t data_size;
++	unsigned int nr_sandboxes;
++};
++
++struct grain_record {
++	struct page *head_page;
++	u64 paddr;
++	u32 block;
++	u32 grain_in_sec;
++	struct page *meta_pages[META_PAGES_PER_GRAIN];
++};
++
++struct stack_slot {
++	struct page **pages;
++	bool mapped;
++	bool allocated;
++};
++
++struct user_space {
++	struct sandbox *sandbox;
++	struct hlist_node hnode;
++	u64 root_paddr;
++	bool live;
++	struct mm_struct *mm;
++	struct file *file;
++	unsigned long start;
++	unsigned long end;
++	atomic_t users;
++};
++
++enum carrier_state {
++	CARRIER_NEW = 0,
++	CARRIER_KERNEL,
++	CARRIER_USER,
++	CARRIER_DEAD,
++};
++
++struct carrier {
++	struct carrier_event_hooks hooks;
++	struct sandbox *sandbox;
++	struct task_struct *task;
++	enum carrier_state state;
++	unsigned int vcpu;
++
++	// Shared ABI records for this vCPU (inside `sandbox->shared_vmap`).
++	struct vcpu_record *vrec;
++	struct copy_fault_record *cfrec;
++	struct user_event_record *urec;
++
++	// Boot stack base (`usable_base`, mapped 256 KiB above 256 KiB guard).
++	u64 boot_stack_base;
++
++	// Linux stack anchor (just below `task_pt_regs(current)`) and live user regs.
++	void *linux_sp;
++	struct pt_regs *user_regs;
++	bool from_syscall;
++
++	// Cached `event_rsp` validation (invalidated via `sandbox->kstack_free_gen`).
++	u64 cached_event_rsp;
++	u64 cached_kstack_gen;
++
++	// Carrier's own empty mm (for `pt_activate(0)` and safe teardown).
++	struct mm_struct *own_mm;
++
++	// Host service depth (0 = running image or user, >0 = inside Linux service).
++	int depth;
++	bool doomed;
++	bool evicted;
++	bool idle;
++	bool boot_requested;
++	bool kick_deferred;
++	// Deferred `#DF` stack-guard overflow report consumed off the IST stack.
++	bool df_overflow;
++	unsigned long df_ip;
++	unsigned long df_sp;
++	unsigned long df_addr;
++	wait_queue_head_t idle_wq;
++
++	// Pending exception (e.g. VMA `#PF` or drained fault signal).
++	bool exc_pending;
++	u64 exc_trap;
++	u64 exc_error;
++	u64 exc_addr;
++
++	// Timing & forced-yield strike tracking.
++	u64 off_cpu_ns;
++	u64 strike1_ns;
++	unsigned long last_on_spin;
++
++#ifdef CONFIG_PREEMPT_NOTIFIERS
++	struct preempt_notifier pnotifier;
++	bool pnotifier_on;
++#endif
++
++	// Per-carrier syscall counter (flushed into `sandbox->stats.syscalls` on detach).
++	u64 syscalls;
++
++	refcount_t refs;
++	struct list_head link;
++};
++
++struct vcpu_slot {
++	bool claimed;
++	pid_t pid;
++	struct file *exec_file;
++};
++
++struct runtime_stats {
++	atomic64_t fpu_saves;
++	atomic64_t fpu_restores;
++	atomic64_t vm_creates;
++	atomic64_t vm_destroys;
++	atomic64_t vm_flushes;
++	atomic64_t vm_maps;
++	atomic64_t vm_protects;
++	atomic64_t vm_unmaps;
++	atomic64_t exceptions;
++	atomic64_t page_faults;
++	atomic64_t virqs;
++	atomic64_t forced_yields;
++	atomic64_t non_sysret;
++	atomic64_t syscalls;
++};
++
++struct sandbox {
++	refcount_t refs;
++	struct image_kind *kind;
++	int slot;
++	u32 generation;
++
++	// Image mapping (`image_base` + `cpu_local` replicas + `shared_vmap`).
++	void *image_base;
++	struct page **image_pages;
++	void *cpu_local_vmap;
++	struct page **cpu_local_pages;
++	unsigned int nr_cpu_local_pages;
++	unsigned int cpu_local_pages_per_vcpu;
++	size_t cpu_local_size;
++
++	// Validated image entry & range addresses in kernel VA.
++	unsigned long entry_fn;
++	unsigned long vcpu_entry;
++	unsigned long virq_entry;
++	unsigned long yield_entry;
++	unsigned long exit_entry;
++	unsigned long user_event_entry;
++	unsigned long text_lo;
++	unsigned long text_hi;
++	unsigned long stub_lo;
++	unsigned long stub_hi;
++	unsigned long cpu_access_lo;
++	unsigned long cpu_access_hi;
++
++	// Contiguous shared pages: BootPage | VcpuShared | InfoPage | GrantTable | MetaIdx | MetaRev | MetaBmp.
++	void *shared_vmap;
++	struct page **shared_pages;
++	unsigned int total_shared_pages;
++	struct boot_args *boot_page;	// Direct-map VA of page 0
++	struct info_page *info_page;	// Direct-map VA of InfoPage
++	struct run_desc *grant_table;	// Direct-map VA of RunDesc[]
++	u32 *meta_section_index;		// Direct-map VA
++	u32 *meta_block_sections;		// Direct-map VA
++	u64 *meta_grain_bitmap;			// Direct-map VA
++	unsigned int nr_phys_sections;
++
++	// Sparse `meta_base` vmalloc window.
++	struct vm_struct *meta_area;
++	u32 max_meta_sections;
++	u32 nr_meta_blocks;
++
++	// Physical memory grant (2 MiB grains).
++	struct mutex grant_mutex;
++	struct grain_record *grains;
++	unsigned int max_grains;
++	unsigned int nr_grains;
++	unsigned int nr_runs;
++	u64 max_paddr;
++
++	// Guarded stack pool (512 KiB stride: 256 KiB guard + 256 KiB usable).
++	struct mutex stack_mutex;
++	struct vm_struct *stack_area;
++	unsigned long stack_pool_start;
++	unsigned long stack_pool_end;
++	unsigned int kstack_slots;
++	struct stack_slot *kstack_table;
++	unsigned long *live_stacks_bitmap;
++	atomic64_t kstack_free_gen;
++
++	// Initramfs read-only vmap.
++	void *initramfs_vmap;
++	struct page **initramfs_pages;
++	unsigned int nr_initramfs_pages;
++	u64 initramfs_len;
++
++	// Sandbox configuration.
++	unsigned int nr_vcpus;
++	u32 grant_mb;
++	u32 max_tasks;
++	u32 pt_mode;
++	char *cmdline;
++	size_t cmdline_len;
++	struct cgroup *cgrp;
++	struct task_struct *owner;
++
++	// Address spaces (`pt_root_register` / `pt_root_unregister`).
++	spinlock_t spaces_lock;
++	DECLARE_HASHTABLE(spaces_ht, 8);
++
++	// Carriers and arrival coordination.
++	spinlock_t lock;
++	struct mutex mutex;
++	struct carrier *vcpus[MAX_VCPUS];
++	struct vcpu_slot vslot[MAX_VCPUS];
++	struct list_head carriers;
++	atomic_t nr_carriers;
++	wait_queue_head_t arrive_wq;
++	unsigned int arrived;
++	bool started;
++
++	// Lifecycle & exit state.
++	bool dying;
++	bool exited;
++	// A claimed cleanup owns one reference until its work finishes.
++	bool exit_claimed;
++	bool sweep_armed;
++	u32 exit_kind;
++	u32 exit_code;
++	char exit_msg[256];
++	wait_queue_head_t exit_wq;
++	struct work_struct cleanup_work;
++
++	// Console (`LEVEL_CONSOLE == 8`) line buffer for unprefixed serial output.
++	spinlock_t con_lock;
++	char con_buf[1024];
++	unsigned int con_len;
++
++	// TSC calibration snapshot.
++	u64 tsc_freq_hz;
++	u64 clock_origin_tsc;
++	u64 realtime_base_ns;
++	u64 monotonic_base_ns;
++
++	struct runtime_stats stats;
++	u64 grant_grains_allocated;
++	u64 grant_grains_freed;
++	bool counted_live;
++
++	// Isolated profiling ring (allocated only when `profile_hz > 0`).
++	spinlock_t prof_lock;
++	struct sandbox_prof_sample *prof_samples;
++	u32 prof_cap;
++	u32 prof_count;
++	u64 prof_dropped;
++};
++
++// Module parameters and shared globals (`main.c`).
++extern bool watch_enabled;
++extern bool audit_enabled;
++extern int profile_hz;
++DECLARE_STATIC_KEY_FALSE(endovisor_audit_key);
++DECLARE_STATIC_KEY_FALSE(endovisor_profile_key);
++extern atomic64_t endo_live_sandboxes;
++extern atomic64_t endo_live_grains;
++extern atomic64_t endo_live_meta_pages;
++extern atomic64_t endo_live_kstack_pages;
++extern atomic64_t endo_live_shared_pages;
++extern u32 cpu_slot_offset;
++extern struct workqueue_struct *cleanup_wq;
++extern struct mutex registry_lock;
++extern const struct service_table host_services;
++extern const struct carrier_event_hooks carrier_hooks;
++extern atomic_t evicting_sandboxes;
++
++static inline struct carrier *carrier_of(struct carrier_event_hooks *hooks)
++{
++	return container_of(hooks, struct carrier, hooks);
++}
++
++static inline struct carrier *current_carrier(void)
++{
++	return current->carrier_hooks ? carrier_of(current->carrier_hooks) : NULL;
++}
++
++static inline bool in_image_text(struct sandbox *sandbox, unsigned long ip)
++{
++	return ip >= sandbox->text_lo && ip < sandbox->text_hi;
++}
++
++static inline bool in_stub_range(struct sandbox *sandbox, unsigned long ip)
++{
++	return ip >= sandbox->stub_lo && ip < sandbox->stub_hi;
++}
++
++static inline bool in_cpu_access_range(struct sandbox *sandbox, unsigned long ip)
++{
++	return ip >= sandbox->cpu_access_lo && ip < sandbox->cpu_access_hi;
++}
++
++static inline bool in_grant(struct sandbox *sandbox, u64 paddr, u64 len)
++{
++	u64 section;
++	u32 block;
++	u64 bitmap;
++	u32 grain;
++
++	if (len == 0 || paddr + len < paddr)
++		return false;
++	if (paddr >= READ_ONCE(sandbox->max_paddr))
++		return false;
++	if ((paddr >> 21) != ((paddr + len - 1) >> 21))
++		return false;
++	section = paddr / META_SECTION_BYTES;
++	if (section >= sandbox->nr_phys_sections)
++		return false;
++	block = READ_ONCE(sandbox->meta_section_index[section]);
++	if (block == NO_META_BLOCK || block >= sandbox->max_meta_sections)
++		return false;
++	bitmap = READ_ONCE(sandbox->meta_grain_bitmap[block]);
++	grain = (paddr % META_SECTION_BYTES) / GRAIN_SIZE;
++	return (bitmap & (1ULL << grain)) != 0;
++}
++
++// `switch.S`
++// Each trampoline receives a 16-byte-aligned stack top.
++// `enter_user_event` validates task tops; bootstrap allocation and the carrier's
++// fixed `linux_sp` establish the same alignment for all other callers.
++void enter_image(unsigned long entry, unsigned long new_rsp,
++		     u64 arg0, u64 arg1);
++void jump_linux_stack(void *linux_sp, void (*fn)(void *), void *arg);
++void jump_user_run(void *linux_sp, struct carrier *c);
++u64 call_on_linux_stack(void *linux_sp, u64 (*fn)(void *), void *arg);
++void return_to_user(struct pt_regs *regs, bool from_syscall);
++void exit_stub(void);
++
++// `main.c`
++struct file *lifeline_create(struct carrier *c);
++void sandbox_get(struct sandbox *sandbox);
++void sandbox_put(struct sandbox *sandbox);
++void sandbox_stop(struct sandbox *sandbox, u32 kind, u32 code, const char *msg);
++bool sandbox_claim_cleanup_locked(struct sandbox *sandbox);
++struct sandbox *exec_lookup(struct linux_binprm *bprm, unsigned int *vcpu);
++int exec_claim(struct sandbox *sandbox, unsigned int vcpu);
++void exec_unclaim(struct sandbox *sandbox, unsigned int vcpu);
++int sandbox_start(struct sandbox *sandbox);
++
++// `image.c`
++int image_load(struct image_kind *kind, const void *buf, size_t len);
++void image_free(struct image_kind *kind);
++int image_start(struct sandbox *sandbox);
++void image_stop(struct sandbox *sandbox);
++
++// `grant.c`
++int grant_init(struct sandbox *sandbox, const u8 __user *uinitrd, size_t initrd_len);
++void grant_destroy(struct sandbox *sandbox);
++s64 do_grains_request(struct sandbox *sandbox, u32 count, u32 contiguous);
++u64 kstack_alloc(struct sandbox *sandbox, bool is_boot);
++s64 kstack_free(struct sandbox *sandbox, u64 vaddr);
++bool stack_pool_contains(struct sandbox *sandbox, unsigned long addr);
++bool stack_pool_slot_bounds(struct sandbox *sandbox, unsigned long addr,
++			    unsigned long *usable_out, unsigned long *top_out);
++bool stack_pool_is_guard_addr(struct sandbox *sandbox, unsigned long addr);
++void stack_pool_destroy(struct sandbox *sandbox);
++
++// `space.c`
++void spaces_init(struct sandbox *sandbox);
++void spaces_destroy(struct sandbox *sandbox);
++s64 do_pt_root_register(struct carrier *c, u64 root_paddr);
++s64 do_pt_root_unregister(struct carrier *c, u64 root_paddr);
++s64 do_pt_activate(struct carrier *c, u64 root_paddr);
++s64 do_tlb_shootdown(struct carrier *c, u64 root_paddr, u64 start, u64 len);
++struct mmio_result do_buffer(struct carrier *c, u32 op, u64 token,
++				     u64 arg0, u64 arg1, u64 arg2);
++void leave_space(struct carrier *c);
++
++// `carrier.c`
++struct carrier *carrier_new(struct sandbox *sandbox, unsigned int vcpu,
++				    struct mm_struct *own_mm);
++struct carrier *carrier_get(struct carrier *c);
++void carrier_put(struct carrier *c);
++int carrier_attach(struct carrier *c);
++void carrier_lifeline_closed(struct carrier *c);
++void carrier_die(struct carrier *c) __noreturn;
++void evict_leave(void) __noreturn;
++void kill_carriers(struct sandbox *sandbox);
++void virq_raise(struct carrier *c, u32 bit);
++void kick_remote(struct carrier *c);
++void carrier_sched_attach(struct carrier *c);
++void carrier_sched_detach(struct carrier *c);
++int carrier_sched_init(void);
++void carrier_sched_exit(void);
++void cpu_slot_set_current(struct carrier *c);
++void cpu_slot_clear_current(void);
++void __noreturn do_user_run_on_linux(struct carrier *c);
++
++// `watch.c`
++int watch_init(void);
++void watch_exit(void);
++void watch_arm(struct carrier *c);
++void watch_fire_now(void);
++void watch_fire_soon(void);
++int evict_init(void);
++void evict_exit(void);
++void evict_arm(struct sandbox *sandbox);
++void watch_sample_profile(struct carrier *c, struct pt_regs *regs);
++
++#endif /* ENDOVISOR_INTERNAL_H */
+--- a/poc/linux/runner/run-kernelet.c
++++ b/poc/linux/runner/run-kernelet.c
+@@ -154,19 +154,32 @@
+ static void write_stats_summary(FILE *f, const struct sandbox_stats *st,
+ 				uint32_t pt_mode, uint32_t vcpus, uint32_t grant_mb)
+ {
++	char non_sysret_precheck[24] = "";
++	char syscalls[24] = "";
++
++	if (st->non_sysret != UINT64_MAX)
++		snprintf(non_sysret_precheck, sizeof(non_sysret_precheck), "%llu",
++			 (unsigned long long)st->non_sysret);
++	if (st->syscalls != UINT64_MAX)
++		snprintf(syscalls, sizeof(syscalls), "%llu",
++			 (unsigned long long)st->syscalls);
+ 	fprintf(f,
+ 		"STATS_JSON {\"pt_mode\":%u,\"vcpus\":%u,\"grant_mb\":%u,"
+ 		"\"exit_kind\":%u,\"exit_kind_name\":\"%s\",\"exit_code\":%u,\"exit_msg\":",
+ 		pt_mode, vcpus, grant_mb,
+ 		st->exit_kind, exit_kind_name(st->exit_kind), st->exit_code);
+ 	print_json_escaped(f, st->exit_msg);
++	if (st->non_sysret != UINT64_MAX)
++		fprintf(f, ",\"non_sysret_precheck\":%s", non_sysret_precheck);
++	if (st->syscalls != UINT64_MAX)
++		fprintf(f, ",\"syscalls\":%s", syscalls);
+ 	fprintf(f,
+ 		",\"fpu_saves\":%llu,\"fpu_restores\":%llu,"
+ 		"\"vm_creates\":%llu,\"vm_destroys\":%llu,\"vm_flushes\":%llu,"
+ 		"\"vm_maps\":%llu,\"vm_protects\":%llu,\"vm_unmaps\":%llu,"
+ 		"\"exceptions\":%llu,\"page_faults\":%llu,\"virqs\":%llu,"
+-		"\"forced_yields\":%llu,\"non_sysret\":%llu,"
+-		"\"bench_vm_apply_cycles\":%llu,\"syscalls\":%llu,"
++		"\"forced_yields\":%llu,"
++		"\"bench_vm_apply_cycles\":%llu,"
+ 		"\"grant_grains_allocated\":%llu,\"grant_grains_freed\":%llu,"
+ 		"\"image_load_base\":\"0x%llx\"}\n",
+ 		(unsigned long long)st->fpu_saves,
+@@ -181,9 +194,7 @@
+ 		(unsigned long long)st->page_faults,
+ 		(unsigned long long)st->virqs,
+ 		(unsigned long long)st->forced_yields,
+-		(unsigned long long)st->non_sysret,
+ 		(unsigned long long)st->bench_vm_apply_cycles,
+-		(unsigned long long)st->syscalls,
+ 		(unsigned long long)st->grant_grains_allocated,
+ 		(unsigned long long)st->grant_grains_freed,
+ 		(unsigned long long)st->image_load_base);
+@@ -192,11 +203,11 @@
+ 		"STATS_CSV_HDR pt_mode,vcpus,grant_mb,exit_kind,exit_code,"
+ 		"fpu_saves,fpu_restores,vm_creates,vm_destroys,vm_flushes,"
+ 		"vm_maps,vm_protects,vm_unmaps,exceptions,page_faults,virqs,"
+-		"forced_yields,non_sysret,bench_vm_apply_cycles,syscalls,"
++		"forced_yields,non_sysret_precheck,bench_vm_apply_cycles,syscalls,"
+ 		"grant_grains_allocated,grant_grains_freed,image_load_base\n");
+ 	fprintf(f,
+ 		"STATS_CSV %u,%u,%u,%u,%u,%llu,%llu,%llu,%llu,%llu,"
+-		"%llu,%llu,%llu,%llu,%llu,%llu,%llu,%llu,%llu,%llu,%llu,%llu,0x%llx\n",
++		"%llu,%llu,%llu,%llu,%llu,%llu,%llu,%s,%llu,%s,%llu,%llu,0x%llx\n",
+ 		pt_mode, vcpus, grant_mb, st->exit_kind, st->exit_code,
+ 		(unsigned long long)st->fpu_saves,
+ 		(unsigned long long)st->fpu_restores,
+@@ -210,9 +221,9 @@
+ 		(unsigned long long)st->page_faults,
+ 		(unsigned long long)st->virqs,
+ 		(unsigned long long)st->forced_yields,
+-		(unsigned long long)st->non_sysret,
++		non_sysret_precheck,
+ 		(unsigned long long)st->bench_vm_apply_cycles,
+-		(unsigned long long)st->syscalls,
++		syscalls,
+ 		(unsigned long long)st->grant_grains_allocated,
+ 		(unsigned long long)st->grant_grains_freed,
+ 		(unsigned long long)st->image_load_base);
+--- a/poc/ostd/src/user.rs
++++ b/poc/ostd/src/user.rs
+@@ -295,8 +295,7 @@
+         unreachable!("user_run should not return under kernelet PR #3");
+     }
+ 
+-    /// Fuses vCPU lookup, `urec.pt_regs` load, `CURRENT_TASK_PTR` load,
+-    /// `active_pt_regs` publication, virtual IRQ unmask (`vrec.irq_off = 0`),
++    /// Fuses vCPU lookup, `CURRENT_TASK_PTR` load, virtual IRQ unmask (`vrec.irq_off = 0`),
+     /// and `(vrec.pending, PREEMPT_INFO)` read into one `.text.kernelet_cpu_access`
+     /// block for the `raw_event != USER_EVENT_EXCEPTION` fast path.
+     ///
+@@ -309,7 +308,7 @@
+         let mut preempt_info = Task::preempt_info_offset();
+         let pending: u64;
+         // SAFETY: `vrec.irq_off == 1` on entry, and the entire table lookup,
+-        // `active_pt_regs` update, IRQ unmask, and state check stay inside one
++        // IRQ unmask and state check stay inside one
+         // nonredirectable `.text.kernelet_cpu_access` block.
+         unsafe {
+             core::arch::asm!(
+@@ -320,14 +319,8 @@
+                 "mov {slot}, qword ptr [{vrec} + {slot_gs_off}]",
+                 "movzx {slot:e}, word ptr gs:[{slot} + 2]",
+                 "mov {local_base}, qword ptr [{vrec} + {slot} * 8 + {local_bases_off}]",
+-                "mov {urec}, qword ptr [{vrec} + {slot} * 8 + {urec_ptrs_off}]",
+                 "mov {vrec}, qword ptr [{vrec} + {slot} * 8 + {record_ptrs_off}]",
+-                "mov {urec}, qword ptr [{urec} + {urec_pt_regs_off}]",
+                 "mov {task}, qword ptr [{local_base} + {task}]",
+-                "test {task}, {task}",
+-                "jz 4f",
+-                "mov qword ptr [{task} + {active_pt_regs_off}], {urec}",
+-                "4:",
+                 "mov dword ptr [{vrec} + {vrec_irq_off}], 0",
+                 "mov {pending}, qword ptr [{vrec} + {vrec_pending_off}]",
+                 "mov {preempt:e}, dword ptr [{local_base} + {preempt}]",
+@@ -337,17 +330,13 @@
+                 vrec = out(reg) _,
+                 slot = out(reg) _,
+                 local_base = out(reg) _,
+-                urec = out(reg) _,
+                 pending = out(reg) pending,
+                 task = inout(reg) current_task_ptr,
+                 preempt = inout(reg) preempt_info,
+                 fast_cpu = sym entry::KERNELET_FAST_CPU,
+                 slot_gs_off = const core::mem::offset_of!(entry::FastCpuTable, slot_gs_offset),
+                 local_bases_off = const core::mem::offset_of!(entry::FastCpuTable, local_bases),
+-                urec_ptrs_off = const core::mem::offset_of!(entry::FastCpuTable, urec_ptrs),
+                 record_ptrs_off = const core::mem::offset_of!(entry::FastCpuTable, record_ptrs),
+-                urec_pt_regs_off = const core::mem::offset_of!(crate::kernelet::abi::UserEventRecord, pt_regs),
+-                active_pt_regs_off = const Task::active_pt_regs_offset(),
+                 vrec_irq_off = const core::mem::offset_of!(crate::kernelet::abi::VcpuRecord, irq_off),
+                 vrec_pending_off = const core::mem::offset_of!(crate::kernelet::abi::VcpuRecord, pending),
+                 options(nostack),
+@@ -379,9 +368,10 @@
+             let current_task =
+                 Task::current_with(&access).expect("user_event_entry requires a current Task");
+             debug_assert!(current_task.is_user());
+-            current_task
+-                .active_pt_regs()
+-                .store(pt_regs_ptr, Ordering::Relaxed);
++            debug_assert_eq!(
++                current_task.active_pt_regs().load(Ordering::Relaxed),
++                pt_regs_ptr
++            );
+             let handler_data = core::ptr::from_ref(current_task.data().as_ref()).cast::<()>();
+             // SAFETY: `user_exception_entry` executes in task context on `current_task`.
+             let handler_local =
+@@ -425,13 +415,12 @@
+             let access = CpuLocalAccess::new(&irq_guard);
+             let current_task =
+                 Task::current_with(&access).expect("first_user_task_entry requires a current Task");
+-            let pt_regs_ptr = entry::user_event_record_for(access.record())
+-                .pt_regs
+-                .load(Ordering::Acquire) as *mut LinuxPtRegs;
+-            debug_assert!(!pt_regs_ptr.is_null());
+-            current_task
+-                .active_pt_regs()
+-                .store(pt_regs_ptr, Ordering::Relaxed);
++            debug_assert!(
++                !current_task
++                    .active_pt_regs()
++                    .load(Ordering::Relaxed)
++                    .is_null()
++            );
+             debug_assert!(current_task.is_user());
+             let handler_data = core::ptr::from_ref(current_task.data().as_ref()).cast::<()>();
+             // SAFETY: `first_user_task_entry` runs in task context on `current_task`.
+--- a/poc/ostd/src/log/logger.rs
++++ b/poc/ostd/src/log/logger.rs
+@@ -31,7 +31,9 @@
+ /// if no logger has been registered yet.
+ ///
+ /// Called by the `log!` macro. Not intended for direct use.
++#[cold]
+ #[doc(hidden)]
++#[inline(never)]
+ pub fn __write_log_record(record: &Record) {
+     if let Some(logger) = __logger() {
+         logger.log(record);
+--- a/poc/ostd/src/console/kernelet.rs
++++ b/poc/ostd/src/console/kernelet.rs
+@@ -37,6 +37,8 @@
+     }
+ }
+ 
++#[cold]
++#[inline(never)]
+ fn write_record(level: u32, module: &[u8], args: Arguments) {
+     let mut writer = ConsoleWriter {
+         level,
+--- a/poc/kernel/core/src/sched/sched_class/mod.rs
++++ b/poc/kernel/core/src/sched/sched_class/mod.rs
+@@ -286,10 +286,14 @@
+ 
+     // TODO: Implement a better algorithm and replace the current naive implementation.
+     fn select_cpu(&self, thread: &Thread, flags: EnqueueFlags) -> CpuId {
++        let affinity = thread.atomic_cpu_affinity().load(Ordering::Relaxed);
+         if let Some(last_cpu) = thread.sched_attr().last_cpu() {
+-            return last_cpu;
+-        }
+-        debug_assert!(flags == EnqueueFlags::Spawn);
++            if affinity.contains(last_cpu) {
++                return last_cpu;
++            }
++        } else {
++            debug_assert!(flags == EnqueueFlags::Spawn);
++        }
+ 
+         let guard = disable_local();
+ 
+@@ -307,7 +311,6 @@
+             }
+         };
+ 
+-        let affinity = thread.atomic_cpu_affinity().load(Ordering::Relaxed);
+         match self.last_chosen_cpu.get() {
+             Some(cpu) => {
+                 // Perform a round-robin selection starting after the last chosen CPU.
+--- a/poc/ostd/src/task/mod.rs
++++ b/poc/ostd/src/task/mod.rs
+@@ -272,11 +272,6 @@
+     #[cfg(feature = "kernelet")]
+     pub(crate) fn active_pt_regs(&self) -> &AtomicPtr<crate::arch::cpu::context::LinuxPtRegs> {
+         &self.active_pt_regs
+-    }
+-
+-    #[cfg(feature = "kernelet")]
+-    pub(crate) const fn active_pt_regs_offset() -> usize {
+-        core::mem::offset_of!(Self, active_pt_regs)
+     }
+ 
+     /// Returns the CPU-local section byte offset of `CURRENT_TASK_PTR`.

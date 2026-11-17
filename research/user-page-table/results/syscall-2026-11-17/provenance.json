@@ -1,0 +1,24 @@
+{
+  "root_head_at_verification": "a5ec4b875d0a17890321a362fbc3fd16859b7eb4",
+  "poc_head_at_verification": "7f8476ab463f1dcdf901fd650ee4f127298d28ef",
+  "rust_snapshot_directory": "45cd17aa1e2978c5f374e992ac95308999098d6823ab90e1aecc13090e1ce370",
+  "rust_snapshot_source_hash": "f92e07ff93aeedeaaf6cdb3990f8d6cf41bcdbe2da4f0ecb67a5e2ad357be59c",
+  "preserved_syscall_source_sha256": "99a459881e0d685370fb4d5428ddd78bdf682f689a65472ffd99a2b09ae708a9",
+  "source_hashes": {
+    "poc/linux/bench/bench_syscall_fpu.c": "174b19a96f9ae6be23ec01920aa2da1c20eb50c317a1909a8b467a79af543111",
+    "poc/linux/bench/host_init.c": "1b06eb9e2b16bbbe75bc42a1687d22420e2c7267a1a825a446331527e439ae44",
+    "poc/linux/endovisor/carrier.c": "5ab791326f231bef69916839bbd9b183fb62b5ae3f3bb0561341c673d37430dc",
+    "poc/linux/endovisor/main.c": "6ecea29f4a782a21cbb1b46b506f8725bb589f548cb48437de86dd5d6edadc58",
+    "poc/linux/endovisor/switch.S": "9774caa5df027a25faa726cf8b46eb811c331ff6095a2ed91c62dbbd45b119a8",
+    "poc/linux/endovisor/endovisor.h": "f2d01dfabf21ce275cdac344781d41888027b1b3939c4671e089466f26092a0d",
+    "poc/linux/runner/run-kernelet.c": "4967529d095917595b54a9617bd34641608eb87d9185d4bd41feecab5a50b943",
+    "poc/ostd/src/user.rs": "f820601b668797c1401c3500495bd2267f3b225212b5ef5a7d7e27e116865970",
+    "poc/ostd/src/log/logger.rs": "b209d15fc4c1f207c40611a7a50ee561944a94f7d5248b2ba2bd3c20ef04f00c",
+    "poc/ostd/src/console/kernelet.rs": "333547eefe32de984f4878025026977222f4e41763a936fb9a35ee24f864adc1",
+    "poc/kernel/core/src/sched/sched_class/mod.rs": "627c21c1ed7c90c56fc2cdd1a7786f81134fa9fae095acebdcd6250a9e57d1b0",
+    "poc/kernel/core/src/syscall/mod.rs": "99a459881e0d685370fb4d5428ddd78bdf682f689a65472ffd99a2b09ae708a9"
+  },
+  "rustc": "rustc 1.99.0-nightly (87e5904f5 2026-07-20)\nbinary: rustc\ncommit-hash: 87e5904f5eb6398af6b22eac2802c78934260c48\ncommit-date: 2026-07-20\nhost: x86_64-unknown-linux-gnu\nrelease: 1.99.0-nightly\nLLVM version: 22.1.8\n",
+  "gcc": "gcc (GCC) 16.2.1 20260810",
+  "cpio": "cpio (GNU cpio) 2.15"
+}

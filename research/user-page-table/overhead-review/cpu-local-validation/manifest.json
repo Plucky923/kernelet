@@ -1,0 +1,246 @@
+{
+  "validated_at_utc": "2026-11-17T07:20:31.891753+00:00",
+  "proposal_head": "ee1b2267e6178c6afaf22d73ad961f0c227ec8db",
+  "environment": "host pinned toolchain; Docker access unavailable",
+  "profiles": {
+    "release": "release",
+    "debug_assertions": "release with profile.release.debug-assertions=true"
+  },
+  "source_sha256": {
+    "poc/ostd/src/arch/x86/cpu/kernelet_local.rs": "9c55c00ea982776dc656d61b687ccb8ed7617c5c0cddb276b903488e55d08239",
+    "poc/ostd/src/arch/x86/irq/kernelet_ops.rs": "1d18e5d34a0d1afedca9ebc7596f747ec58f5fc28634f24b20144318c7d0cd6f",
+    "poc/ostd/src/arch/x86/irq/mod.rs": "0621076f1f2b0a48aab1ba4427c079c147f77b5d24ce7a070dfae5eb7a06a1f0",
+    "poc/ostd/src/cpu/local/cell.rs": "7183d65b2d37b33474a426e5282a7fc808162efc5a72e757dde54f66899f7c35",
+    "poc/ostd/src/irq/guard.rs": "7a0085ad0424e1a97eccac28fea9f3b1984130a502e0ea662ecf9220f67f3b8c",
+    "poc/ostd/src/kernelet/entry.rs": "89e488fe4442dcd5ec83c3a77a6bf3c4dbed87ee209282e2559a6566309fffca",
+    "poc/ostd/src/task/mod.rs": "e1568068aca49679f3994dba398f3a8b2e64094549777bfee991d2bf2fb35078",
+    "poc/ostd/src/task/preempt/cpu_local.rs": "e1f799da7d6340f677224445f6c6672d1988d49c1ed31716048ea32f5892045c",
+    "poc/ostd/src/task/preempt/guard.rs": "5ea06403ec95c5ed023991c28f911c96a668733b8878ece00567236eccb555f9",
+    "poc/ostd/src/task/processor.rs": "e5442aba7a7809fbcefcc7badd4b93a26af01b9108941601b173e3985cca41c1",
+    "poc/ostd/src/user.rs": "807c8223a660fc5b602ec2a27412a021f2f85d2a40e661ff44b1c64c4886db26"
+  },
+  "osdk_snapshots": {
+    "release": "2127e384186b84af841186f0f59939765d654c84029107ca15dac270e8039879",
+    "debug_assertions": "2127e384186b84af841186f0f59939765d654c84029107ca15dac270e8039879"
+  },
+  "input_sha256": {
+    "release_image": "cafde2788ce0857f688340b8c02bf919d48e20d44c93c257dbe5560198b14890",
+    "debug_assertions_image": "eb5eff1d318755bd60cd70180d9300734f97e76a9c8ec4c542d0bbb7130ab05f",
+    "baseline_image": "17c004a17bfa9dc0da04b46cc79e3a1e309db78d1de4bf5d64b2fa36b3728ab5",
+    "linux_kernel": "63891070fcdc17736dbff1e94774f89d2bf6f8d96bc2b7256c95476f49f02ee0",
+    "module": "efe6deb2b63dd93ca3cc14a31cab6e1b65a0ef64c59bb94eb9b09e1f43c33eba",
+    "release_initramfs": "b99c7eddfb26606a8b3fed962213f4aaa94665ce2dc15ffa5c8c1970f610d994",
+    "debug_assertions_initramfs": "d5d9a83a4ec9181e86a4cef60b31ff5bf196c26cc18290e2f2eeced85679d99c"
+  },
+  "qemu": {
+    "version": "QEMU emulator version 11.1.3",
+    "accelerator": "KVM",
+    "cpu": "host",
+    "vcpus": 2,
+    "memory_mib": 1024,
+    "pt_mode": "direct",
+    "grant_mib": 256,
+    "mitigations": "off",
+    "memlock_soft": 0,
+    "kill_ms": 100
+  },
+  "observations": {
+    "syscall": {
+      "results": {
+        "smp_pthreads_cpus": {
+          "value": "2",
+          "unit": "cpus"
+        },
+        "smp_fork_cpus": {
+          "value": "2",
+          "unit": "cpus"
+        },
+        "smp_check": {
+          "value": "1",
+          "unit": "bool"
+        },
+        "getpid_ns": {
+          "value": "129.65",
+          "unit": "ns"
+        },
+        "reg_preserve_getpid": {
+          "value": "1",
+          "unit": "bool"
+        },
+        "reg_preserve_nanosleep": {
+          "value": "1",
+          "unit": "bool"
+        },
+        "fpu_sse_getpid_ns": {
+          "value": "132.58",
+          "unit": "ns"
+        },
+        "fpu_sse_getpid_ok": {
+          "value": "1",
+          "unit": "bool"
+        },
+        "fpu_avx_getpid_ns": {
+          "value": "127.36",
+          "unit": "ns"
+        },
+        "fpu_avx_getpid_ok": {
+          "value": "1",
+          "unit": "bool"
+        },
+        "fpu_switch_sse_aba_ns": {
+          "value": "1527.73",
+          "unit": "ns"
+        },
+        "fpu_switch_sse_aba_ns_ok": {
+          "value": "1",
+          "unit": "bool"
+        },
+        "fpu_switch_avx_aba_ns": {
+          "value": "1547.33",
+          "unit": "ns"
+        },
+        "fpu_switch_avx_aba_ns_ok": {
+          "value": "1",
+          "unit": "bool"
+        },
+        "rt_sigreturn_valid": {
+          "value": "1",
+          "unit": "bool"
+        },
+        "rt_sigreturn_bad_mxcsr": {
+          "value": "1",
+          "unit": "bool"
+        },
+        "rt_sigreturn_bad_xcomp_bv": {
+          "value": "1",
+          "unit": "bool"
+        },
+        "suite_done": {
+          "value": "1",
+          "unit": "bool"
+        }
+      },
+      "safety": [],
+      "exit": "RUN_POC exit_kind=exit exit_code=0 grant_create_us=650800 exit_msg=\"\""
+    },
+    "safety": {
+      "results": {},
+      "safety": [
+        "SAFETY exc_de got_sig=8 expected=8 ok=1",
+        "SAFETY exc_db got_sig=5 expected=5 ok=1",
+        "SAFETY exc_bp got_sig=5 expected=5 ok=1",
+        "SAFETY exc_of got_sig=11 expected=11 ok=1",
+        "SAFETY exc_ud got_sig=4 expected=4 ok=1",
+        "SAFETY exc_ss got_sig=7 expected=7 ok=1",
+        "SAFETY exc_gp got_sig=11 expected=11 ok=1",
+        "SAFETY exc_pf got_sig=11 expected=11 ok=1",
+        "SAFETY exc_mf got_sig=8 expected=8 ok=1",
+        "SAFETY exc_xm got_sig=8 expected=8 ok=1",
+        "SAFETY exc_ac got_sig=7 expected=7 ok=1",
+        "SAFETY pf_rcx_r11_preserve 1",
+        "SAFETY prot_none_softw2 1",
+        "SAFETY pt_alloc_race_2vcpu errors=0 ok=1",
+        "SAFETY kernel_efault 1",
+        "SAFETY suite_done 1"
+      ],
+      "exit": "RUN_POC exit_kind=exit exit_code=0 grant_create_us=639134 exit_msg=\"\""
+    },
+    "kill": {
+      "results": {},
+      "safety": [],
+      "exit": "RUN_POC exit_kind=killed exit_code=9 grant_create_us=606172 exit_msg=\"killed by holder\""
+    },
+    "debug-assertions": {
+      "results": {
+        "smp_pthreads_cpus": {
+          "value": "2",
+          "unit": "cpus"
+        },
+        "smp_fork_cpus": {
+          "value": "2",
+          "unit": "cpus"
+        },
+        "smp_check": {
+          "value": "1",
+          "unit": "bool"
+        },
+        "getpid_ns": {
+          "value": "136.31",
+          "unit": "ns"
+        },
+        "reg_preserve_getpid": {
+          "value": "1",
+          "unit": "bool"
+        },
+        "reg_preserve_nanosleep": {
+          "value": "1",
+          "unit": "bool"
+        },
+        "fpu_sse_getpid_ns": {
+          "value": "135.75",
+          "unit": "ns"
+        },
+        "fpu_sse_getpid_ok": {
+          "value": "1",
+          "unit": "bool"
+        },
+        "fpu_avx_getpid_ns": {
+          "value": "137.73",
+          "unit": "ns"
+        },
+        "fpu_avx_getpid_ok": {
+          "value": "1",
+          "unit": "bool"
+        },
+        "fpu_switch_sse_aba_ns": {
+          "value": "1549.93",
+          "unit": "ns"
+        },
+        "fpu_switch_sse_aba_ns_ok": {
+          "value": "1",
+          "unit": "bool"
+        },
+        "fpu_switch_avx_aba_ns": {
+          "value": "1583.68",
+          "unit": "ns"
+        },
+        "fpu_switch_avx_aba_ns_ok": {
+          "value": "1",
+          "unit": "bool"
+        },
+        "rt_sigreturn_valid": {
+          "value": "1",
+          "unit": "bool"
+        },
+        "rt_sigreturn_bad_mxcsr": {
+          "value": "1",
+          "unit": "bool"
+        },
+        "rt_sigreturn_bad_xcomp_bv": {
+          "value": "1",
+          "unit": "bool"
+        },
+        "suite_done": {
+          "value": "1",
+          "unit": "bool"
+        }
+      },
+      "safety": [],
+      "exit": "RUN_POC exit_kind=exit exit_code=0 grant_create_us=869209 exit_msg=\"\""
+    }
+  },
+  "working_tree_source_sha256": {
+    "poc/ostd/src/arch/x86/cpu/kernelet_local.rs": "9c55c00ea982776dc656d61b687ccb8ed7617c5c0cddb276b903488e55d08239",
+    "poc/ostd/src/arch/x86/irq/kernelet_ops.rs": "1d18e5d34a0d1afedca9ebc7596f747ec58f5fc28634f24b20144318c7d0cd6f",
+    "poc/ostd/src/arch/x86/irq/mod.rs": "4856cf6ada843ae75a0f75fd98a759b895d12ee2f3500e16206d9717c321d716",
+    "poc/ostd/src/cpu/local/cell.rs": "7183d65b2d37b33474a426e5282a7fc808162efc5a72e757dde54f66899f7c35",
+    "poc/ostd/src/irq/guard.rs": "7a0085ad0424e1a97eccac28fea9f3b1984130a502e0ea662ecf9220f67f3b8c",
+    "poc/ostd/src/kernelet/entry.rs": "89e488fe4442dcd5ec83c3a77a6bf3c4dbed87ee209282e2559a6566309fffca",
+    "poc/ostd/src/task/mod.rs": "e1568068aca49679f3994dba398f3a8b2e64094549777bfee991d2bf2fb35078",
+    "poc/ostd/src/task/preempt/cpu_local.rs": "e1f799da7d6340f677224445f6c6672d1988d49c1ed31716048ea32f5892045c",
+    "poc/ostd/src/task/preempt/guard.rs": "5ea06403ec95c5ed023991c28f911c96a668733b8878ece00567236eccb555f9",
+    "poc/ostd/src/task/processor.rs": "e5442aba7a7809fbcefcc7badd4b93a26af01b9108941601b173e3985cca41c1",
+    "poc/ostd/src/user.rs": "807c8223a660fc5b602ec2a27412a021f2f85d2a40e661ff44b1c64c4886db26"
+  },
+  "formatter_normalized_sources_match": true
+}

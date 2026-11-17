@@ -1,0 +1,12 @@
+{
+  "component": "run_kernelet",
+  "input_sha256": "ac85cf30e0bb33b5ed1d52237de418733e80791334e7450772d68c9e2a2ef4f8",
+  "toolchain": "gcc (GCC) 16.2.1 20260810",
+  "outputs_sha256": {
+    "run_kernelet": "193e7348d07c1b9712e3378780d440869a42dd3e1974073ed556578f23ccbc77"
+  },
+  "outputs_rel": {
+    "run_kernelet": "run-kernelet"
+  },
+  "built_utc": "2026-11-17T12:14:02.835977+00:00"
+}

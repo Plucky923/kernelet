@@ -1,0 +1,149 @@
+{
+  "run_id": "20261117-092710-standards-memlock0",
+  "created_utc": "2026-11-17T09:27:11.702879+00:00",
+  "git_commit": "a5ec4b875d0a17890321a362fbc3fd16859b7eb4",
+  "git_dirty": true,
+  "poc_git_commit": "7f8476ab463f1dcdf901fd650ee4f127298d28ef",
+  "poc_git_dirty": true,
+  "targets": [
+    "L",
+    "K"
+  ],
+  "rounds": 1,
+  "seed": 1,
+  "payload_sha256": "7497ce18273f2a2b1fb336acc856d64a24c35ee1ed7ffa0e3a9a580fb2c7f99a",
+  "artifacts_sha256": {
+    "aster_bzimage": "2d3ee7b24dfb9b2ef98020c97305b247d170e25416d7d8264e1a8975e921f436",
+    "host_base_initrd": "a6139c5037144537621cc006861e29bd5a35a4d0a45ae3b9c0425f02eee1b891",
+    "linux_bzimage": "05baf6a37aee29813271e66acdc5fe261c1f15858db52327b164a125bb523dbb",
+    "payload_cpio": "7497ce18273f2a2b1fb336acc856d64a24c35ee1ed7ffa0e3a9a580fb2c7f99a"
+  },
+  "embedded_artifacts_sha256": {
+    "payload/eval-payload.cpio": "7497ce18273f2a2b1fb336acc856d64a24c35ee1ed7ffa0e3a9a580fb2c7f99a",
+    "modules/endovisor.ko": "1eae1375f3755794cb3e4febf9f0fa4badb2e784b37b33fa5f4bece63cc97120",
+    "bin/run-kernelet": "f537d012898adae77a46932c3954b8adbbf1168c4e2ce58600555fe769b1b410",
+    "kernelet-image.elf": "fbeebee8b0f18486baf2744f1d5f8daee05a1a80960dd6c80f843a0a88f1247a"
+  },
+  "kernel_config_checks": {
+    "perf-base": []
+  },
+  "host_cpu_model": "AMD Ryzen 7 5800H with Radeon Graphics",
+  "host_cpu_count": 16,
+  "host_governors": [
+    "performance"
+  ],
+  "host_cpu_topology": [
+    {
+      "cpu": 0,
+      "thread_siblings": "0-1",
+      "core_id": "0",
+      "scaling_governor": "performance",
+      "scaling_cur_freq": "3552541"
+    },
+    {
+      "cpu": 1,
+      "thread_siblings": "0-1",
+      "core_id": "0",
+      "scaling_governor": "performance",
+      "scaling_cur_freq": "3549485"
+    },
+    {
+      "cpu": 2,
+      "thread_siblings": "2-3",
+      "core_id": "1",
+      "scaling_governor": "performance",
+      "scaling_cur_freq": "4441877"
+    },
+    {
+      "cpu": 3,
+      "thread_siblings": "2-3",
+      "core_id": "1",
+      "scaling_governor": "performance",
+      "scaling_cur_freq": "4437619"
+    },
+    {
+      "cpu": 4,
+      "thread_siblings": "4-5",
+      "core_id": "2",
+      "scaling_governor": "performance",
+      "scaling_cur_freq": "3553044"
+    },
+    {
+      "cpu": 5,
+      "thread_siblings": "4-5",
+      "core_id": "2",
+      "scaling_governor": "performance",
+      "scaling_cur_freq": "3553474"
+    },
+    {
+      "cpu": 6,
+      "thread_siblings": "6-7",
+      "core_id": "3",
+      "scaling_governor": "performance",
+      "scaling_cur_freq": "3549230"
+    },
+    {
+      "cpu": 7,
+      "thread_siblings": "6-7",
+      "core_id": "3",
+      "scaling_governor": "performance",
+      "scaling_cur_freq": "3550343"
+    },
+    {
+      "cpu": 8,
+      "thread_siblings": "8-9",
+      "core_id": "4",
+      "scaling_governor": "performance",
+      "scaling_cur_freq": "3553741"
+    },
+    {
+      "cpu": 9,
+      "thread_siblings": "8-9",
+      "core_id": "4",
+      "scaling_governor": "performance",
+      "scaling_cur_freq": "3554403"
+    },
+    {
+      "cpu": 10,
+      "thread_siblings": "10-11",
+      "core_id": "5",
+      "scaling_governor": "performance",
+      "scaling_cur_freq": "3554818"
+    },
+    {
+      "cpu": 11,
+      "thread_siblings": "10-11",
+      "core_id": "5",
+      "scaling_governor": "performance",
+      "scaling_cur_freq": "4430527"
+    },
+    {
+      "cpu": 12,
+      "thread_siblings": "12-13",
+      "core_id": "6",
+      "scaling_governor": "performance",
+      "scaling_cur_freq": "3553618"
+    },
+    {
+      "cpu": 13,
+      "thread_siblings": "12-13",
+      "core_id": "6",
+      "scaling_governor": "performance",
+      "scaling_cur_freq": "3554681"
+    },
+    {
+      "cpu": 14,
+      "thread_siblings": "14-15",
+      "core_id": "7",
+      "scaling_governor": "performance",
+      "scaling_cur_freq": "3716250"
+    },
+    {
+      "cpu": 15,
+      "thread_siblings": "14-15",
+      "core_id": "7",
+      "scaling_governor": "performance",
+      "scaling_cur_freq": "3553584"
+    }
+  ]
+}

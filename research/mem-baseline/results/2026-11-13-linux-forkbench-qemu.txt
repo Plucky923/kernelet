@@ -1,0 +1,45 @@
+FORKBENCH anon     fork (parent side) median    0.308 ms  [min 0.256, max 3.305]
+FORKBENCH anon     child first read pass  median    0.642 ms  (1 minor faults)
+FORKBENCH anon     parent re-read          median    0.099 ms
+FORKBENCH shared   fork (parent side) median    0.026 ms  [min 0.023, max 1.206]
+FORKBENCH shared   child first read pass  median    1.031 ms  (1089 minor faults)
+FORKBENCH shared   parent re-read          median    0.048 ms
+FORKBENCH anon-thp fork (parent side) median    0.273 ms  [min 0.247, max 1.211]
+FORKBENCH anon-thp child first read pass  median    0.490 ms  (1 minor faults)
+FORKBENCH anon-thp parent re-read          median    0.089 ms
+FORKBENCH anon     fork (parent side) median    0.337 ms  [min 0.249, max 1.581]
+FORKBENCH anon     child first read pass  median    0.528 ms  (1 minor faults)
+FORKBENCH anon     parent re-read          median    0.092 ms
+FORKBENCH shared   fork (parent side) median    0.025 ms  [min 0.021, max 1.285]
+FORKBENCH shared   child first read pass  median    1.247 ms  (1089 minor faults)
+FORKBENCH shared   parent re-read          median    0.086 ms
+FORKBENCH anon-thp fork (parent side) median    0.295 ms  [min 0.249, max 1.297]
+FORKBENCH anon-thp child first read pass  median    0.534 ms  (1 minor faults)
+FORKBENCH anon-thp parent re-read          median    0.092 ms
+FORKBENCH anon     fork (parent side) median    0.316 ms  [min 0.246, max 1.406]
+FORKBENCH anon     child first read pass  median    0.652 ms  (1 minor faults)
+FORKBENCH anon     parent re-read          median    0.100 ms
+FORKBENCH shared   fork (parent side) median    0.028 ms  [min 0.024, max 1.243]
+FORKBENCH shared   child first read pass  median    1.190 ms  (1089 minor faults)
+FORKBENCH shared   parent re-read          median    0.060 ms
+FORKBENCH anon-thp fork (parent side) median    0.413 ms  [min 0.251, max 1.402]
+FORKBENCH anon-thp child first read pass  median    0.568 ms  (1 minor faults)
+FORKBENCH anon-thp parent re-read          median    0.094 ms
+FORKBENCH anon     fork (parent side) median    1.048 ms  [min 0.255, max 1.363]
+FORKBENCH anon     child first read pass  median    0.609 ms  (1 minor faults)
+FORKBENCH anon     parent re-read          median    0.095 ms
+FORKBENCH shared   fork (parent side) median    0.025 ms  [min 0.022, max 1.288]
+FORKBENCH shared   child first read pass  median    1.220 ms  (1089 minor faults)
+FORKBENCH shared   parent re-read          median    0.047 ms
+FORKBENCH anon-thp fork (parent side) median    0.276 ms  [min 0.252, max 1.356]
+FORKBENCH anon-thp child first read pass  median    0.668 ms  (1 minor faults)
+FORKBENCH anon-thp parent re-read          median    0.099 ms
+FORKBENCH anon     fork (parent side) median    0.342 ms  [min 0.243, max 1.284]
+FORKBENCH anon     child first read pass  median    0.596 ms  (1 minor faults)
+FORKBENCH anon     parent re-read          median    0.095 ms
+FORKBENCH shared   fork (parent side) median    0.025 ms  [min 0.022, max 1.206]
+FORKBENCH shared   child first read pass  median    1.166 ms  (1025 minor faults)
+FORKBENCH shared   parent re-read          median    0.051 ms
+FORKBENCH anon-thp fork (parent side) median    0.561 ms  [min 0.255, max 1.405]
+FORKBENCH anon-thp child first read pass  median    0.620 ms  (1 minor faults)
+FORKBENCH anon-thp parent re-read          median    0.099 ms

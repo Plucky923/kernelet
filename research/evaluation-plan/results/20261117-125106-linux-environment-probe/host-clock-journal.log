@@ -1,0 +1,13 @@
+Oct 27 04:22:05 plucky kernel: tsc: Fast TSC calibration using PIT
+Oct 27 04:22:05 plucky kernel: tsc: Detected 3194.216 MHz processor
+Oct 27 04:22:05 plucky kernel: clocksource: refined-jiffies: mask: 0xffffffff max_cycles: 0xffffffff, max_idle_ns: 1910969940391419 ns
+Oct 27 04:22:05 plucky kernel: clocksource: jiffies: mask: 0xffffffff max_cycles: 0xffffffff, max_idle_ns: 1911260446275000 ns
+Oct 27 04:22:05 plucky kernel: clocksource: hpet: mask: 0xffffffff max_cycles: 0xffffffff, max_idle_ns: 133484873504 ns
+Oct 27 04:22:05 plucky kernel: clocksource: tsc-early: mask: 0xffffffffffffffff max_cycles: 0x2e0af1c0398, max_idle_ns: 440795225912 ns
+Oct 27 04:22:05 plucky kernel: TSC synchronization [CPU#0 -> CPU#2]:
+Oct 27 04:22:05 plucky kernel: Measured 9025100516 cycles TSC warp between CPUs, turning off TSC clock.
+Oct 27 04:22:05 plucky kernel: tsc: Marking TSC unstable due to check_tsc_sync_source failed
+Oct 27 04:22:05 plucky kernel: clocksource: Switched to clocksource hpet
+Oct 27 04:22:05 plucky kernel: clocksource: acpi_pm: mask: 0xffffff max_cycles: 0xffffff, max_idle_ns: 2085701024 ns
+Oct 27 04:22:06 plucky kernel: kvm_amd: TSC scaling supported
+Oct 28 20:47:27 plucky kernel: kvm: SMP vm created on host with unstable TSC; guest TSC will not be reliable

@@ -1,0 +1,1 @@
+A R1 selfcheck.vdso: QEMU exited before QMP ready (rc=1): qemu-system-x86_64: Failed to initialize io_uring: Cannot allocate memory

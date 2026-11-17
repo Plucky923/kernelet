@@ -1,0 +1,18 @@
+{
+  "component": "linux_perf_base",
+  "input_sha256": "9d7fd32de29b24370de7d66e12846abacf04743a28fc7976c3c56d474db628c5",
+  "toolchain": "gcc (GCC) 16.2.1 20260810",
+  "outputs_sha256": {
+    "linux_perf_base_bzimage": "f8743f4f599440c01b865bce9fac1c96de2d57f3afe6d62ce6b75fa295584e57",
+    "linux_perf_base_config": "b04b19238b62a917293c640f067ab3916a5654d001e89aeb33ba13e00f7fb206",
+    "linux_perf_base_symvers": "d56acdcb581a0a250f94d46d3ad02ffd3b0c7f2bfbd215f060bec79f13756bd8",
+    "linux_perf_base_system_map": "674f21909dff53f6573ccb4befec81c19f3b81a95b9562e17b47cae8d3f729b4"
+  },
+  "outputs_rel": {
+    "linux_perf_base_bzimage": "linux-perf-base/arch/x86/boot/bzImage",
+    "linux_perf_base_config": "linux-perf-base/.config",
+    "linux_perf_base_symvers": "linux-perf-base/Module.symvers",
+    "linux_perf_base_system_map": "linux-perf-base/System.map"
+  },
+  "built_utc": "2026-11-17T12:13:48.720127+00:00"
+}
