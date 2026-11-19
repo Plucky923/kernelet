@@ -1,0 +1,361 @@
+<!DOCTYPE HTML>
+<html lang="en" class="light sidebar-visible" dir="ltr">
+    <head>
+        <!-- Book generated using mdBook -->
+        <meta charset="UTF-8">
+        <title>2026-11-16 Principles of API virtualization - Building Kernelets on Linux</title>
+
+
+        <!-- Custom HTML head -->
+
+        <meta name="description" content="The accepted design and implementation of kernelets on Linux, with proposals for their evolution">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <meta name="theme-color" content="#ffffff">
+
+        <link rel="icon" href="../favicon-de23e50b.svg">
+        <link rel="shortcut icon" href="../favicon-8114d1fc.png">
+        <link rel="stylesheet" href="../css/variables-8adf115d.css">
+        <link rel="stylesheet" href="../css/general-2459343d.css">
+        <link rel="stylesheet" href="../css/chrome-ae938929.css">
+        <link rel="stylesheet" href="../css/print-9e4910d8.css" media="print">
+
+        <!-- Fonts -->
+        <link rel="stylesheet" href="../fonts/fonts-9644e21d.css">
+
+        <!-- Highlight.js Stylesheets -->
+        <link rel="stylesheet" id="mdbook-highlight-css" href="../highlight-493f70e1.css">
+        <link rel="stylesheet" id="mdbook-tomorrow-night-css" href="../tomorrow-night-4c0ae647.css">
+        <link rel="stylesheet" id="mdbook-ayu-highlight-css" href="../ayu-highlight-3fdfc3ac.css">
+
+        <!-- Custom theme stylesheets -->
+        <link rel="stylesheet" href="../assets/book-46594365.css">
+
+
+        <!-- Provide site root and default themes to javascript -->
+        <script>
+            const path_to_root = "../";
+            const default_light_theme = "light";
+            const default_dark_theme = "navy";
+            window.path_to_searchindex_js = "../searchindex-d67a5a1e.js";
+        </script>
+        <!-- Start loading toc.js asap -->
+        <script src="../toc-4ef43cdc.js"></script>
+    </head>
+    <body>
+    <div id="mdbook-help-container">
+        <div id="mdbook-help-popup">
+            <h2 class="mdbook-help-title">Keyboard shortcuts</h2>
+            <div>
+                <p>Press <kbd>←</kbd> or <kbd>→</kbd> to navigate between chapters</p>
+                <p>Press <kbd>S</kbd> or <kbd>/</kbd> to search in the book</p>
+                <p>Press <kbd>?</kbd> to show this help</p>
+                <p>Press <kbd>Esc</kbd> to hide this help</p>
+            </div>
+        </div>
+    </div>
+    <div id="mdbook-body-container">
+        <!-- Work around some values being stored in localStorage wrapped in quotes -->
+        <script>
+            try {
+                let theme = localStorage.getItem('mdbook-theme');
+                let sidebar = localStorage.getItem('mdbook-sidebar');
+
+                if (theme.startsWith('"') && theme.endsWith('"')) {
+                    localStorage.setItem('mdbook-theme', theme.slice(1, theme.length - 1));
+                }
+
+                if (sidebar.startsWith('"') && sidebar.endsWith('"')) {
+                    localStorage.setItem('mdbook-sidebar', sidebar.slice(1, sidebar.length - 1));
+                }
+            } catch (e) { }
+        </script>
+
+        <!-- Set the theme before any content is loaded, prevents flash -->
+        <script>
+            const default_theme = window.matchMedia("(prefers-color-scheme: dark)").matches ? default_dark_theme : default_light_theme;
+            let theme;
+            try { theme = localStorage.getItem('mdbook-theme'); } catch(e) { }
+            if (theme === null || theme === undefined) { theme = default_theme; }
+            const html = document.documentElement;
+            html.classList.remove('light')
+            html.classList.add(theme);
+            html.classList.add("js");
+        </script>
+
+        <input type="checkbox" id="mdbook-sidebar-toggle-anchor" class="hidden">
+
+        <!-- Hide / unhide sidebar before it is displayed -->
+        <script>
+            let sidebar = null;
+            const sidebar_toggle = document.getElementById("mdbook-sidebar-toggle-anchor");
+            if (document.body.clientWidth >= 1080) {
+                try { sidebar = localStorage.getItem('mdbook-sidebar'); } catch(e) { }
+                sidebar = sidebar || 'visible';
+            } else {
+                sidebar = 'hidden';
+                sidebar_toggle.checked = false;
+            }
+            if (sidebar === 'visible') {
+                sidebar_toggle.checked = true;
+            } else {
+                html.classList.remove('sidebar-visible');
+            }
+        </script>
+
+        <nav id="mdbook-sidebar" class="sidebar" aria-label="Table of contents">
+            <!-- populated by js -->
+            <mdbook-sidebar-scrollbox class="sidebar-scrollbox"></mdbook-sidebar-scrollbox>
+            <noscript>
+                <iframe class="sidebar-iframe-outer" src="../toc.html"></iframe>
+            </noscript>
+            <div id="mdbook-sidebar-resize-handle" class="sidebar-resize-handle">
+                <div class="sidebar-resize-indicator"></div>
+            </div>
+        </nav>
+
+        <div id="mdbook-page-wrapper" class="page-wrapper">
+
+            <div class="page">
+                <div id="mdbook-menu-bar-hover-placeholder"></div>
+                <div id="mdbook-menu-bar" class="menu-bar sticky">
+                    <div class="left-buttons">
+                        <label id="mdbook-sidebar-toggle" class="icon-button" for="mdbook-sidebar-toggle-anchor" title="Toggle Table of Contents" aria-label="Toggle Table of Contents" aria-controls="mdbook-sidebar">
+                            <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M0 96C0 78.3 14.3 64 32 64H416c17.7 0 32 14.3 32 32s-14.3 32-32 32H32C14.3 128 0 113.7 0 96zM0 256c0-17.7 14.3-32 32-32H416c17.7 0 32 14.3 32 32s-14.3 32-32 32H32c-17.7 0-32-14.3-32-32zM448 416c0 17.7-14.3 32-32 32H32c-17.7 0-32-14.3-32-32s14.3-32 32-32H416c17.7 0 32 14.3 32 32z"/></svg></span>
+                        </label>
+                        <button id="mdbook-theme-toggle" class="icon-button" type="button" title="Change theme" aria-label="Change theme" aria-haspopup="true" aria-expanded="false" aria-controls="mdbook-theme-list">
+                            <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 576 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M371.3 367.1c27.3-3.9 51.9-19.4 67.2-42.9L600.2 74.1c12.6-19.5 9.4-45.3-7.6-61.2S549.7-4.4 531.1 9.6L294.4 187.2c-24 18-38.2 46.1-38.4 76.1L371.3 367.1zm-19.6 25.4l-116-104.4C175.9 290.3 128 339.6 128 400c0 3.9 .2 7.8 .6 11.6c1.8 17.5-10.2 36.4-27.8 36.4H96c-17.7 0-32 14.3-32 32s14.3 32 32 32H240c61.9 0 112-50.1 112-112c0-2.5-.1-5-.2-7.5z"/></svg></span>
+                        </button>
+                        <ul id="mdbook-theme-list" class="theme-popup" aria-label="Themes" role="menu">
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-default_theme">Auto</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-light">Light</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-rust">Rust</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-coal">Coal</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-navy">Navy</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-ayu">Ayu</button></li>
+                        </ul>
+                        <button id="mdbook-search-toggle" class="icon-button" type="button" title="Search (`/`)" aria-label="Toggle Searchbar" aria-expanded="false" aria-keyshortcuts="/ s" aria-controls="mdbook-searchbar">
+                            <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M416 208c0 45.9-14.9 88.3-40 122.7L502.6 457.4c12.5 12.5 12.5 32.8 0 45.3s-32.8 12.5-45.3 0L330.7 376c-34.4 25.2-76.8 40-122.7 40C93.1 416 0 322.9 0 208S93.1 0 208 0S416 93.1 416 208zM208 352c79.5 0 144-64.5 144-144s-64.5-144-144-144S64 128.5 64 208s64.5 144 144 144z"/></svg></span>
+                        </button>
+                    </div>
+
+                    <h1 class="menu-title">Building Kernelets on Linux</h1>
+
+                    <div class="right-buttons">
+                        <a href="../print.html" title="Print this book" aria-label="Print this book">
+                            <span class=fa-svg id="print-button"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M128 0C92.7 0 64 28.7 64 64v96h64V64H354.7L384 93.3V160h64V93.3c0-17-6.7-33.3-18.7-45.3L400 18.7C388 6.7 371.7 0 354.7 0H128zM384 352v32 64H128V384 368 352H384zm64 32h32c17.7 0 32-14.3 32-32V256c0-35.3-28.7-64-64-64H64c-35.3 0-64 28.7-64 64v96c0 17.7 14.3 32 32 32H64v64c0 35.3 28.7 64 64 64H384c35.3 0 64-28.7 64-64V384zm-16-88c-13.3 0-24-10.7-24-24s10.7-24 24-24s24 10.7 24 24s-10.7 24-24 24z"/></svg></span>
+                        </a>
+
+                    </div>
+                </div>
+
+                <div id="mdbook-search-wrapper" class="hidden">
+                    <form id="mdbook-searchbar-outer" class="searchbar-outer">
+                        <div class="search-wrapper">
+                            <input type="search" id="mdbook-searchbar" name="searchbar" placeholder="Search this book ..." aria-controls="mdbook-searchresults-outer" aria-describedby="searchresults-header">
+                            <div class="spinner-wrapper">
+                                <span class=fa-svg id="fa-spin"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M304 48c0-26.5-21.5-48-48-48s-48 21.5-48 48s21.5 48 48 48s48-21.5 48-48zm0 416c0-26.5-21.5-48-48-48s-48 21.5-48 48s21.5 48 48 48s48-21.5 48-48zM48 304c26.5 0 48-21.5 48-48s-21.5-48-48-48s-48 21.5-48 48s21.5 48 48 48zm464-48c0-26.5-21.5-48-48-48s-48 21.5-48 48s21.5 48 48 48s48-21.5 48-48zM142.9 437c18.7-18.7 18.7-49.1 0-67.9s-49.1-18.7-67.9 0s-18.7 49.1 0 67.9s49.1 18.7 67.9 0zm0-294.2c18.7-18.7 18.7-49.1 0-67.9S93.7 56.2 75 75s-18.7 49.1 0 67.9s49.1 18.7 67.9 0zM369.1 437c18.7 18.7 49.1 18.7 67.9 0s18.7-49.1 0-67.9s-49.1-18.7-67.9 0s-18.7 49.1 0 67.9z"/></svg></span>
+                            </div>
+                        </div>
+                    </form>
+                    <div id="mdbook-searchresults-outer" class="searchresults-outer hidden">
+                        <div id="mdbook-searchresults-header" class="searchresults-header"></div>
+                        <ul id="mdbook-searchresults">
+                        </ul>
+                    </div>
+                </div>
+
+                <!-- Apply ARIA attributes after the sidebar and the sidebar toggle button are added to the DOM -->
+                <script>
+                    document.getElementById('mdbook-sidebar-toggle').setAttribute('aria-expanded', sidebar === 'visible');
+                    document.getElementById('mdbook-sidebar').setAttribute('aria-hidden', sidebar !== 'visible');
+                    Array.from(document.querySelectorAll('#mdbook-sidebar a')).forEach(function(link) {
+                        link.setAttribute('tabIndex', sidebar === 'visible' ? 0 : -1);
+                    });
+                </script>
+
+                <div id="mdbook-content" class="content">
+                    <main>
+                        <h1 id="2026-11-16-principles-of-api-virtualization"><a class="header" href="#2026-11-16-principles-of-api-virtualization">2026-11-16 Principles of API virtualization</a></h1>
+<ul>
+<li>Status: Draft</li>
+<li>Author(s): Plucky923</li>
+<li>Discussion: No public review opened yet.</li>
+<li>Affected chapters: <a href="../accepted-design/why-a-kernel-of-your-own.html">Why a kernel of your own</a>, <a href="../accepted-design/the-kernelet-abi.html">The kernelet ABI</a>, <a href="../accepted-design/stopping-a-kernelet.html">Stopping a kernelet</a>, <a href="../accepted-design/tenant-memory-on-linux-page-tables.html">Tenant memory on Linux’s page tables</a>, <a href="../accepted-design/what-vostd-adds-on-top.html">What vOSTD adds on top</a>, and <a href="../accepted-design/what-it-costs.html">What it costs</a>.</li>
+<li>Implementation or experiments: No standalone implementation. This document synthesizes the accepted design, audits all 24 service-table entries, and generalizes six companion proposals (<a href="2026-10-31-reduce-syscall-overhead.html">Reduce syscall overhead</a>, <a href="https://github.com/tatetian/kernelet/blob/cd92aad9d195736cec1daf49d403315add0bab4c/book/src/design-proposals/2026-11-04-coordinate-the-two-schedulers.md">Coordinate the two schedulers</a>, <a href="2026-11-08-typed-io.html">TypedIO</a>, <a href="2026-11-09-fpu-state-management.html">FPU state management</a>, <a href="2026-11-13-direct-page-table-updates-in-vostd.html">Direct page-table updates in vOSTD</a>, and <a href="2026-11-16-allocate-the-kernelet-heap-from-the-grant.html">Allocate the kernelet heap from the grant</a>). The <a href="#lmbench-measurements">LMbench measurements</a> cover the integrated prototype.</li>
+</ul>
+<h2 id="summary"><a class="header" href="#summary">Summary</a></h2>
+<p>API virtualization turns <code>OSTD</code> into <code>vOSTD</code> for multi-tenant sandboxes on a shared host kernel. Unlike a machine hypervisor that combines protection and multiplexing at one trap boundary, a kernelet splits them by resource ownership. <code>vOSTD</code> confines <code>kernel proper</code> at the upper API boundary without crossing, and the endovisor checks only the host-owned objects it multiplexes. Two principles define these boundaries:</p>
+<ol>
+<li><strong>Principle 1 (<code>kernel proper → vOSTD</code>): virtualize tenant OS semantics.</strong> Strip machine-global authority, keep tenant-scoped OS contracts, and replace hardware-coupled or unchecked signatures with safe OS abstractions.</li>
+<li><strong>Principle 2 (<code>vOSTD ↔ host</code>): delegate coarse containers to the host; keep tenant confinement and fine-grained state local.</strong> Cross the host boundary only for whole-reclaimable containers, host-owned CPU/MMU/privilege control, or peer fault domains.</li>
+</ol>
+<p>Applied to OSTD and the 24-entry service table, these principles derive the six companion proposals and leave 13 multiplexing and cross-domain services.</p>
+<h2 id="problem-and-motivation"><a class="header" href="#problem-and-motivation">Problem and motivation</a></h2>
+<div class="background">
+<p><strong>Virtualization: protection vs. multiplexing.</strong> A multi-tenant system performs two distinct jobs. <em>Protection</em> confines each tenant to its own resources so it cannot read, corrupt, or crash the host or sibling tenants. <em>Multiplexing</em> shares scarce physical hardware and global kernel state across tenants, including CPU time, physical memory quotas, MMU/TLB contexts, interrupt gates, and shared devices. In classical machine virtualization (<a href="https://dl.acm.org/doi/10.1145/361011.361073">Popek and Goldberg, 1974</a>), the guest kernel is an untrusted binary, so the hypervisor enforces both protection and multiplexing at one expensive hardware trap boundary.</p>
+</div>
+
+<h3 id="why-a-cheap-boundary-still-fails-when-protection-and-multiplexing-stay-coupled"><a class="header" href="#why-a-cheap-boundary-still-fails-when-protection-and-multiplexing-stay-coupled">Why a cheap boundary still fails when protection and multiplexing stay coupled</a></h3>
+<p>In a classical VM, trapping across the hypervisor boundary is expensive, so it is natural to assume that replacing that trap with a cheap call would remove the overhead. In a kernelet, a null service call switches stacks in only 36 cycles (<a href="../accepted-design/what-it-costs.html#the-crossing">What it costs</a>). Following that intuition, a design can keep single-machine <code>OSTD</code> unchanged above and forward every privileged or hardware-facing operation across the <a href="../accepted-design/the-kernelet-abi.html#the-three-tables">service table</a> to the endovisor, which validates each request and executes it inside Linux’s shared kernel subsystems.</p>
+<p>Making the jump cheap removes only the 36-cycle call cost. Pushing <code>OSTD</code> semantics across the host multiplexing boundary still fails in two ways:</p>
+<ol>
+<li><strong>Duplicate structures and host paths inflate latency.</strong> Because <code>vOSTD</code> cannot touch host internals yet must preserve <code>OSTD</code> semantics, while the host loses Rust type and ownership guarantees across C calls, both sides duplicate locks, tracking tables, and side structures. Every forwarded call also runs boundary checks, staging copies, and Linux subsystem paths instead of updating memory directly. Thus a 64 MiB <code>fork</code> slows to 7.85 ms vs. 0.34 ms natively (<a href="2026-11-13-direct-page-table-updates-in-vostd.html#what-that-choice-costs">Direct page-table updates in vOSTD</a>), 64-byte <code>mem_alloc</code>/<code>mem_free</code> pairs take 449 cycles (<a href="2026-11-16-allocate-the-kernelet-heap-from-the-grant.html#how-the-accepted-host-heap-works-and-what-it-costs">Allocate the kernelet heap from the grant</a>), and FPU staging adds ~330–340 ns per syscall (<a href="2026-11-09-fpu-state-management.html#problem-and-motivation">FPU state management</a>).</li>
+<li><strong>Conflicting OS and host semantics force extra bridging mechanisms.</strong> Host subsystems enforce their own rules for concurrency, object lifetimes, and state representation, which often conflict with <code>OSTD</code>’s single-OS contracts. Reconciling those mismatches requires extra cross-boundary shims and restrictions, such as host waiting helpers (<code>vm_wait</code>) and lock aborts when sleepable host paths meet kernelet spin locks, deferred queues and per-object scans where abrupt kill demands whole-container teardown (<a href="../accepted-design/what-vostd-adds-on-top.html#the-rule-about-sleeping">What vOSTD adds on top</a>), or software side-maps where host formats cannot encode an <code>OSTD</code> permission state.</li>
+</ol>
+<h3 id="how-api-virtualization-decouples-them"><a class="header" href="#how-api-virtualization-decouples-them">How API virtualization decouples them</a></h3>
+<p>Unlike a binary VM, a kernelet moves the virtualization boundary up to <code>OSTD</code>’s safe-Rust API on Linux. Three structural conditions let it separate protection from multiplexing:</p>
+<ol>
+<li><strong>Safe Rust splits the VM’s single boundary into two.</strong> Safe Rust forces untrusted <code>kernel proper</code> through <code>vOSTD</code>, which sits inside the TCB (<a href="../accepted-design/why-a-kernel-of-your-own.html#the-same-kernel-a-different-framework">Why a kernel of your own</a>). <code>vOSTD</code> can therefore enforce tenant protection locally at <code>kernel proper → vOSTD</code> with zero crossings, leaving <code>vOSTD ↔ host</code> for host multiplexing.</li>
+<li><strong>The upper boundary is a source-level Rust API.</strong> Because kernelets compile both layers from source, <code>vOSTD</code> can reshape bare-metal assumptions (such as <code>UserMode::execute</code>, unchecked <code>FpuContext</code>, and <code>IoMem</code>) into host-friendly Rust abstractions.</li>
+<li><strong><code>vOSTD</code> stays decoupled from Linux internals below.</strong> Unlike a Linux kernel module, <code>vOSTD</code> compiles as a PIE image with zero host symbol imports and cannot touch Linux runqueues, <code>mm_struct</code> lists, or IDT gates (<a href="../accepted-design/the-kernelet-abi.html">The kernelet ABI</a>). Because the host can also kill a sandbox immediately without running <code>Drop</code> destructors (<a href="../accepted-design/stopping-a-kernelet.html#the-shape-of-a-death">Stopping a kernelet</a>), Linux hands out coarse containers that the host multiplexer schedules and reclaims whole.</li>
+</ol>
+<p>Earlier <a href="https://github.com/tatetian/kernelet-book/blob/main/src/blueprint/asterinas-mode/virtualizing-ostd/README.md"><code>kernelet-book</code></a> blueprints observe that 22 of 38 virtualized OSTD items do not call the host, without stating the underlying rule. Separating protection from multiplexing supplies that rule.</p>
+<h2 id="proposed-change"><a class="header" href="#proposed-change">Proposed change</a></h2>
+<h3 id="core-thesis-decouple-protection-from-multiplexing"><a class="header" href="#core-thesis-decouple-protection-from-multiplexing">Core thesis: decouple protection from multiplexing</a></h3>
+<p>API virtualization places tenant protection at <code>kernel proper → vOSTD</code> and host multiplexing at <code>vOSTD ↔ host</code>, splitting them by resource ownership:</p>
+<pre class="mermaid">flowchart LR
+    subgraph MV["Machine virtualization"]
+        direction TB
+        G["Untrusted guest kernel (binary ISA)"] -- "Trap: protection + multiplexing" --&gt; HV["Trusted hypervisor"]
+    end
+    subgraph AV["API virtualization"]
+        direction TB
+        KP["Untrusted kernel proper (safe Rust)"] -- "P1 (Protection): semantic API; confines tenant locally (0 crossings)" --&gt; VO["Trusted vOSTD (per-sandbox view)"]
+        VO &lt;-- "P2 (Multiplexing): coarse containers; shares hardware &amp; checks host objects" --&gt; EN["Trusted endovisor and host (machine-wide view)"]
+    end
+    MV ~~~ AV
+</pre>
+
+<p>Two principles define these boundaries:</p>
+<h3 id="principle-1-virtualize-tenant-os-semantics"><a class="header" href="#principle-1-virtualize-tenant-os-semantics">Principle 1: Virtualize tenant OS semantics</a></h3>
+<p>At the <code>kernel proper → vOSTD</code> boundary, <code>vOSTD</code> enforces tenant confinement while keeping <code>kernel proper</code> portable:</p>
+<ol>
+<li><strong>Strip machine-global authority.</strong> <code>vOSTD</code> omits APIs over physical hardware topology or host-global kernel state (<code>Absent</code>) so unauthorized calls fail at compile time.</li>
+<li><strong>Keep tenant-scoped OS contracts.</strong> <code>vOSTD</code> keeps safe-Rust contracts for single-OS abstractions, reshaping a signature only when a single-machine assumption conflicts with running on a host.</li>
+</ol>
+<p>As a result, pure-software abstractions built over lower <code>vOSTD</code> primitives compile unchanged (<code>Identical</code>), while <code>vOSTD</code> reimplements the underlying primitives (<code>Virtualized</code>) under Principle 2.</p>
+<h3 id="principle-2-delegate-coarse-containers-to-the-host-keep-tenant-confinement-and-fine-grained-state-local"><a class="header" href="#principle-2-delegate-coarse-containers-to-the-host-keep-tenant-confinement-and-fine-grained-state-local">Principle 2: Delegate coarse containers to the host; keep tenant confinement and fine-grained state local</a></h3>
+<p>At the <code>vOSTD ↔ host</code> boundary, resource ownership sets placement, crossings, and checks:</p>
+<ol>
+<li><strong>Delegate coarse containers; keep fine-grained state local.</strong> Because Linux must reclaim sandbox resources whole on abrupt kill without running <code>Drop</code> destructors, the host provides only coarse containers, while <code>vOSTD</code> handles all fine-grained updates locally inside them to avoid Linux paths and locks.</li>
+<li><strong>Cross only for external ownership.</strong> <code>vOSTD</code> and the host cross the runtime boundary <em>if and only if</em> an operation touches a host container, host-controlled CPU/MMU/privilege multiplexing, or another fault domain.</li>
+</ol>
+<p>Each side checks only what it owns: <code>vOSTD</code> confines the tenant over sandbox state locally, and the endovisor checks host-owned objects during required crossings.</p>
+<h3 id="resulting-taxonomy-of-vostd"><a class="header" href="#resulting-taxonomy-of-vostd">Resulting taxonomy of <code>vOSTD</code></a></h3>
+<p>The table below classifies Asterinas’s <code>OSTD</code> (<code>ab9a4cfdc</code>) using both principles. Principle 1 separates items into <code>Absent</code>, <code>Identical</code>, and <code>Virtualized</code> (marking reshaped upper signatures with <code>\*</code>), and Principle 2 splits <code>Virtualized</code> paths into local <code>Not crossing</code> operations and <code>Crossing</code> host transfers (<code>Services</code>, <code>EntryTable</code>, and <code>BootArgs</code>). Compound primitives split by execution path: common fast paths stay inside <code>vOSTD</code>, while contention, cross-CPU TLB shootdowns, and instance teardown cross into the host multiplexer.</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Subsystem</th><th>Absent</th><th>Identical</th><th>Virtualized: Not crossing <em>(local in <code>vOSTD</code>)</em></th><th>Virtualized: Crossing <em>(host multiplexer &amp; ABI)</em></th></tr>
+</thead>
+<tbody>
+<tr><td><strong>Tasks, Sync &amp; Time</strong></td><td><code>smp::inter_processor_call</code></td><td><code>Scheduler</code>, <code>WaitQueue</code>, <code>Mutex</code>, <code>RwMutex</code></td><td><code>Task</code>, <code>TaskOptions</code>, <code>disable_preempt()</code>, <code>SpinLock</code> <em>(fast path; slow path calls <code>vcpu_on_spin</code>)</em>, <code>disable_local()</code>, <code>cpu_local!</code>, <code>CpuId</code>, <code>Jiffies</code></td><td>Physical CPU multiplexing: carrier scheduling, preemption timers &amp; cgroup quotas (<code>vcpu_boot</code>/<code>idle</code>/<code>kick</code>/<code>yield</code>/<code>on_spin</code>, <code>vcpu_entry</code>, <code>virq_entry</code>)</td></tr>
+<tr><td><strong>Memory &amp; Heap</strong></td><td>None</td><td><code>Infallible</code> <code>VmReader</code>/<code>VmWriter</code></td><td><code>Frame&lt;M&gt;</code>, <code>UniqueFrame&lt;M&gt;</code>, <code>Segment&lt;M&gt;</code>, <code>FrameAllocOptions</code>, <code>#[global_allocator]</code>, <code>Fallible</code> <code>VmReader</code>/<code>VmWriter</code>, <code>VmIo</code></td><td>Memory quota multiplexing: startup <code>grant</code> provisioning &amp; whole-grant reclaim (<code>BootArgs</code>)</td></tr>
+<tr><td><strong>Address Spaces</strong></td><td>None</td><td><code>PageProperty</code>, <code>PageFlags</code></td><td><code>VmSpace</code>, <code>Cursor</code>, <code>CursorMut</code> (<code>map</code>, <code>protect_next</code>, <code>unmap</code> on grant PT), <code>TlbFlusher</code> <em>(triggers <code>vm_flush</code>)</em></td><td>MMU multiplexing: <code>mm_struct</code> &amp; <code>CR3</code> switching, cross-CPU TLB shootdowns (<code>vm_create</code>/<code>activate</code>/<code>flush</code>/<code>destroy</code>)</td></tr>
+<tr><td><strong>User Mode &amp; FPU</strong></td><td>None</td><td><code>GeneralRegs</code>, <code>CpuException</code></td><td><code>UserEventHandler</code>*, <code>UserEvent</code>* <em>(replace <code>UserMode::execute</code>, <code>ReturnReason</code>)</em>, <code>FpuContext</code> (<code>read_from</code>*, intra-carrier <code>XSAVE</code>/<code>XRSTOR</code>)</td><td>Shared hardware Ring-3 / trap gate (<code>user_run</code>, <code>user_event_entry</code>, <code>on_exception</code>)</td></tr>
+<tr><td><strong>Devices &amp; IPC</strong></td><td><code>IoPort</code>, <code>IRQ_CHIP</code>, <code>BootloaderAcpiArg</code> <em>(and <code>IoMem</code> under <code>TypedIO</code>)</em></td><td>None</td><td><code>TypedIO</code> (<code>Protocol</code>/<code>Message</code>*), <code>DmaStream</code>/<code>DmaCoherent</code> <em>(alloc &amp; sync)</em>, <code>IrqLine</code> <em>(dispatch)</em></td><td>Device/IPC multiplexing: attachments, queue/buffer leases, cross-sandbox pipes &amp; virtual IRQs (<code>discover</code>, <code>try_submit</code>, <code>reserve</code>/<code>commit</code>, <code>bind_irq</code>/<code>rearm_irq</code>)</td></tr>
+<tr><td><strong>Boot, Log &amp; Panic</strong></td><td><code>DEVICE_TREE</code>, <code>SERIAL_PORT</code></td><td><code>catch_unwind()</code>, <code>Error</code>, <code>Result</code>, <code>ExitCode</code>, <code>util</code></td><td><code>boot_info()</code> (<code>BootInfo</code>), <code>tsc_freq()</code>, <code>read_tsc()</code>, <code>early_print!</code> / <code>log</code> <em>(formatting)</em>, <code>poweroff()</code> / <code>abort()</code> <em>(call <code>stop</code>)</em></td><td>Startup entry (<code>BootArgs</code>, <code>kernelet_entry</code>), shared host output sinks (<code>console_write</code>, <code>log_write</code>), &amp; instance teardown (<code>stop</code>)</td></tr>
+</tbody>
+</table>
+</div>
+<h3 id="changes-relative-to-the-accepted-design"><a class="header" href="#changes-relative-to-the-accepted-design">Changes relative to the Accepted Design</a></h3>
+<p>This taxonomy retires 11 entries from the 24-entry <code>Services</code> table in <a href="../accepted-design/the-kernelet-abi.html#the-three-tables">The kernelet ABI</a>. Heap blocks (<code>mem_alloc</code>, <code>mem_free</code>), single-page PTE updates (<code>vm_map</code>, <code>vm_unmap</code>, <code>vm_protect</code>, <code>vm_wait</code>, <code>vm_wake</code>), FPU switches (<code>fpu_save</code>, <code>fpu_load</code>), and task stacks (<code>kstack_alloc</code>, <code>kstack_free</code>) do not manage host multiplexer units, so they move into local grant memory and intra-carrier <code>XSAVE</code>/<code>XRSTOR</code>, leaving 13 host-multiplexing and cross-domain calls (<code>vcpu_*</code>, <code>vm_create</code>/<code>destroy</code>/<code>activate</code>/<code>flush</code>, <code>user_run</code>, <code>console_write</code>, <code>log_write</code>, <code>stop</code>).</p>
+<h2 id="alternatives-and-tradeoffs"><a class="header" href="#alternatives-and-tradeoffs">Alternatives and tradeoffs</a></h2>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Alternative</th><th>Benefits</th><th>Costs and limits</th></tr>
+</thead>
+<tbody>
+<tr><td><strong>Document subsystem mechanisms without unifying principles</strong></td><td>Leaves existing chapter structure untouched</td><td>Gives contributors no predictive rule for new OSTD subsystems or alternative host kernels</td></tr>
+<tr><td><strong>Mediate fine-grained ops on sandbox-owned state at the service table</strong> <em>(accepted v1 paths)</em></td><td>Catches certain <code>vOSTD</code> bugs inside endovisor C checks</td><td>Adds host locks, per-object teardown tables, and sleeping host calls under spin locks without shrinking the TCB</td></tr>
+<tr><td><strong>Preserve bare-metal OSTD signatures unconditionally</strong></td><td>Zero source diff in OSTD traits and drivers</td><td>Suspends kernel stacks across <code>UserMode::execute</code>, skips <code>FpuContext</code> validation, and forces untyped <code>IoMem</code> emulation</td></tr>
+</tbody>
+</table>
+</div>
+<h2 id="implementation-and-integration"><a class="header" href="#implementation-and-integration">Implementation and integration</a></h2>
+<p>This proposal introduces no standalone code. The six companion proposals implement all runtime, ABI, and subsystem changes:</p>
+<ul>
+<li><strong>Upper-boundary changes (Principle 1):</strong> <a href="2026-10-31-reduce-syscall-overhead.html">Reduce syscall overhead</a>, <a href="2026-11-08-typed-io.html">TypedIO</a>, and <a href="2026-11-09-fpu-state-management.html">FPU state management</a>.</li>
+<li><strong>Lower-boundary changes (Principle 2):</strong> <a href="https://github.com/tatetian/kernelet/blob/cd92aad9d195736cec1daf49d403315add0bab4c/book/src/design-proposals/2026-11-04-coordinate-the-two-schedulers.md">Coordinate the two schedulers</a>, <a href="2026-11-09-fpu-state-management.html">FPU state management</a>, <a href="2026-11-13-direct-page-table-updates-in-vostd.html">Direct page-table updates in vOSTD</a>, and <a href="2026-11-16-allocate-the-kernelet-heap-from-the-grant.html">Allocate the kernelet heap from the grant</a>.</li>
+</ul>
+<p>Once those companion proposals are accepted, this framework updates <a href="../accepted-design/why-a-kernel-of-your-own.html#the-same-kernel-a-different-framework">Why a kernel of your own</a> (protection vs. multiplexing, Principle 1, and the <code>vOSTD</code> taxonomy) and <a href="../accepted-design/the-kernelet-abi.html#the-three-tables">The kernelet ABI</a> (Principle 2, the 13-entry service table, and ownership-based endovisor checks).</p>
+<h2 id="validation-and-evidence"><a class="header" href="#validation-and-evidence">Validation and evidence</a></h2>
+<h3 id="lmbench-measurements"><a class="header" href="#lmbench-measurements">LMbench measurements</a></h3>
+<p>On 2026-11-18, Linux, native Asterinas, and Kernelet ran the same 19 LMbench workloads, with five accepted measurements per workload and system. All three used the same payload from the Asterinas LMbench fork at <code>afb47eddaf10</code> with the timing and resource-use patch.</p>
+<p>Each VM used QEMU 10.2.1 with KVM, two pinned vCPUs, and 2 GiB of preallocated memory on one Intel Xeon Platinum 8259CL host. We set both frequency limits to 3.2 GHz on the assigned host CPUs and accepted per-boot effective VM execution frequencies of 3.168–3.232 GHz.</p>
+<p>Linux and Kernelet shared the Linux 6.12 kernel binary. Kernelet ran in a separate campaign with Direct page tables and a fresh sandbox with a 512 MiB memory grant for each workload. Native Asterinas used an earlier source snapshot.</p>
+<p>The table gives median end-to-end latencies for six workloads.</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Workload</th><th>Unit</th><th style="text-align: right">Linux</th><th style="text-align: right">Native Asterinas</th><th style="text-align: right">Kernelet</th></tr>
+</thead>
+<tbody>
+<tr><td><code>getppid</code></td><td>ns/op</td><td style="text-align: right">57.6</td><td style="text-align: right">75.7</td><td style="text-align: right">77.4</td></tr>
+<tr><td>Read 1 byte from <code>/dev/zero</code></td><td>ns/op</td><td style="text-align: right">81.6</td><td style="text-align: right">136.6</td><td style="text-align: right">186.2</td></tr>
+<tr><td>Pipe round trip</td><td>µs/op</td><td style="text-align: right">9.17</td><td style="text-align: right">9.56</td><td style="text-align: right">23.44</td></tr>
+<tr><td><code>fork</code>, child exit, and <code>waitpid</code></td><td>ms/op</td><td style="text-align: right">0.0848</td><td style="text-align: right">0.1346</td><td style="text-align: right">15.99</td></tr>
+<tr><td><code>fork</code> + <code>exec</code></td><td>µs/op</td><td style="text-align: right">241.7</td><td style="text-align: right">341.0</td><td style="text-align: right">450.8</td></tr>
+<tr><td>File-mapping page fault</td><td>ns/fault</td><td style="text-align: right">174.2</td><td style="text-align: right">138.3</td><td style="text-align: right">229.0</td></tr>
+</tbody>
+</table>
+</div>
+<p>Across the four 64 MiB memory bandwidth workloads, Kernelet’s median bandwidth was 92.8–95.9% of the corresponding Linux medians and 94.9–98.8% of the native Asterinas medians.</p>
+<p>The local archive at <code>research/evaluation-plan/results/20261118-kernelet-lmbench-3p2ghz/</code> contains full summaries, all 285 samples, workload settings, frequency logs, and build manifests.</p>
+<h2 id="decision-and-follow-up"><a class="header" href="#decision-and-follow-up">Decision and follow-up</a></h2>
+<p>Status remains Draft pending review alongside the companion proposals.</p>
+
+                    </main>
+
+                    <nav class="nav-wrapper" aria-label="Page navigation">
+                        <!-- Mobile navigation buttons -->
+                            <a rel="prev" href="../design-proposals/2026-11-16-allocate-the-kernelet-heap-from-the-grant.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                                <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M41.4 233.4c-12.5 12.5-12.5 32.8 0 45.3l160 160c12.5 12.5 32.8 12.5 45.3 0s12.5-32.8 0-45.3L109.3 256 246.6 118.6c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0l-160 160z"/></svg></span>
+                            </a>
+
+
+                        <div style="clear: both"></div>
+                    </nav>
+                </div>
+            </div>
+
+            <nav class="nav-wide-wrapper" aria-label="Page navigation">
+                    <a rel="prev" href="../design-proposals/2026-11-16-allocate-the-kernelet-heap-from-the-grant.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                        <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M41.4 233.4c-12.5 12.5-12.5 32.8 0 45.3l160 160c12.5 12.5 32.8 12.5 45.3 0s12.5-32.8 0-45.3L109.3 256 246.6 118.6c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0l-160 160z"/></svg></span>
+                    </a>
+
+            </nav>
+
+        </div>
+
+        <template id=fa-eye><span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 576 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M288 32c-80.8 0-145.5 36.8-192.6 80.6C48.6 156 17.3 208 2.5 243.7c-3.3 7.9-3.3 16.7 0 24.6C17.3 304 48.6 356 95.4 399.4C142.5 443.2 207.2 480 288 480s145.5-36.8 192.6-80.6c46.8-43.5 78.1-95.4 93-131.1c3.3-7.9 3.3-16.7 0-24.6c-14.9-35.7-46.2-87.7-93-131.1C433.5 68.8 368.8 32 288 32zM432 256c0 79.5-64.5 144-144 144s-144-64.5-144-144s64.5-144 144-144s144 64.5 144 144zM288 192c0 35.3-28.7 64-64 64c-11.5 0-22.3-3-31.6-8.4c-.2 2.8-.4 5.5-.4 8.4c0 53 43 96 96 96s96-43 96-96s-43-96-96-96c-2.8 0-5.6 .1-8.4 .4c5.3 9.3 8.4 20.1 8.4 31.6z"/></svg></span></template>
+        <template id=fa-eye-slash><span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M38.8 5.1C28.4-3.1 13.3-1.2 5.1 9.2S-1.2 34.7 9.2 42.9l592 464c10.4 8.2 25.5 6.3 33.7-4.1s6.3-25.5-4.1-33.7L525.6 386.7c39.6-40.6 66.4-86.1 79.9-118.4c3.3-7.9 3.3-16.7 0-24.6c-14.9-35.7-46.2-87.7-93-131.1C465.5 68.8 400.8 32 320 32c-68.2 0-125 26.3-169.3 60.8L38.8 5.1zM223.1 149.5C248.6 126.2 282.7 112 320 112c79.5 0 144 64.5 144 144c0 24.9-6.3 48.3-17.4 68.7L408 294.5c5.2-11.8 8-24.8 8-38.5c0-53-43-96-96-96c-2.8 0-5.6 .1-8.4 .4c5.3 9.3 8.4 20.1 8.4 31.6c0 10.2-2.4 19.8-6.6 28.3l-90.3-70.8zm223.1 298L373 389.9c-16.4 6.5-34.3 10.1-53 10.1c-79.5 0-144-64.5-144-144c0-6.9 .5-13.6 1.4-20.2L83.1 161.5C60.3 191.2 44 220.8 34.5 243.7c-3.3 7.9-3.3 16.7 0 24.6c14.9 35.7 46.2 87.7 93 131.1C174.5 443.2 239.2 480 320 480c47.8 0 89.9-12.9 126.2-32.5z"/></svg></span></template>
+        <template id=fa-copy><span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M502.6 70.63l-61.25-61.25C435.4 3.371 427.2 0 418.7 0H255.1c-35.35 0-64 28.66-64 64l.0195 256C192 355.4 220.7 384 256 384h192c35.2 0 64-28.8 64-64V93.25C512 84.77 508.6 76.63 502.6 70.63zM464 320c0 8.836-7.164 16-16 16H255.1c-8.838 0-16-7.164-16-16L239.1 64.13c0-8.836 7.164-16 16-16h128L384 96c0 17.67 14.33 32 32 32h47.1V320zM272 448c0 8.836-7.164 16-16 16H63.1c-8.838 0-16-7.164-16-16L47.98 192.1c0-8.836 7.164-16 16-16H160V128H63.99c-35.35 0-64 28.65-64 64l.0098 256C.002 483.3 28.66 512 64 512h192c35.2 0 64-28.8 64-64v-32h-47.1L272 448z"/></svg></span></template>
+        <template id=fa-play><span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 384 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M73 39c-14.8-9.1-33.4-9.4-48.5-.9S0 62.6 0 80V432c0 17.4 9.4 33.4 24.5 41.9s33.7 8.1 48.5-.9L361 297c14.3-8.7 23-24.2 23-41s-8.7-32.2-23-41L73 39z"/></svg></span></template>
+        <template id=fa-clock-rotate-left><span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M75 75L41 41C25.9 25.9 0 36.6 0 57.9V168c0 13.3 10.7 24 24 24H134.1c21.4 0 32.1-25.9 17-41l-30.8-30.8C155 85.5 203 64 256 64c106 0 192 86 192 192s-86 192-192 192c-40.8 0-78.6-12.7-109.7-34.4c-14.5-10.1-34.4-6.6-44.6 7.9s-6.6 34.4 7.9 44.6C151.2 495 201.7 512 256 512c141.4 0 256-114.6 256-256S397.4 0 256 0C185.3 0 121.3 28.7 75 75zm181 53c-13.3 0-24 10.7-24 24V256c0 6.4 2.5 12.5 7 17l72 72c9.4 9.4 24.6 9.4 33.9 0s9.4-24.6 0-33.9l-65-65V152c0-13.3-10.7-24-24-24z"/></svg></span></template>
+
+
+
+        <script>
+            window.playground_copyable = true;
+        </script>
+
+
+        <script src="../elasticlunr-ef4e11c1.min.js"></script>
+        <script src="../mark-09e88c2c.min.js"></script>
+        <script src="../searcher-c2a407aa.js"></script>
+
+        <script src="../clipboard-1626706a.min.js"></script>
+        <script src="../highlight-abc7f01d.js"></script>
+        <script src="../book-a0b12cfe.js"></script>
+
+        <!-- Custom JS scripts -->
+        <script src="../assets/mermaid-eefea253.min.js"></script>
+        <script src="../assets/mermaid-init-9b03b796.js"></script>
+
+
+
+    </div>
+    </body>
+</html>

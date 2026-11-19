@@ -37,10 +37,10 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-0cd4f786.js";
+            window.path_to_searchindex_js = "searchindex-d67a5a1e.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="toc-dd7541c6.js"></script>
+        <script src="toc-4ef43cdc.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -5100,6 +5100,361 @@ B.FpuContext -&gt; CPU registers   XRSTOR
 <p>The host was shared, with variable frequency. All samples and boot ranges are retained, including large variations in the switch tests. Recovery latency was not measured. Full Host containment and process lifecycle correctness remain unvalidated. Reproduce with <code>prototype/bench/fpu-direct/no-entry.py</code>. Results and independent verification are in <code>prototype/bench/results/2026-11-12-fpu-direct-no-entry/</code>; the Linux syscall reference is in <code>prototype/bench/results/2026-11-12-fpu-direct-syscall/</code>.</p>
 <h2 id="open-questions-1"><a class="header" href="#open-questions-1">Open questions</a></h2>
 <h2 id="decision-and-follow-up-1"><a class="header" href="#decision-and-follow-up-1">Decision and follow-up</a></h2>
+<div style="break-before: page; page-break-before: always;"></div>
+<h1 id="2026-11-13-direct-page-table-updates-in-vostd"><a class="header" href="#2026-11-13-direct-page-table-updates-in-vostd">2026-11-13 Direct page-table updates in vOSTD</a></h1>
+<ul>
+<li>Status: Draft</li>
+<li>Author(s): Plucky923</li>
+<li>Discussion: Revised from the initial <code>2026-11-13</code> batched-services draft; batched services appear under <a href="#alternatives-and-tradeoffs-2">Alternatives and tradeoffs</a>.</li>
+<li>Affected chapters: <a href="#the-kernelet-abi">The kernelet ABI</a>, <a href="#carrier-hooks-and-patch-overview">Carrier hooks and patch overview</a>, <a href="#into-user-mode-and-back">Into user mode and back</a>, <a href="#stopping-a-kernelet">Stopping a kernelet</a>, <a href="#tenant-memory-on-linuxs-page-tables">Tenant memory on Linux’s page tables</a>, <a href="#what-vostd-adds-on-top">What vOSTD adds on top</a>, and <a href="#what-it-costs">What it costs</a>.</li>
+<li>Implementation or experiments: Not yet implemented in the book prototype; baseline <code>fork</code> measurements appear below.</li>
+</ul>
+<h2 id="summary-3"><a class="header" href="#summary-3">Summary</a></h2>
+<p>The accepted design maps tenant memory under a full-range <code>VM_PFNMAP</code> VMA and crosses into Linux for <code>map</code>, <code>protect</code>, and <code>unmap</code>. Nearly all of <code>map</code>’s 447 cycles/page goes to host <code>mmap_lock</code>, VMA lookup, double walks, and tracking tables. Because the host MMU multiplexer owns only <code>mm_struct</code> containers, this proposal deletes the VMA along with <code>vm_map</code>, <code>vm_protect</code>, <code>vm_unmap</code>, <code>vm_wait</code>, and <code>vm_wake</code>. <code>vOSTD</code> allocates lower page tables from sandbox grants and updates user PTEs directly in memory, while Linux retains one VMA-free <code>mm_struct</code> per <code>VmSpace</code> for <code>CR3</code> scheduling, kernel-half sync, and <code>vm_flush</code> TLB shootdowns. At trap entry, <code>on_exception</code> captures user faults and traps, and <code>on_resume</code> delivers them to the kernelet without VMA callbacks or POSIX signals.</p>
+<h2 id="problem-and-motivation-3"><a class="header" href="#problem-and-motivation-3">Problem and motivation</a></h2>
+<h3 id="who-manages-tenant-page-tables"><a class="header" href="#who-manages-tenant-page-tables">Who manages tenant page tables</a></h3>
+<p>Each carrier runs as a Linux task. Its page tables must work with Linux scheduling, confine mappings to the sandbox grant, and update fast enough for workloads such as <code>fork</code>.</p>
+<p>To reuse Linux’s PTE helpers without handing physical-page accounting to Linux, the accepted design (<a href="#the-problem">Tenant memory on Linux’s page tables</a>) gives each <code>VmSpace</code> one <code>mm_struct</code> and one full-range <code>VM_PFNMAP</code> VMA. That VMA indirection burdens two paths:</p>
+<ul>
+<li><strong>PTE updates (<code>map</code>, <code>protect</code>).</strong> Each single-page update crosses into the endovisor. The endovisor takes <code>mmap_read_lock</code> and looks up the VMA, forcing <code>vOSTD</code> to handle cursor contention with sleeping <code>vm_wait</code> and <code>vm_wake</code> shims. Linux walks the page table to write the PTE, and the endovisor walks it a second time to verify the slot because <code>vmf_insert_pfn_prot()</code> returns success even when an existing entry skips the insert.</li>
+<li><strong>Page-fault delivery (<code>#PF</code>).</strong> User page faults traverse VMA lookup, <code>handle_mm_fault()</code>, and the VMA fault callback before <code>on_resume</code>, while other user traps fall back to Linux signals. Deleting the VMA removes the <code>#PF</code> callback, so a direct trap hook replaces both paths.</li>
+</ul>
+<h3 id="what-that-choice-costs"><a class="header" href="#what-that-choice-costs">What that choice costs</a></h3>
+<p>We measured five-boot medians on one KVM VM (2 vCPUs, 512 MiB RAM, Linux 6.12, 3.19 GHz Ryzen 7 5800H). Native Linux forks 64 MiB of 4 KiB private anonymous pages (<code>MADV_NOHUGEPAGE</code>, 16,384 distinct pages) in 0.34 ms (0.337 ms, ~21 ns or ~66 cycles/page), including task, VMA, and PTE setup. Linux walks each 2 MiB leaf table once, updates PTEs in batches, and flushes the TLB once.</p>
+<p>In the same VM, the baseline kernelet benchmark measures only <code>VmSpace</code> creation and copy-on-write PTE replication across 16,384 entries (<code>protect</code> and <code>map</code> per page over 256 frames mapped 64 times due to the small baseline grant), excluding task creation. Even with that narrower scope and warmer frame reuse, the kernelet takes 7.85 ms (25.07 M cycles, ~479 ns or ~1,530 cycles/page), 23x slower than Linux’s full <code>fork()</code>.</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Kernelet operation (3.19 GHz VM)</th><th style="text-align: right">Median</th><th style="text-align: right">Median per page</th></tr>
+</thead>
+<tbody>
+<tr><td><code>map</code>, one page per call</td><td style="text-align: right">447 cycles (140 ns)</td><td style="text-align: right">447 cycles (140 ns)</td></tr>
+<tr><td><code>map</code>, 512 pages under one cursor</td><td style="text-align: right">n/a</td><td style="text-align: right">472 cycles (148 ns)</td></tr>
+<tr><td><code>protect</code> 2 MiB read-only + flush (512 pages)</td><td style="text-align: right">243,808 cycles (76.3 µs)</td><td style="text-align: right">~476 cycles</td></tr>
+<tr><td><code>munmap</code> 64 MiB in one range call (16,384 pages)</td><td style="text-align: right">872,480 cycles (0.27 ms)</td><td style="text-align: right">~53 cycles</td></tr>
+</tbody>
+</table>
+</div>
+<p>One <code>CursorMut</code> across 512 pages still costs 472 cycles/page, and a single range <code>munmap</code> drops to ~53 cycles/page. Because <code>mem-perf</code> brackets loops with unserialized <code>rdtsc</code> calls and retains cold initial rounds, short single-call rows carry timer noise. Still, a null crossing takes only 36 cycles on the 3.79 GHz host in <a href="#the-crossing">What it costs</a>, so nearly all of <code>map</code>’s 447 cycles/page and the 23x <code>fork</code> gap come from host VMA locks, double walks, and tracking tables.</p>
+<h2 id="proposed-change-3"><a class="header" href="#proposed-change-3">Proposed change</a></h2>
+<h3 id="why-linux-need-not-maintain-user-page-tables"><a class="header" href="#why-linux-need-not-maintain-user-page-tables">Why Linux need not maintain user page tables</a></h3>
+<p>Linux neither sets tenant paging policy nor audits individual PTE writes. The kernel proper runs demand paging and copy-on-write, and trusted <code>vOSTD</code> confines every mapping to sandbox grants. Because the x86-64 MMU walks <code>CR3</code> without consulting Linux VMAs, and grant-backed page tables allow whole-sandbox reclamation on kill, Linux only needs to manage each address space’s <code>mm_struct</code> shell.</p>
+<h3 id="overview-2"><a class="header" href="#overview-2">Overview</a></h3>
+<p>Four layers split page-table management:</p>
+<ul>
+<li><strong>Kernel proper (unchanged).</strong> Uses OSTD <code>VmSpace</code>, <code>CursorMut</code>, and <code>TlbFlusher</code> APIs and handles user faults as on bare metal.</li>
+<li><strong><code>vOSTD</code>.</strong> Allocates lower page-table pages from sandbox grants and writes user PTEs and root user slots directly in memory. It keeps only <code>vm_create</code>, <code>vm_activate</code>, <code>vm_flush</code>, and <code>vm_destroy</code>.</li>
+<li><strong>Endovisor.</strong> Manages VMA-free <code>mm_struct</code> shells across <code>vm_create</code>, <code>vm_activate</code>, <code>vm_flush</code>, and <code>vm_destroy</code>, and forwards user traps to <code>on_resume</code>.</li>
+<li><strong>Linux and carrier hooks.</strong> Owns <code>mm-&gt;pgd</code> allocation, kernel-half sync, <code>CR3</code> scheduling, cross-CPU TLB shootdowns, and <code>on_exception</code> trap capture.</li>
+</ul>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Kernel proper call or event</th><th>Accepted design</th><th>Proposed design</th></tr>
+</thead>
+<tbody>
+<tr><td><code>VmSpace::new()</code></td><td><code>vm_create</code> builds <code>mm</code>, file, and <code>VM_PFNMAP</code> VMA</td><td><code>vm_create</code> allocates VMA-free <code>mm_struct</code> and exposes its root PFN</td></tr>
+<tr><td><code>vm_space.activate()</code></td><td><code>vm_activate</code> records space and switches before user entry</td><td><code>vm_activate</code> pins <code>VmSpace</code> and switches <code>current-&gt;mm</code> directly</td></tr>
+<tr><td><code>cursor.map(frame, prop)</code></td><td><code>vm_map</code> crossing (or withheld map if <code>!R</code>)</td><td><code>vOSTD</code> allocates grant PT pages and writes PTE locally (including <code>!R</code>)</td></tr>
+<tr><td><code>cursor.protect_next(len, op)</code></td><td><code>vm_protect</code> crossing (or <code>vm_unmap</code>/<code>vm_map</code> if <code>!R</code>)</td><td><code>vOSTD</code> updates PTE atomically in memory (caller flushes via <code>TlbFlusher</code>)</td></tr>
+<tr><td><code>cursor.unmap(len)</code></td><td>Walk + <code>vm_unmap</code> crossing + RCU wait</td><td><code>vOSTD</code> clears PTEs locally, calls <code>vm_flush</code>, waits RCU, and drops frames</td></tr>
+<tr><td><code>flusher.dispatch_tlb_flush()</code></td><td><code>vm_flush</code> (VMA range flush)</td><td><code>vm_flush</code> (<code>mm_struct</code> range flush)</td></tr>
+<tr><td><code>VmSpace</code> drop</td><td>Walk + <code>vm_unmap</code> + <code>vm_destroy</code></td><td>Detaches root user slots, runs RCU wait + <code>vm_destroy</code>, frees subtree locally</td></tr>
+<tr><td>Tenant <code>#PF</code> / user trap</td><td>VMA fault callback or POSIX signal drain</td><td><code>on_exception</code> captures user traps, and <code>on_resume</code> delivers them</td></tr>
+</tbody>
+</table>
+</div>
+<h3 id="vma-free-mm_struct-and-root-page"><a class="header" href="#vma-free-mm_struct-and-root-page">VMA-free mm_struct and root page</a></h3>
+<p>On x86-64, one 4-level root (<code>mm-&gt;pgd</code>) maps both halves: shared Linux kernel slots <code>256..511</code> and tenant slots <code>0..255</code>. Deleting the VMA removes Linux’s user-range tracking, but each <code>VmSpace</code> retains one VMA-free <code>mm_struct</code> so Linux can:</p>
+<ol>
+<li><strong>Own and sync the root page.</strong> Allocate <code>mm-&gt;pgd</code> and propagate host kernel updates in <code>256..511</code>.</li>
+<li><strong>Restore <code>CR3</code> on schedule.</strong> Reload <code>mm-&gt;pgd</code> across host preemptions and CPU migrations.</li>
+<li><strong>Track CPUs and PCIDs.</strong> Maintain <code>mm_cpumask</code> and PCID generations for TLB shootdowns.</li>
+<li><strong>Switch tenant spaces.</strong> Swap <code>current-&gt;mm</code> when a carrier changes tenant threads.</li>
+</ol>
+<p>Previously, <code>vm_create</code> called <code>vm_mmap()</code>, which required a backing file and switching <code>current-&gt;mm</code> twice to attach the VMA. Without VMAs, <code>vm_create</code> allocates only a VMA-free <code>mm_struct</code> and publishes its root physical address (<code>root_paddr</code>) in the shared space record. Because slots <code>256..511</code> carry Linux’s direct map (<code>linear_map_base</code>), <code>vOSTD</code> reads and edits any <code>VmSpace</code> at <code>linear_map_base + paddr</code> without switching <code>CR3</code>.</p>
+<p>Running tenant code still loads the target <code>mm-&gt;pgd</code> into <code>CR3</code>. Previously, <code>vm_activate</code> deferred switching <code>current-&gt;mm</code> until user-mode entry because synchronous <code>mmput()</code> can sleep if the old <code>mm</code> hits zero references while <code>VmSpace::activate()</code> runs in a non-sleepable context. Now <code>vm_activate</code> switches <code>current-&gt;mm</code> immediately and drops the previous <code>mm</code> via non-sleeping <code>mmput_async()</code>. Because that <code>mm</code> has no VMAs, <code>mmput_async()</code> tears down only the Linux <code>mm_struct</code> shell, leaving <code>vOSTD</code> to reclaim the grant-backed lower page tables on <code>VmSpace</code> drop.</p>
+<h3 id="direct-page-table-writes-in-vostd"><a class="header" href="#direct-page-table-writes-in-vostd">Direct page-table writes in vOSTD</a></h3>
+<p><code>vOSTD</code> runs OSTD’s page-table logic (<code>CursorMut::map</code>, <code>protect_next</code>, and <code>unmap</code>) directly in memory. Lower tables (levels 1–3) use grant frames, <a href="#use-ostds-frame-model-within-the-grant"><code>MetaSlot</code></a> node locks (<code>PageTablePageMeta</code>, excluded from <code>AnyUFrameMeta</code>), and hand-over-hand locking (<code>vcpu::on_spin()</code> on contention). Concurrent reads (<code>VmReader</code>, <code>VmWriter</code>, <code>query</code>) and writes use aligned <code>AtomicU64</code> accesses, with <code>Release</code> stores publishing zeroed child tables before readers traverse them. Extra rules handle Linux’s <code>mm-&gt;pgd</code> root, lockless host walkers, and x86 PTE bits.</p>
+<div class="background">
+<p><strong>Linux: page-table isolation (PTI).</strong> To mitigate Meltdown, PTI removes full kernel mappings from user mode’s <code>CR3</code>. Under <code>X86_FEATURE_PTI</code>, Linux allocates two adjacent 4 KiB pages per <code>mm-&gt;pgd</code> on an 8 KiB boundary: the kernel root (<code>root_paddr</code>) and the user root (<code>root_paddr | PAGE_SIZE</code>), whose upper half maps only minimal entry structures. Both roots share the same user subtree across slots <code>0..255</code>. Linux loads <code>root_paddr</code> on kernel entry and <code>root_paddr | PAGE_SIZE</code> on user return, and <a href="https://elixir.bootlin.com/linux/v6.12/source/arch/x86/mm/pti.c#L124"><code>__pti_set_user_pgtbl()</code></a> sets <code>_PAGE_NX</code> on present user entries in the kernel root.</p>
+</div>
+
+<p>Because Linux allocates <code>mm-&gt;pgd</code> outside the grant <code>MetaSlot</code> array, <code>VmSpace</code> keeps a dedicated lock for level 4 and maintains both roots when <code>pti_enabled</code> holds. At startup, <code>vOSTD</code> checks <code>BootArgs</code> for 4-level paging (<code>pgtable_levels == 4</code>), <code>_PAGE_NX</code> support, and unencrypted RAM (<code>sme_me_mask == 0</code>). Under the root lock, <code>vOSTD</code> zeroes new child tables before publishing them; with PTI enabled, it writes <code>root_paddr | PAGE_SIZE</code> first and then <code>Release</code>-stores <code>root_paddr</code> with <code>_PAGE_NX</code> on present user slots.</p>
+<p>An empty VMA tree stops VMA-based Linux scanners (<code>pagemap</code>, MGLRU, <code>exit_mmap()</code>). Two lockless Linux paths still walk <code>mm-&gt;pgd</code> on <code>current-&gt;mm</code>:</p>
+<div class="background">
+<p><strong>Linux: lockless page-table walkers and non-present PTE bits.</strong> <code>perf_virt_to_phys()</code> walks <code>mm-&gt;pgd</code> in NMI context via <code>get_user_page_fast_only()</code>. <code>gup_fast_pgd_range()</code> (<code>gup_fast</code> in <code>mm/gup.c</code>) walks page tables with interrupts disabled before checking VMAs. <code>gup_fast_pte_range()</code> rejects an entry when <code>pte_special()</code> (<code>_PAGE_SPECIAL</code>), <code>pte_protnone()</code>, devmap, or permission checks fail; otherwise it pins the frame’s <code>struct page</code>. On x86-64, Linux reuses bit 8 (<code>_PAGE_GLOBAL</code>) on non-present PTEs as <code>_PAGE_PROTNONE</code> and defines <code>pte_present()</code> as <code>_PAGE_PRESENT | _PAGE_PROTNONE</code> (<code>arch/x86/include/asm/pgtable_types.h</code>).</p>
+</div>
+
+<p><code>on_syscall</code> blocks carrier syscalls such as <code>O_DIRECT</code> from calling <code>gup_fast</code>, while host <code>perf</code> still samples carriers in NMI context. To protect lockless walkers from reading freed tables without running <code>synchronize_rcu()</code> on every unmap, <code>CursorMut::unmap</code> clears leaf PTEs and leaves lower tables (levels 1–3) attached until <code>VmSpace</code> destruction.</p>
+<p>Before writing a leaf PTE, <code>vOSTD</code> checks a typed <code>UFrame</code>, alignment, user-range bounds, and multi-segment <code>in_grant(paddr)</code> (<a href="#2026-11-16-allocate-the-kernelet-heap-from-the-grant">2026-11-16</a>), then enforces four PTE bit rules:</p>
+<ul>
+<li><strong>Writeback PAT policy.</strong> <code>vOSTD</code> restricts mappings to <code>CachePolicy::Writeback</code> (<code>PWT = PCD = PAT = 0</code>), matching Linux’s direct map without touching <code>IA32_PAT</code>.</li>
+<li><strong>Special and global bits.</strong> Mapped leaves set <code>_PAGE_SPECIAL</code> (bit 9) so lockless <code>perf</code>/<code>gup_fast</code> paths skip <code>struct page</code> lookups, and clear <code>_PAGE_GLOBAL</code> (bit 8) to avoid cross-PCID aliasing and <code>_PAGE_PROTNONE</code> confusion.</li>
+<li><strong>Saved-dirty write protection.</strong> Because x86 CET reserves <code>WRITE = 0</code> with <code>DIRTY = 1</code> for shadow stacks (<code>arch/x86/include/asm/pgtable.h</code>), write-protecting a leaf moves <code>_PAGE_DIRTY</code> (bit 6) to <code>_PAGE_SAVED_DIRTY</code> (bit 58), and <code>PageFlags::DIRTY</code> reads both.</li>
+<li><strong>L1TF-safe <code>!R</code> leaves.</strong> Non-readable (<code>!PageFlags::R</code>) entries replace the accepted <code>withheld</code> set by clearing <code>PRESENT</code> and <code>_PAGE_GLOBAL</code>, setting <code>SOFTW2</code> (bit 10), and inverting PFN bits within <code>physical_mask</code> (<code>arch/x86/include/asm/pgtable-invert.h</code>) to block L1TF speculation. The kernel proper resolves <code>SEGV_ACCERR</code> versus <code>SEGV_MAPERR</code> from its VMAR tree.</li>
+</ul>
+<h3 id="tlb-flushing-and-space-teardown"><a class="header" href="#tlb-flushing-and-space-teardown">TLB flushing and space teardown</a></h3>
+<p><code>vOSTD</code> sees only virtual CPUs and edits page tables without changing <code>CR3</code>. Only Linux tracks physical CPUs in <code>mm_cpumask</code>, sends cross-CPU IPIs, and runs host RCU:</p>
+<ul>
+<li><strong>Runtime TLB flushes (<code>vm_flush</code>).</strong> Local <code>invlpg</code> misses remote physical CPUs in <code>mm_cpumask</code>, inactive spaces edited via the direct map, and PTI user PCIDs. Callers must dispatch <code>TlbFlusher</code> (<code>vm_flush</code> calling <code>flush_tlb_mm_range()</code>) before relying on tighter permissions (<code>protect_next</code>) or reusing unmapped frames.</li>
+<li><strong>Space teardown (<code>vm_destroy</code>).</strong> Without VMAs, <code>exit_mmap()</code> skips user tables and table-freeing TLB flushes. Reclaiming grant page tables requires evicting CPUs holding stale <code>CR3</code> roots and draining host RCU readers. On <code>KLET_KILL</code>, kernelet cleanup never runs, so the endovisor must sever those host references itself.</li>
+</ul>
+<div class="background">
+<p><strong>Linux: lazy TLB mode.</strong> On kernel threads, x86 Linux leaves the last user <code>mm</code> in <code>CR3</code> (<code>arch/x86/mm/tlb.c</code>). Page shootdowns skip lazy CPUs until they exit lazy mode. Freeing page-table pages requires <code>flush_tlb_mm_range()</code> with <code>freed_tables = true</code>: CPUs cache upper-level paging structures, walk <code>CR3</code> speculatively, and must switch lazy CPUs back to <code>init_mm</code>.</p>
+</div>
+
+<p>Runtime <code>VmSpace</code> retirement and sandbox exit or kill run four host teardown steps in order:</p>
+<ol>
+<li>Wait for active <code>vm_activate</code> and <code>vm_flush</code> calls on the space to finish, and detach referencing vCPUs.</li>
+<li>Zero user entries <code>0..255</code> in <code>mm-&gt;pgd</code> (and <code>root_paddr | PAGE_SIZE</code> under PTI) without reading lower tables.</li>
+<li>Run <code>flush_tlb_mm_range(mm, 0, TLB_FLUSH_ALL, 0, true)</code> to clear paging-structure caches and switch lazy-TLB CPUs to <code>init_mm</code>.</li>
+<li>Run host <code>synchronize_rcu()</code> to drain lockless <code>perf</code> and <code>gup_fast</code> walkers, and call <code>mmput(mm)</code>.</li>
+</ol>
+<p>On runtime <code>VmSpace</code> retirement, <code>vOSTD</code> detaches user PGD slots <code>0..255</code>, drains its own RCU readers (<code>rcu::synchronize()</code>) and runs <code>vm_destroy</code> (steps 1–4), and then drops the detached lower tables and <code>UFrame</code>s (decoding <code>SOFTW2</code> inverted PFNs) back into the grant. On sandbox exit or <code>KLET_KILL</code>, the endovisor runs steps 1–4 on each space without touching lower tables and reclaims whole grant segments once active I/O leases (<a href="#2026-11-08-typedio">TypedIO</a>) drain.</p>
+<h3 id="user-mode-exception-hook"><a class="header" href="#user-mode-exception-hook">User-mode exception hook</a></h3>
+<p>Deleting the <code>VM_PFNMAP</code> VMA removes Linux’s <code>.fault()</code> and <code>.pfn_mkwrite()</code> callbacks, which would drop user <code>#PF</code> events into POSIX <code>SIGSEGV</code> signals. Extending <code>carrier_event_hooks</code> with <code>on_exception(regs, trapnr, error_code, addr)</code> lets Linux forward user traps directly before VMA lookup or <code>force_sig()</code> signal queuing.</p>
+<p>Because <code>on_exception</code> runs in non-sleepable trap-entry contexts (such as <code>#DB</code>’s IST stack), it splits capture from delivery. At trap entry, <code>on_exception</code> records <code>(trapnr, error_code, addr)</code> on the carrier, sets <code>TIF_NOTIFY_RESUME</code>, and returns <code>true</code>. On the sleepable <code>exit_to_user_mode_loop()</code> path, <code>on_resume</code> delivers the captured trap to the kernelet (<code>UserEvent::Exception</code> under <code>UserEventHandler</code>, or <code>KLET_RUN_EXCEPTION</code> in the accepted stack model).</p>
+<p>Three constraints bound the hook:</p>
+<ul>
+<li><strong>User traps only.</strong> <code>on_exception</code> claims faults only when <code>user_mode(regs)</code> and <code>KLET_USER</code> hold; kernel-mode faults still fail via Linux’s exception table (<code>-EFAULT</code>).</li>
+<li><strong>Host checks and vector split.</strong> Linux runs per-vector sanitization first (such as <code>#PF</code> error-code sanitization), retains host and hardware vectors (<code>#DF</code>, <code>#MC</code>, lazy-FPU <code>#NM</code>, fatal <code>#BR</code>), and forwards the 11 Asterinas-handled user traps directly instead of routing them through <code>force_sig()</code> and <code>klet_drain_signals()</code>.</li>
+<li><strong>No host VMAs or notifiers.</strong> Because <code>on_syscall</code> blocks host memory system calls, no carrier can attach a VMA or <code>mmu_notifier</code> to a tenant <code>mm</code>.</li>
+</ul>
+<h2 id="alternatives-and-tradeoffs-2"><a class="header" href="#alternatives-and-tradeoffs-2">Alternatives and tradeoffs</a></h2>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Alternative</th><th>Benefits</th><th>Costs and limits</th></tr>
+</thead>
+<tbody>
+<tr><td><strong>Keep per-page Linux calls</strong></td><td>Avoids PTI root sync and x86 PTE encoding in <code>vOSTD</code></td><td>Baseline <code>VmSpace</code> <code>fork</code> takes 7.85 ms (excluding task creation), 23x slower than native Linux’s full <code>fork()</code></td></tr>
+<tr><td><strong>Batch Linux PTE calls</strong></td><td>Cuts crossing counts on large contiguous ranges</td><td>Single-page <code>#PF</code> and small ranges still cross into Linux, take <code>mmap_lock</code>, and run double walks</td></tr>
+</tbody>
+</table>
+</div>
+<h2 id="implementation-and-integration-2"><a class="header" href="#implementation-and-integration-2">Implementation and integration</a></h2>
+<ul>
+<li><strong>Linux carrier patch</strong> (<code>prototype/linux/patches/0001-carrier-hooks.patch</code>). Add <code>on_exception</code> to <code>carrier_event_hooks</code> for user <code>#PF</code> and forwarded user exceptions.</li>
+<li><strong>Endovisor</strong> (<code>prototype/linux/endovisor/</code>). Validate startup paging constraints, export <code>pti_enabled</code> and <code>physical_mask</code> in <code>BootArgs</code>, remove per-page <code>vm_*</code> services and <code>VM_PFNMAP</code> setup, and update <code>vm_activate</code>, 4-step <code>vm_destroy</code>, and <code>on_exception</code> capture.</li>
+<li><strong><code>vOSTD</code></strong> (<code>prototype/vostd/src/mm/</code>, <code>arch/</code>). Use the shared <code>MetaSlot</code> and <code>in_grant()</code> model (<a href="#2026-11-16-allocate-the-kernelet-heap-from-the-grant">2026-11-16</a>) for lower page tables, add root locking, PTI dual-root writes, and x86 PTE rules, reclaim subtrees locally on <code>unmap</code> and <code>VmSpace</code> drop, and handle <code>UserEvent::Exception</code>.</li>
+<li><strong>Book.</strong> On acceptance, update the seven Accepted Design chapters listed above. Any future grant-reclaim design must keep installed page-table pages pinned until <code>vm_destroy</code> finishes.</li>
+</ul>
+<h2 id="decision-and-follow-up-2"><a class="header" href="#decision-and-follow-up-2">Decision and follow-up</a></h2>
+<p>Pending prototype implementation, benchmark results, and review.</p>
+<div style="break-before: page; page-break-before: always;"></div>
+<h1 id="2026-11-16-allocate-the-kernelet-heap-from-the-grant"><a class="header" href="#2026-11-16-allocate-the-kernelet-heap-from-the-grant">2026-11-16 Allocate the kernelet heap from the grant</a></h1>
+<ul>
+<li>Status: Draft</li>
+<li>Author(s): Plucky923</li>
+<li>Discussion: No public review opened yet.</li>
+<li>Affected chapters: <a href="#the-first-kernel-we-will-run">The first kernel we will run</a>, <a href="#the-kernelet-abi">The kernelet ABI</a>, <a href="#carriers">Carriers</a>, <a href="#stopping-a-kernelet">Stopping a kernelet</a>, <a href="#what-vostd-adds-on-top">What vOSTD adds on top</a>, and <a href="#what-it-costs">What it costs</a>.</li>
+<li>Implementation or experiments: Not yet implemented. The argument below comes from source inspection; no local-heap performance or fault-injection results are available.</li>
+</ul>
+<h2 id="summary-4"><a class="header" href="#summary-4">Summary</a></h2>
+<p>This proposal removes <code>mem_alloc</code>, <code>mem_free</code>, and the endovisor’s per-block heap tracking table. Linux provisions multi-segment startup grants via <code>BootArgs</code>, accounts for them, and reclaims them whole after execution, host accesses, and descriptor references end. Inside those grants, <code>vOSTD</code> uses OSTD’s <code>Frame</code>, <code>MetaSlot</code>, and slab model to implement Rust’s <code>#[global_allocator]</code> (<code>Box</code>, <code>Vec</code>, <code>Arc</code>) locally, eliminating host crossings (449 cycles per 64-byte pair) and sleeping <code>kmalloc</code> calls under kernelet spin locks.</p>
+<h2 id="problem-and-motivation-4"><a class="header" href="#problem-and-motivation-4">Problem and motivation</a></h2>
+<h3 id="host-page-ownership-vs-kernelet-objects"><a class="header" href="#host-page-ownership-vs-kernelet-objects">Host page ownership vs. kernelet objects</a></h3>
+<p>A kernelet needs physical pages for user spaces (<code>UFrame</code>), its Rust heap (<code>Box</code>, <code>Vec</code>, <code>Arc</code>), and per-page metadata. On the host side, Linux must meter every backing page and reclaim them whole after sandbox exit and final descriptor close (<a href="#the-shape-of-a-death">Stopping a kernelet</a>). Forwarding fine-grained Rust allocations across the host boundary solves reclamation only by paying a per-object tax.</p>
+<h3 id="how-the-accepted-host-heap-works-and-what-it-costs"><a class="header" href="#how-the-accepted-host-heap-works-and-what-it-costs">How the accepted host heap works and what it costs</a></h3>
+<p>Today, <code>FrameAllocOptions</code> draws user pages from a <a href="#the-grant-and-the-direct-map">grant</a> capped at 4 MiB as one contiguous Linux allocation. Because 4 MiB is too tight to hold both user pages and kernel objects, <code>HostHeap</code> (<code>prototype/vostd/src/mm/heap.rs</code>) forwards Rust allocations to <code>mem_alloc</code> and <code>mem_free</code>.</p>
+<p>Forwarding every Rust object to Linux adds three costs:</p>
+<ol>
+<li><strong>Per-object crossings and lock contention.</strong> Each <code>alloc</code> or <code>free</code> switches to the Linux stack and takes <code>inst-&gt;heap.lock</code> to update the host block table (<code>inst-&gt;heap.block</code>). Benchmarks in <a href="#the-crossing">What it costs</a> report 449 cycles for one 64-byte <code>mem_alloc</code>/<code>mem_free</code> pair, including ~120 cycles for that block table.</li>
+<li><strong>Sleeping allocations under spin locks.</strong> <code>mem_alloc</code> calls <code>kmalloc(GFP_KERNEL_ACCOUNT)</code>, which may sleep. Calling <code>Box</code> or <code>Vec</code> under a kernelet spin lock breaks the non-sleeping rule under locks and can stall sibling vCPUs (<a href="#the-rule-about-sleeping">What vOSTD adds on top</a>).</li>
+<li><strong>Per-block padding and teardown scans.</strong> The endovisor pads every block by alignment (<code>size + align</code>) and maintains a dynamically grown <code>inst-&gt;heap.block</code> table, which <code>klet_heap_destroy</code> must scan to <code>kfree</code> leaked blocks at teardown.</li>
+</ol>
+<h2 id="proposed-change-4"><a class="header" href="#proposed-change-4">Proposed change</a></h2>
+<p>Linux continues to provision, meter, and whole-reclaim the grant, while <code>vOSTD</code> subdivides grant pages into kernel objects, metadata, and user frames locally.</p>
+<h3 id="use-ostds-frame-model-within-the-grant"><a class="header" href="#use-ostds-frame-model-within-the-grant">Use OSTD’s frame model within the grant</a></h3>
+<p>Sharing the grant between kernel objects and user memory requires tracking each page’s role so kernel pages never escape to user space. Adopting OSTD’s <code>Frame</code>, <code>UniqueFrame</code>, <code>MetaSlot</code>, and buddy allocator provides type safety, refcounts, coalescing, and slab metadata:</p>
+<div class="background">
+<p><strong>OSTD: direct-map frames and slabs.</strong> OSTD maps physical RAM once at boot via a fixed offset (<code>paddr_to_vaddr</code>) and never remaps kernel allocations. OSTD’s <a href="https://github.com/asterinas/asterinas/blob/ab9a4cfdc726263b3f41ccea0337633e24b443fc/ostd/src/mm/frame/allocator.rs#L130-L175"><code>GlobalFrameAllocator</code></a> trait fronts the page allocator, while each page has a 64-byte <a href="https://github.com/asterinas/asterinas/blob/ab9a4cfdc726263b3f41ccea0337633e24b443fc/ostd/src/mm/frame/meta.rs#L75-L118"><code>MetaSlot</code></a> storing <code>M</code>, its refcount, vtable, and list ID (<code>in_list</code>). <a href="https://github.com/asterinas/asterinas/blob/ab9a4cfdc726263b3f41ccea0337633e24b443fc/ostd/src/mm/frame/mod.rs#L81-L121"><code>Frame&lt;M&gt;</code></a> shares read access to <code>M</code>, and <a href="https://github.com/asterinas/asterinas/blob/ab9a4cfdc726263b3f41ccea0337633e24b443fc/ostd/src/mm/frame/unique.rs#L18-L54"><code>UniqueFrame&lt;M&gt;</code></a> holds exclusive write ownership. OSTD’s <a href="https://github.com/asterinas/asterinas/blob/ab9a4cfdc726263b3f41ccea0337633e24b443fc/ostd/src/mm/heap/slab.rs#L23-L52"><code>Slab</code></a> slices a <code>UniqueFrame</code> via <code>paddr_to_vaddr</code>, keeping free links in unused slots and <code>SlabMeta</code> in <code>MetaSlot</code>; only <code>UFrame</code> mappings edit user page tables.</p>
+</div>
+
+<ol>
+<li><strong>Supply startup grant segments.</strong> Pass one or more startup <code>alloc_pages</code> segments via <code>BootArgs</code> to lift the 4 MiB single-allocation cap without runtime resizing.</li>
+<li><strong>Reserve grant-resident <code>MetaSlot</code> arrays.</strong> Carve pinned <code>MetaSlot</code> pages (<code>MetaPageMeta</code>, 64 bytes per page, ~1.56%) from each segment’s start before initializing allocators.</li>
+<li><strong>Map bidirectionally across non-contiguous segments.</strong> Because multi-segment grants have physical address gaps, <code>frame_to_meta</code> and <code>meta_to_frame</code> check alignment and segment bounds without overflow in both directions.</li>
+<li><strong>Manage free pages with OSDK’s buddy allocator.</strong> Store buddy links (<code>Link&lt;FreeHeadMeta&gt;</code>) inside unused <code>MetaSlot</code>s, and drain per-vCPU caches and empty slabs before returning <code>Error::NoMemory</code>.</li>
+</ol>
+<p>When the last reference drops during execution, <code>vOSTD</code> runs <code>M</code>’s <code>on_drop</code> and Rust destructor before returning the page to the buddy pool. On sandbox failure or exit, Linux reclaims all grant segments whole without invoking <code>on_drop</code>.</p>
+<h3 id="connect-rust-allocation-to-the-local-heap"><a class="header" href="#connect-rust-allocation-to-the-local-heap">Connect Rust allocation to the local heap</a></h3>
+<p>Replace <code>HostHeap</code> (<code>prototype/vostd/src/mm/heap.rs</code>) with OSTD’s <code>AllocDispatch</code> (<code>#[global_allocator]</code>) backed by OSDK’s <code>HeapAllocator</code> implementing <code>GlobalHeapAllocator</code>. Objects up to 2,048 bytes with natural alignment allocate from single-page <code>Slab</code> classes (<code>Link&lt;SlabMeta&lt;SLOT_SIZE&gt;&gt;</code>). Requests above 2,048 bytes or requiring larger alignment route to aligned <code>LargeAllocFrameMeta</code> <code>HeapSlot</code> segments from the buddy pool. Address conversions (<code>paddr_to_vaddr</code> and <code>HeapSlot::paddr</code>) read Linux’s runtime <code>linear_map_base</code> directly. Exhaustion returns a null pointer to <code>GlobalAlloc</code> and enters Rust’s allocation-error handler without calling <code>kmalloc</code>.</p>
+<h3 id="keep-heap-pages-private-to-the-kernel"><a class="header" href="#keep-heap-pages-private-to-the-kernel">Keep heap pages private to the kernel</a></h3>
+<p>Live kernel pages hold Rust objects or metadata and must stay hidden from untrusted code and user space:</p>
+<ul>
+<li><strong>Typed-frame and <code>VmIo</code> boundary.</strong> <code>SlabMeta</code>, <code>LargeAllocFrameMeta</code>, <code>PageTablePageMeta</code>, and <code>MetaPageMeta</code> do not implement <code>AnyUFrameMeta</code>, and <code>vOSTD</code> restricts <code>VmIo</code> byte access and <code>is_untyped()</code> casts to <code>AnyUFrameMeta</code>.</li>
+<li><strong>Mandatory zeroing.</strong> Keep <code>FrameAllocOptions::zeroed(false)</code> internal to <code>vOSTD</code> (<code>pub(crate)</code>), so every untyped frame exposed to <code>kernel proper</code> or user space starts zeroed.</li>
+<li><strong>Trusted allocator code.</strong> Allocator code stays inside trusted <code>vOSTD</code> under the <a href="#the-same-kernel-a-different-framework">language-based isolation model</a>, leaving no hardware boundary inside the grant.</li>
+</ul>
+<h3 id="initialize-the-heap-without-depending-on-itself"><a class="header" href="#initialize-the-heap-without-depending-on-itself">Initialize the heap without depending on itself</a></h3>
+<p>Bootstrap must break circular dependencies between metadata, page allocation, and the heap:</p>
+<ol>
+<li><strong>Strict startup order.</strong> Initialize <code>MetaSlot</code> storage, the buddy allocator, and the local heap before secondary vCPUs or heap consumers (<code>cmdline</code> parsing and <code>__ostd_main</code>).</li>
+<li><strong>Allocation-free teardown, panic, and OOM paths.</strong> Keep <code>panic_handler</code>, <code>alloc_error_handler</code>, <code>CursorMut::unmap</code>, and <code>VmSpace</code> retirement allocation-free so OOM or teardown cannot recurse into the heap.</li>
+<li><strong>Interrupt-safe locking.</strong> Guard allocators with <code>SpinLock&lt;..., LocalIrqDisabled&gt;</code> so allocators make no <code>mem_alloc</code> crossings, form no lock-order cycles, and call <code>vcpu_on_spin</code> only on extended contention.</li>
+</ol>
+<h3 id="reclaim-the-grant-after-a-failure"><a class="header" href="#reclaim-the-grant-after-a-failure">Reclaim the grant after a failure</a></h3>
+<p>When a sandbox exits or fails, Linux reclaims grant segments from its own host-side segment array without reading grant metadata:</p>
+<ol>
+<li><strong>Stop execution.</strong> Halt all carriers and block further sandbox entry so no kernelet or user-context access remains active.</li>
+<li><strong>Drain host references.</strong> Finish in-flight host calls, active I/O leases (<a href="#2026-11-08-typedio">TypedIO</a>), and address-space, TLB, and RCU teardown (<a href="#the-shape-of-a-death">Stopping a kernelet</a>).</li>
+<li><strong>Free all grant segments.</strong> Release every recorded <code>(struct page *, order)</code> segment on startup rollback or after exit and final sandbox descriptor close.</li>
+</ol>
+<h3 id="account-for-the-shared-capacity"><a class="header" href="#account-for-the-shared-capacity">Account for the shared capacity</a></h3>
+<p>Linux already charges grant segments via <code>GFP_KERNEL_ACCOUNT</code> (<code>prototype/linux/endovisor/sandbox.c</code>), so subdividing them into Rust objects adds no host charge. Heap objects, <code>UFrame</code>s, lower page tables, <code>MetaSlot</code> pages, and OSDK caches share this fixed startup budget (contiguous runs stay bounded by one segment). Sizing <code>memory_initial</code> above the prototype’s 4 MiB single-block cap via multiple startup segments absorbs those caches without runtime resizing. Linux separately charges per-instance private image pages (<code>image.c</code>), address spaces, and, in the current prototype, interim host stack pools, while shared read-only kind pages belong to kind registration.</p>
+<h2 id="alternatives-and-tradeoffs-3"><a class="header" href="#alternatives-and-tradeoffs-3">Alternatives and tradeoffs</a></h2>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Alternative</th><th>Benefits</th><th>Costs and limits</th></tr>
+</thead>
+<tbody>
+<tr><td><strong>Keep the host heap</strong></td><td>Reuses <code>kmalloc</code>/<code>kfree</code> outside the grant</td><td>Keeps 449-cycle alloc/free pairs, <code>inst-&gt;heap.block</code>, and sleeping calls under spin locks</td></tr>
+<tr><td><strong>Carve a fixed heap sub-region in the grant</strong></td><td>Separates kernel heap and <code>UFrame</code> quotas statically without sharing one buddy pool</td><td>Strands idle pages on one side when either the heap or user space fills</td></tr>
+</tbody>
+</table>
+</div>
+<h2 id="implementation-and-integration-3"><a class="header" href="#implementation-and-integration-3">Implementation and integration</a></h2>
+<ul>
+<li><strong><code>vOSTD</code></strong> (<code>prototype/vostd/src/mm/</code>, <code>lib.rs</code>, <code>panic.rs</code>). Replace <code>HostHeap</code> with OSTD’s grant-backed <code>MetaSlot</code>, typed frame isolation (<code>AnyUFrameMeta</code>, <code>VmIo</code>, <code>pub(crate)</code> zeroing), buddy frame allocator, and local slab/large-block heap using runtime <code>linear_map_base</code>, keeping bootstrap, panic, OOM, and teardown allocation-free.</li>
+<li><strong>Endovisor and ABI</strong> (<code>prototype/vostd/src/abi.rs</code>, <code>prototype/linux/endovisor/</code>). Deliver multi-segment startup grants via <code>BootArgs</code>, remove <code>mem_alloc</code>, <code>mem_free</code>, and <code>inst-&gt;heap.block</code>, and reclaim segments whole on failure or teardown.</li>
+<li><strong>Book and proposals.</strong> This frame and <code>MetaSlot</code> layer is the shared foundation for both local heap allocation and <a href="#2026-11-13-direct-page-table-updates-in-vostd">direct page-table updates in vOSTD</a>. Update the six Accepted Design chapters listed above on acceptance.</li>
+</ul>
+<h2 id="decision-and-follow-up-3"><a class="header" href="#decision-and-follow-up-3">Decision and follow-up</a></h2>
+<p>Status remains Draft pending implementation and benchmark evidence.</p>
+<div style="break-before: page; page-break-before: always;"></div>
+<h1 id="2026-11-16-principles-of-api-virtualization"><a class="header" href="#2026-11-16-principles-of-api-virtualization">2026-11-16 Principles of API virtualization</a></h1>
+<ul>
+<li>Status: Draft</li>
+<li>Author(s): Plucky923</li>
+<li>Discussion: No public review opened yet.</li>
+<li>Affected chapters: <a href="#why-a-kernel-of-your-own">Why a kernel of your own</a>, <a href="#the-kernelet-abi">The kernelet ABI</a>, <a href="#stopping-a-kernelet">Stopping a kernelet</a>, <a href="#tenant-memory-on-linuxs-page-tables">Tenant memory on Linux’s page tables</a>, <a href="#what-vostd-adds-on-top">What vOSTD adds on top</a>, and <a href="#what-it-costs">What it costs</a>.</li>
+<li>Implementation or experiments: No standalone implementation. This document synthesizes the accepted design, audits all 24 service-table entries, and generalizes six companion proposals (<a href="#2026-10-31-reduce-syscall-overhead">Reduce syscall overhead</a>, <a href="https://github.com/tatetian/kernelet/blob/cd92aad9d195736cec1daf49d403315add0bab4c/book/src/design-proposals/2026-11-04-coordinate-the-two-schedulers.md">Coordinate the two schedulers</a>, <a href="#2026-11-08-typedio">TypedIO</a>, <a href="#2026-11-09-fpu-state-management">FPU state management</a>, <a href="#2026-11-13-direct-page-table-updates-in-vostd">Direct page-table updates in vOSTD</a>, and <a href="#2026-11-16-allocate-the-kernelet-heap-from-the-grant">Allocate the kernelet heap from the grant</a>). The <a href="#lmbench-measurements">LMbench measurements</a> cover the integrated prototype.</li>
+</ul>
+<h2 id="summary-5"><a class="header" href="#summary-5">Summary</a></h2>
+<p>API virtualization turns <code>OSTD</code> into <code>vOSTD</code> for multi-tenant sandboxes on a shared host kernel. Unlike a machine hypervisor that combines protection and multiplexing at one trap boundary, a kernelet splits them by resource ownership. <code>vOSTD</code> confines <code>kernel proper</code> at the upper API boundary without crossing, and the endovisor checks only the host-owned objects it multiplexes. Two principles define these boundaries:</p>
+<ol>
+<li><strong>Principle 1 (<code>kernel proper → vOSTD</code>): virtualize tenant OS semantics.</strong> Strip machine-global authority, keep tenant-scoped OS contracts, and replace hardware-coupled or unchecked signatures with safe OS abstractions.</li>
+<li><strong>Principle 2 (<code>vOSTD ↔ host</code>): delegate coarse containers to the host; keep tenant confinement and fine-grained state local.</strong> Cross the host boundary only for whole-reclaimable containers, host-owned CPU/MMU/privilege control, or peer fault domains.</li>
+</ol>
+<p>Applied to OSTD and the 24-entry service table, these principles derive the six companion proposals and leave 13 multiplexing and cross-domain services.</p>
+<h2 id="problem-and-motivation-5"><a class="header" href="#problem-and-motivation-5">Problem and motivation</a></h2>
+<div class="background">
+<p><strong>Virtualization: protection vs. multiplexing.</strong> A multi-tenant system performs two distinct jobs. <em>Protection</em> confines each tenant to its own resources so it cannot read, corrupt, or crash the host or sibling tenants. <em>Multiplexing</em> shares scarce physical hardware and global kernel state across tenants, including CPU time, physical memory quotas, MMU/TLB contexts, interrupt gates, and shared devices. In classical machine virtualization (<a href="https://dl.acm.org/doi/10.1145/361011.361073">Popek and Goldberg, 1974</a>), the guest kernel is an untrusted binary, so the hypervisor enforces both protection and multiplexing at one expensive hardware trap boundary.</p>
+</div>
+
+<h3 id="why-a-cheap-boundary-still-fails-when-protection-and-multiplexing-stay-coupled"><a class="header" href="#why-a-cheap-boundary-still-fails-when-protection-and-multiplexing-stay-coupled">Why a cheap boundary still fails when protection and multiplexing stay coupled</a></h3>
+<p>In a classical VM, trapping across the hypervisor boundary is expensive, so it is natural to assume that replacing that trap with a cheap call would remove the overhead. In a kernelet, a null service call switches stacks in only 36 cycles (<a href="#the-crossing">What it costs</a>). Following that intuition, a design can keep single-machine <code>OSTD</code> unchanged above and forward every privileged or hardware-facing operation across the <a href="#the-three-tables">service table</a> to the endovisor, which validates each request and executes it inside Linux’s shared kernel subsystems.</p>
+<p>Making the jump cheap removes only the 36-cycle call cost. Pushing <code>OSTD</code> semantics across the host multiplexing boundary still fails in two ways:</p>
+<ol>
+<li><strong>Duplicate structures and host paths inflate latency.</strong> Because <code>vOSTD</code> cannot touch host internals yet must preserve <code>OSTD</code> semantics, while the host loses Rust type and ownership guarantees across C calls, both sides duplicate locks, tracking tables, and side structures. Every forwarded call also runs boundary checks, staging copies, and Linux subsystem paths instead of updating memory directly. Thus a 64 MiB <code>fork</code> slows to 7.85 ms vs. 0.34 ms natively (<a href="#what-that-choice-costs">Direct page-table updates in vOSTD</a>), 64-byte <code>mem_alloc</code>/<code>mem_free</code> pairs take 449 cycles (<a href="#how-the-accepted-host-heap-works-and-what-it-costs">Allocate the kernelet heap from the grant</a>), and FPU staging adds ~330–340 ns per syscall (<a href="#problem-and-motivation-2">FPU state management</a>).</li>
+<li><strong>Conflicting OS and host semantics force extra bridging mechanisms.</strong> Host subsystems enforce their own rules for concurrency, object lifetimes, and state representation, which often conflict with <code>OSTD</code>’s single-OS contracts. Reconciling those mismatches requires extra cross-boundary shims and restrictions, such as host waiting helpers (<code>vm_wait</code>) and lock aborts when sleepable host paths meet kernelet spin locks, deferred queues and per-object scans where abrupt kill demands whole-container teardown (<a href="#the-rule-about-sleeping">What vOSTD adds on top</a>), or software side-maps where host formats cannot encode an <code>OSTD</code> permission state.</li>
+</ol>
+<h3 id="how-api-virtualization-decouples-them"><a class="header" href="#how-api-virtualization-decouples-them">How API virtualization decouples them</a></h3>
+<p>Unlike a binary VM, a kernelet moves the virtualization boundary up to <code>OSTD</code>’s safe-Rust API on Linux. Three structural conditions let it separate protection from multiplexing:</p>
+<ol>
+<li><strong>Safe Rust splits the VM’s single boundary into two.</strong> Safe Rust forces untrusted <code>kernel proper</code> through <code>vOSTD</code>, which sits inside the TCB (<a href="#the-same-kernel-a-different-framework">Why a kernel of your own</a>). <code>vOSTD</code> can therefore enforce tenant protection locally at <code>kernel proper → vOSTD</code> with zero crossings, leaving <code>vOSTD ↔ host</code> for host multiplexing.</li>
+<li><strong>The upper boundary is a source-level Rust API.</strong> Because kernelets compile both layers from source, <code>vOSTD</code> can reshape bare-metal assumptions (such as <code>UserMode::execute</code>, unchecked <code>FpuContext</code>, and <code>IoMem</code>) into host-friendly Rust abstractions.</li>
+<li><strong><code>vOSTD</code> stays decoupled from Linux internals below.</strong> Unlike a Linux kernel module, <code>vOSTD</code> compiles as a PIE image with zero host symbol imports and cannot touch Linux runqueues, <code>mm_struct</code> lists, or IDT gates (<a href="#the-kernelet-abi">The kernelet ABI</a>). Because the host can also kill a sandbox immediately without running <code>Drop</code> destructors (<a href="#the-shape-of-a-death">Stopping a kernelet</a>), Linux hands out coarse containers that the host multiplexer schedules and reclaims whole.</li>
+</ol>
+<p>Earlier <a href="https://github.com/tatetian/kernelet-book/blob/main/src/blueprint/asterinas-mode/virtualizing-ostd/README.md"><code>kernelet-book</code></a> blueprints observe that 22 of 38 virtualized OSTD items do not call the host, without stating the underlying rule. Separating protection from multiplexing supplies that rule.</p>
+<h2 id="proposed-change-5"><a class="header" href="#proposed-change-5">Proposed change</a></h2>
+<h3 id="core-thesis-decouple-protection-from-multiplexing"><a class="header" href="#core-thesis-decouple-protection-from-multiplexing">Core thesis: decouple protection from multiplexing</a></h3>
+<p>API virtualization places tenant protection at <code>kernel proper → vOSTD</code> and host multiplexing at <code>vOSTD ↔ host</code>, splitting them by resource ownership:</p>
+<pre class="mermaid">flowchart LR
+    subgraph MV["Machine virtualization"]
+        direction TB
+        G["Untrusted guest kernel (binary ISA)"] -- "Trap: protection + multiplexing" --&gt; HV["Trusted hypervisor"]
+    end
+    subgraph AV["API virtualization"]
+        direction TB
+        KP["Untrusted kernel proper (safe Rust)"] -- "P1 (Protection): semantic API; confines tenant locally (0 crossings)" --&gt; VO["Trusted vOSTD (per-sandbox view)"]
+        VO &lt;-- "P2 (Multiplexing): coarse containers; shares hardware &amp; checks host objects" --&gt; EN["Trusted endovisor and host (machine-wide view)"]
+    end
+    MV ~~~ AV
+</pre>
+
+<p>Two principles define these boundaries:</p>
+<h3 id="principle-1-virtualize-tenant-os-semantics"><a class="header" href="#principle-1-virtualize-tenant-os-semantics">Principle 1: Virtualize tenant OS semantics</a></h3>
+<p>At the <code>kernel proper → vOSTD</code> boundary, <code>vOSTD</code> enforces tenant confinement while keeping <code>kernel proper</code> portable:</p>
+<ol>
+<li><strong>Strip machine-global authority.</strong> <code>vOSTD</code> omits APIs over physical hardware topology or host-global kernel state (<code>Absent</code>) so unauthorized calls fail at compile time.</li>
+<li><strong>Keep tenant-scoped OS contracts.</strong> <code>vOSTD</code> keeps safe-Rust contracts for single-OS abstractions, reshaping a signature only when a single-machine assumption conflicts with running on a host.</li>
+</ol>
+<p>As a result, pure-software abstractions built over lower <code>vOSTD</code> primitives compile unchanged (<code>Identical</code>), while <code>vOSTD</code> reimplements the underlying primitives (<code>Virtualized</code>) under Principle 2.</p>
+<h3 id="principle-2-delegate-coarse-containers-to-the-host-keep-tenant-confinement-and-fine-grained-state-local"><a class="header" href="#principle-2-delegate-coarse-containers-to-the-host-keep-tenant-confinement-and-fine-grained-state-local">Principle 2: Delegate coarse containers to the host; keep tenant confinement and fine-grained state local</a></h3>
+<p>At the <code>vOSTD ↔ host</code> boundary, resource ownership sets placement, crossings, and checks:</p>
+<ol>
+<li><strong>Delegate coarse containers; keep fine-grained state local.</strong> Because Linux must reclaim sandbox resources whole on abrupt kill without running <code>Drop</code> destructors, the host provides only coarse containers, while <code>vOSTD</code> handles all fine-grained updates locally inside them to avoid Linux paths and locks.</li>
+<li><strong>Cross only for external ownership.</strong> <code>vOSTD</code> and the host cross the runtime boundary <em>if and only if</em> an operation touches a host container, host-controlled CPU/MMU/privilege multiplexing, or another fault domain.</li>
+</ol>
+<p>Each side checks only what it owns: <code>vOSTD</code> confines the tenant over sandbox state locally, and the endovisor checks host-owned objects during required crossings.</p>
+<h3 id="resulting-taxonomy-of-vostd"><a class="header" href="#resulting-taxonomy-of-vostd">Resulting taxonomy of <code>vOSTD</code></a></h3>
+<p>The table below classifies Asterinas’s <code>OSTD</code> (<code>ab9a4cfdc</code>) using both principles. Principle 1 separates items into <code>Absent</code>, <code>Identical</code>, and <code>Virtualized</code> (marking reshaped upper signatures with <code>\*</code>), and Principle 2 splits <code>Virtualized</code> paths into local <code>Not crossing</code> operations and <code>Crossing</code> host transfers (<code>Services</code>, <code>EntryTable</code>, and <code>BootArgs</code>). Compound primitives split by execution path: common fast paths stay inside <code>vOSTD</code>, while contention, cross-CPU TLB shootdowns, and instance teardown cross into the host multiplexer.</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Subsystem</th><th>Absent</th><th>Identical</th><th>Virtualized: Not crossing <em>(local in <code>vOSTD</code>)</em></th><th>Virtualized: Crossing <em>(host multiplexer &amp; ABI)</em></th></tr>
+</thead>
+<tbody>
+<tr><td><strong>Tasks, Sync &amp; Time</strong></td><td><code>smp::inter_processor_call</code></td><td><code>Scheduler</code>, <code>WaitQueue</code>, <code>Mutex</code>, <code>RwMutex</code></td><td><code>Task</code>, <code>TaskOptions</code>, <code>disable_preempt()</code>, <code>SpinLock</code> <em>(fast path; slow path calls <code>vcpu_on_spin</code>)</em>, <code>disable_local()</code>, <code>cpu_local!</code>, <code>CpuId</code>, <code>Jiffies</code></td><td>Physical CPU multiplexing: carrier scheduling, preemption timers &amp; cgroup quotas (<code>vcpu_boot</code>/<code>idle</code>/<code>kick</code>/<code>yield</code>/<code>on_spin</code>, <code>vcpu_entry</code>, <code>virq_entry</code>)</td></tr>
+<tr><td><strong>Memory &amp; Heap</strong></td><td>None</td><td><code>Infallible</code> <code>VmReader</code>/<code>VmWriter</code></td><td><code>Frame&lt;M&gt;</code>, <code>UniqueFrame&lt;M&gt;</code>, <code>Segment&lt;M&gt;</code>, <code>FrameAllocOptions</code>, <code>#[global_allocator]</code>, <code>Fallible</code> <code>VmReader</code>/<code>VmWriter</code>, <code>VmIo</code></td><td>Memory quota multiplexing: startup <code>grant</code> provisioning &amp; whole-grant reclaim (<code>BootArgs</code>)</td></tr>
+<tr><td><strong>Address Spaces</strong></td><td>None</td><td><code>PageProperty</code>, <code>PageFlags</code></td><td><code>VmSpace</code>, <code>Cursor</code>, <code>CursorMut</code> (<code>map</code>, <code>protect_next</code>, <code>unmap</code> on grant PT), <code>TlbFlusher</code> <em>(triggers <code>vm_flush</code>)</em></td><td>MMU multiplexing: <code>mm_struct</code> &amp; <code>CR3</code> switching, cross-CPU TLB shootdowns (<code>vm_create</code>/<code>activate</code>/<code>flush</code>/<code>destroy</code>)</td></tr>
+<tr><td><strong>User Mode &amp; FPU</strong></td><td>None</td><td><code>GeneralRegs</code>, <code>CpuException</code></td><td><code>UserEventHandler</code>*, <code>UserEvent</code>* <em>(replace <code>UserMode::execute</code>, <code>ReturnReason</code>)</em>, <code>FpuContext</code> (<code>read_from</code>*, intra-carrier <code>XSAVE</code>/<code>XRSTOR</code>)</td><td>Shared hardware Ring-3 / trap gate (<code>user_run</code>, <code>user_event_entry</code>, <code>on_exception</code>)</td></tr>
+<tr><td><strong>Devices &amp; IPC</strong></td><td><code>IoPort</code>, <code>IRQ_CHIP</code>, <code>BootloaderAcpiArg</code> <em>(and <code>IoMem</code> under <code>TypedIO</code>)</em></td><td>None</td><td><code>TypedIO</code> (<code>Protocol</code>/<code>Message</code>*), <code>DmaStream</code>/<code>DmaCoherent</code> <em>(alloc &amp; sync)</em>, <code>IrqLine</code> <em>(dispatch)</em></td><td>Device/IPC multiplexing: attachments, queue/buffer leases, cross-sandbox pipes &amp; virtual IRQs (<code>discover</code>, <code>try_submit</code>, <code>reserve</code>/<code>commit</code>, <code>bind_irq</code>/<code>rearm_irq</code>)</td></tr>
+<tr><td><strong>Boot, Log &amp; Panic</strong></td><td><code>DEVICE_TREE</code>, <code>SERIAL_PORT</code></td><td><code>catch_unwind()</code>, <code>Error</code>, <code>Result</code>, <code>ExitCode</code>, <code>util</code></td><td><code>boot_info()</code> (<code>BootInfo</code>), <code>tsc_freq()</code>, <code>read_tsc()</code>, <code>early_print!</code> / <code>log</code> <em>(formatting)</em>, <code>poweroff()</code> / <code>abort()</code> <em>(call <code>stop</code>)</em></td><td>Startup entry (<code>BootArgs</code>, <code>kernelet_entry</code>), shared host output sinks (<code>console_write</code>, <code>log_write</code>), &amp; instance teardown (<code>stop</code>)</td></tr>
+</tbody>
+</table>
+</div>
+<h3 id="changes-relative-to-the-accepted-design"><a class="header" href="#changes-relative-to-the-accepted-design">Changes relative to the Accepted Design</a></h3>
+<p>This taxonomy retires 11 entries from the 24-entry <code>Services</code> table in <a href="#the-three-tables">The kernelet ABI</a>. Heap blocks (<code>mem_alloc</code>, <code>mem_free</code>), single-page PTE updates (<code>vm_map</code>, <code>vm_unmap</code>, <code>vm_protect</code>, <code>vm_wait</code>, <code>vm_wake</code>), FPU switches (<code>fpu_save</code>, <code>fpu_load</code>), and task stacks (<code>kstack_alloc</code>, <code>kstack_free</code>) do not manage host multiplexer units, so they move into local grant memory and intra-carrier <code>XSAVE</code>/<code>XRSTOR</code>, leaving 13 host-multiplexing and cross-domain calls (<code>vcpu_*</code>, <code>vm_create</code>/<code>destroy</code>/<code>activate</code>/<code>flush</code>, <code>user_run</code>, <code>console_write</code>, <code>log_write</code>, <code>stop</code>).</p>
+<h2 id="alternatives-and-tradeoffs-4"><a class="header" href="#alternatives-and-tradeoffs-4">Alternatives and tradeoffs</a></h2>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Alternative</th><th>Benefits</th><th>Costs and limits</th></tr>
+</thead>
+<tbody>
+<tr><td><strong>Document subsystem mechanisms without unifying principles</strong></td><td>Leaves existing chapter structure untouched</td><td>Gives contributors no predictive rule for new OSTD subsystems or alternative host kernels</td></tr>
+<tr><td><strong>Mediate fine-grained ops on sandbox-owned state at the service table</strong> <em>(accepted v1 paths)</em></td><td>Catches certain <code>vOSTD</code> bugs inside endovisor C checks</td><td>Adds host locks, per-object teardown tables, and sleeping host calls under spin locks without shrinking the TCB</td></tr>
+<tr><td><strong>Preserve bare-metal OSTD signatures unconditionally</strong></td><td>Zero source diff in OSTD traits and drivers</td><td>Suspends kernel stacks across <code>UserMode::execute</code>, skips <code>FpuContext</code> validation, and forces untyped <code>IoMem</code> emulation</td></tr>
+</tbody>
+</table>
+</div>
+<h2 id="implementation-and-integration-4"><a class="header" href="#implementation-and-integration-4">Implementation and integration</a></h2>
+<p>This proposal introduces no standalone code. The six companion proposals implement all runtime, ABI, and subsystem changes:</p>
+<ul>
+<li><strong>Upper-boundary changes (Principle 1):</strong> <a href="#2026-10-31-reduce-syscall-overhead">Reduce syscall overhead</a>, <a href="#2026-11-08-typedio">TypedIO</a>, and <a href="#2026-11-09-fpu-state-management">FPU state management</a>.</li>
+<li><strong>Lower-boundary changes (Principle 2):</strong> <a href="https://github.com/tatetian/kernelet/blob/cd92aad9d195736cec1daf49d403315add0bab4c/book/src/design-proposals/2026-11-04-coordinate-the-two-schedulers.md">Coordinate the two schedulers</a>, <a href="#2026-11-09-fpu-state-management">FPU state management</a>, <a href="#2026-11-13-direct-page-table-updates-in-vostd">Direct page-table updates in vOSTD</a>, and <a href="#2026-11-16-allocate-the-kernelet-heap-from-the-grant">Allocate the kernelet heap from the grant</a>.</li>
+</ul>
+<p>Once those companion proposals are accepted, this framework updates <a href="#the-same-kernel-a-different-framework">Why a kernel of your own</a> (protection vs. multiplexing, Principle 1, and the <code>vOSTD</code> taxonomy) and <a href="#the-three-tables">The kernelet ABI</a> (Principle 2, the 13-entry service table, and ownership-based endovisor checks).</p>
+<h2 id="validation-and-evidence-2"><a class="header" href="#validation-and-evidence-2">Validation and evidence</a></h2>
+<h3 id="lmbench-measurements"><a class="header" href="#lmbench-measurements">LMbench measurements</a></h3>
+<p>On 2026-11-18, Linux, native Asterinas, and Kernelet ran the same 19 LMbench workloads, with five accepted measurements per workload and system. All three used the same payload from the Asterinas LMbench fork at <code>afb47eddaf10</code> with the timing and resource-use patch.</p>
+<p>Each VM used QEMU 10.2.1 with KVM, two pinned vCPUs, and 2 GiB of preallocated memory on one Intel Xeon Platinum 8259CL host. We set both frequency limits to 3.2 GHz on the assigned host CPUs and accepted per-boot effective VM execution frequencies of 3.168–3.232 GHz.</p>
+<p>Linux and Kernelet shared the Linux 6.12 kernel binary. Kernelet ran in a separate campaign with Direct page tables and a fresh sandbox with a 512 MiB memory grant for each workload. Native Asterinas used an earlier source snapshot.</p>
+<p>The table gives median end-to-end latencies for six workloads.</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Workload</th><th>Unit</th><th style="text-align: right">Linux</th><th style="text-align: right">Native Asterinas</th><th style="text-align: right">Kernelet</th></tr>
+</thead>
+<tbody>
+<tr><td><code>getppid</code></td><td>ns/op</td><td style="text-align: right">57.6</td><td style="text-align: right">75.7</td><td style="text-align: right">77.4</td></tr>
+<tr><td>Read 1 byte from <code>/dev/zero</code></td><td>ns/op</td><td style="text-align: right">81.6</td><td style="text-align: right">136.6</td><td style="text-align: right">186.2</td></tr>
+<tr><td>Pipe round trip</td><td>µs/op</td><td style="text-align: right">9.17</td><td style="text-align: right">9.56</td><td style="text-align: right">23.44</td></tr>
+<tr><td><code>fork</code>, child exit, and <code>waitpid</code></td><td>ms/op</td><td style="text-align: right">0.0848</td><td style="text-align: right">0.1346</td><td style="text-align: right">15.99</td></tr>
+<tr><td><code>fork</code> + <code>exec</code></td><td>µs/op</td><td style="text-align: right">241.7</td><td style="text-align: right">341.0</td><td style="text-align: right">450.8</td></tr>
+<tr><td>File-mapping page fault</td><td>ns/fault</td><td style="text-align: right">174.2</td><td style="text-align: right">138.3</td><td style="text-align: right">229.0</td></tr>
+</tbody>
+</table>
+</div>
+<p>Across the four 64 MiB memory bandwidth workloads, Kernelet’s median bandwidth was 92.8–95.9% of the corresponding Linux medians and 94.9–98.8% of the native Asterinas medians.</p>
+<p>The local archive at <code>research/evaluation-plan/results/20261118-kernelet-lmbench-3p2ghz/</code> contains full summaries, all 285 samples, workload settings, frequency logs, and build manifests.</p>
+<h2 id="decision-and-follow-up-4"><a class="header" href="#decision-and-follow-up-4">Decision and follow-up</a></h2>
+<p>Status remains Draft pending review alongside the companion proposals.</p>
 
                     </main>
 
